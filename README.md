@@ -6,9 +6,14 @@
 > Card Forge Studio is a blazing-fast, open-source tool for creating professional card game assets at scale.
 
 Card Forge Studio is built for designers, developers, and worldbuilders who need **speed**, **power**, and **control**.  
-Whether you’re crafting a single prototype or generating thousands of cards from data, Card Forge Studio does it in seconds.
+Generating thousands of cards from data in seconds.
 
 > *“In the land of bloated editors and slow pipelines, a mighty forge was built.”*
+
+---
+
+**Version:**2025.306.14
+[Changelog](Changelog.md)
 
 ---
 
