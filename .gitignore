@@ -1,0 +1,42 @@
+# --- OS junk ---
+Thumbs.db
+thumbs.db
+Desktop.ini
+desktop.ini
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# --- Windows ---
+$RECYCLE.BIN/
+*.lnk
+
+# --- Logs / temp ---
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# --- Editor / IDE ---
+.vscode/
+.idea/
+*.code-workspace
+
+# --- Build / output ---
+dist/
+build/
+out/
+
+# --- Node / tooling (if ever added) ---
+node_modules/
+
+# --- Local config ---
+.env
+.env.*
+
+# --- Generated artifacts ---
+*.cache
+*.generated
+
+Card Forge Studio/Autosave/
