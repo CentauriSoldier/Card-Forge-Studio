@@ -1,18 +1,20 @@
+![Card Forge Studio Banner](assets/img/banner.png)
+
 # 🔥 Card Forge
 
 > **Design. Build. Export. Dominate.**  
-> Card Forge is a blazing-fast, open-source tool for creating professional card game assets at scale.
+> Card Forge Studio is a blazing-fast, open-source tool for creating professional card game assets at scale.
 
-Card Forge is built for designers, developers, and worldbuilders who need **speed**, **power**, and **control**.  
-Whether you’re crafting a single prototype or generating thousands of cards from data, Card Forge does it in seconds.
+Card Forge Studio is built for designers, developers, and worldbuilders who need **speed**, **power**, and **control**.  
+Whether you’re crafting a single prototype or generating thousands of cards from data, Card Forge Studio does it in seconds.
 
 > *“In the land of bloated editors and slow pipelines, a mighty forge was built.”*
 
 ---
 
-## ⚔️ What Is Card Forge?
+## ⚔️ What Is Card Forge Studio?
 
-Card Forge is a desktop tool for:
+Card Forge Studio is a desktop tool for:
 
 - Designing card layouts  
 - Binding data to templates  
@@ -51,9 +53,9 @@ It’s built to handle *real* production workloads—no fluff, no bloat, no wait
 
 ## 🧠 Programming Required
 
-Card Forge is powerful because it **demands code**.
+Card Forge Studio is powerful because it **demands code**.
 
-This is not a drag-and-drop toy. Card Forge is built on a real engine, using:
+This is not a drag-and-drop toy. Card Forge Studio is built on a real engine, using:
 
 - **AutoPlay Media Studio** – the host environment  
   https://www.indigorose.com/autoplay-media-studio/
@@ -70,9 +72,9 @@ Every system is scriptable. Every behavior is deterministic. Every build is unde
 That’s the trade:
 
 - You bring logic.  
-- Card Forge gives you raw power.
+- Card Forge Studio gives you raw power.
 
-If you can think in data and express it in code, Card Forge becomes a weapon for mass creation—capable of generating entire games in seconds with precision and repeatability.
+If you can think in data and express it in code, Card Forge Studio becomes a weapon for mass creation—capable of generating entire games in seconds with precision and repeatability.
 
 This is a forge for builders, not tourists.
 
@@ -86,13 +88,13 @@ This is a forge for builders, not tourists.
 - Rapid iteration on balance and layout  
 - Print-on-demand pipelines  
 
-If your workflow involves *lots of cards*, Card Forge is your war machine.
+If your workflow involves *lots of cards*, Card Forge Studio is your war machine.
 
 ---
 
 ## 🛠️ Philosophy
 
-Card Forge is built around three principles:
+Card Forge Studio is built around three principles:
 
 1. **Speed over ceremony**  
 2. **Power over prettiness**  
@@ -105,11 +107,11 @@ It’s a forge.
 
 ## 📦 Status
 
-Card Forge is under active development.  
+Card Forge Studio is under active development.  
 The goal is a lean, brutal toolchain that turns structured data into finished card art with zero friction.
 
 ---
 
 ## 🩸 License
 
-Card Forge is open-source, free to use, and licensed under **The Unlicense** wherever possible. AutoPlay Media Studio and AutoPlay Media Studio Plugins are licensed seperately and are property of their respective owners.
+Card Forge Studio is open-source, free to use, and licensed under **The Unlicense** wherever possible. AutoPlay Media Studio and AutoPlay Media Studio Plugins are licensed seperately and are property of their respective owners.
