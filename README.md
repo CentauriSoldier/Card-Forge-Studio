@@ -12,7 +12,7 @@ Generating thousands of cards from data in seconds.
 
 ---
 
-**Version:**2025.306.14
+**Version:** 2025.306.14
 [Changelog](Changelog.md)
 
 ---
