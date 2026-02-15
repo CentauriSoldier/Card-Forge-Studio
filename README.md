@@ -1,6 +1,6 @@
 ![Card Forge Studio Banner](assets/img/banner.png)
 
-# 🔥 Card Forge
+# 🔥 Card Forge Studio
 
 > **Design. Build. Export. Dominate.**  
 > Card Forge Studio is a blazing-fast, open-source tool for creating professional card game assets at scale.
