@@ -46,15 +46,11 @@ local _tSetPaths    = {};
 ██║     ██║███████╗███████╗
 ╚═╝     ╚═╝╚══════╝╚══════╝  ]]
 TheMenu.Add("File",          _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
-        Add("File:>New",     _nIconID,   -_bEnabled,   -_bChecked,   -_bCheckable,   _tNoCallbacks).
-        Add("File:>---",     _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
-        Add("File:>Exit",    _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks);
-
-local function FileOnSelected(oItem)
-    Application.Exit(0);
-end
-
-TheMenu.SetCallback("File:>Exit", Menu.EVENT.OnSelected, FileOnSelected);
+        --Add("File:>New",     _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
+        --Add("File:>---",     _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
+        Add("File:>Exit",    _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   {[eMenu.OnSelected] = function(tItem)
+            Application.Exit(0); --TODO check for savability
+        end});
 
 
 --[[
@@ -65,9 +61,11 @@ TheMenu.SetCallback("File:>Exit", Menu.EVENT.OnSelected, FileOnSelected);
 ██║     ██║  ██║╚██████╔╝╚█████╔╝███████╗╚██████╗   ██║
 ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚════╝ ╚══════╝ ╚═════╝   ╚═╝  ]]
 TheMenu.Add("Project",           _nIconID,   _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Project:>New",      _nIconID,   _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
+        Add("Project:>New",      _nIconID,   _bEnabled,      -_bChecked,     -_bCheckable,   {[eMenu.OnSelected] = function(tItem)
+            NewGame(); --TODO check for savability
+        end}).
         Add("Project:>Load",     _nIconID,   _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Project:>Browse",   _nIconID,   -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks);
+        Add("Project:>Browse",   _nIconID,   _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks);
 
 --[[
 ███████╗███████╗████████╗
@@ -76,12 +74,11 @@ TheMenu.Add("Project",           _nIconID,   _bEnabled,      -_bChecked,     -_b
 ╚════██║██╔══╝     ██║
 ███████║███████╗   ██║
 ╚══════╝╚══════╝   ╚═╝   ]]
-TheMenu.Add("Set",           _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks).
+TheMenu.Add("Set",           _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
         Add("Set:>New",      _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
         Add("Set:>Load",     _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Set:>Save",     _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Set:>---",      _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Set:>Delete",   _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks);
+        Add("Set:>Browse",   _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks);
+        --Add("Set:>Save",     _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks);
 
 --[[
  ██████╗ ██████╗ ████████╗██╗ ██████╗ ███╗   ██╗███████╗
@@ -160,23 +157,25 @@ TheMenu.Refresh();
 local tSupport;
 tSupport = {
     RefreshGamesList = function(sPage)
-        --clear the card set list TODO FINISH
         local tGames = Folder.Find(_pGames.."\\", "*", false, nil);
 
         if (tGames) then
+            --clear the games list
+            TheMenu.ClearChildren("Project:>Load");
             table.sort(tGames, Path.SortByEndFolder); --sort by game name
 
             for nIndex, pFolder in ipairs(tGames) do
                 local sGame = Path.GetEndFolder(pFolder);
                 local sMenuPath = "Project:>Load:>"..sGame;
-                TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, _tNoCallbacks);
-                _tGamePaths[sGame] = pFolder;
+                    TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, {
+                        [eMenu.OnSelected] = function(tItem)
+                            --TODO check that the current project isn't loaded first and that there are no unssaved changes
+                            PrepGame(pFolder);
+                            Page.Jump("Forge");
+                        end
+                });
 
-                TheMenu.SetCallback(sMenuPath, Menu.EVENT.OnSelected, function(tItem)
-                    --TODO check that the current project isn't loaded frst and that there are no unssaved changes
-                    PrepGame(pFolder);
-                    Page.Jump("Forge");
-                end)
+                _tGamePaths[sGame] = pFolder;
             end
 
             TheMenu.Refresh();
@@ -184,10 +183,11 @@ tSupport = {
 
     end,
     RereshSetsList = function(sPage)
-        --clear the card sets list TODO FINISH ALSO enable the other menu items GHOST current project item
         local tCardSets = File.Find(_pCSVSource.."\\", "*.csv", true, false, nil, nil);
 
         if (tCardSets) then
+            --clear the cards list
+            TheMenu.ClearChildren("Set:>Load");
             table.sort(tCardSets, PathSorter); --sort by game name
 
             for nIndex, pFile in ipairs(tCardSets) do
@@ -205,33 +205,7 @@ tSupport = {
                 end
 
             end
-            --[[TODO LEFT OFF HERE
-                            local tLoadSet      = _tFile.SubMenu[3];
-                            tLoadSet.Enabled    = true;
-                            tLoadSet.SubMenu    = {};
-                            local nMenuIndex    = 1;
 
-                            for nIndex, pFolder in ipairs(tCardSets) do
-                                local sSet = Path.GetEndFolder(pFolder):gsub("%.[cC][sS][vV]$", '');
-
-                                if not (pFolder:find(".ignore")) then
-
-                                    tLoadSet.SubMenu[nMenuIndex] = {
-                                        ID      = tLoadSet.ID + nMenuIndex,
-                                        Text    = sSet,
-                                        IconID  = -1,
-                                        Enabled = true,
-                                        Checked = false,
-                                    };
-
-                                    --local pLogo 		= pFolder.."\\"..sSet..".png";
-                                    _tSetPaths[sSet] = pFolder;
-                                    --tGameLogos[#tGameLogos + 1] = pLogo;
-                                    nMenuIndex = nMenuIndex + 1;
-                                end
-
-                            end
-            ]]
         end
 
     end,
@@ -239,17 +213,31 @@ tSupport = {
 
         if (sPage == "Welcome") then
             tSupport.RefreshGamesList();
-            TheMenu.SetEnabled("Options:>Draw",         false);
-            TheMenu.SetEnabled("Set",                   false);--TODO clear sets
-            TheMenu.SetEnabled("Window",                false);
-            TheMenu.SetEnabled("Help:>Documentation",   false);
+            --disable draw options TODO do each individiaully...cleaner
+            TheMenu.SetEnabled("Options:>Draw",             false);
+            --project items
+            TheMenu.SetEnabled("Project:>Browse",           false);
+            --set items
+            TheMenu.SetEnabled("Set:>New",                  false);
+            TheMenu.SetEnabled("Set:>Load",                 false);
+            --TheMenu.SetEnabled("Set:>Save",               false);
+            TheMenu.SetEnabled("Window",                    false);
+            TheMenu.SetEnabled("Help:>Documentation",       false);
+
             --TheMenu.Refresh();
 
         elseif (sPage == "Forge") then
-            TheMenu.SetEnabled("Options:>Draw",         true);
-            TheMenu.SetEnabled("Set",                   true);
-            TheMenu.SetEnabled("Window",                true);
-            TheMenu.SetEnabled("Help:>Documentation",   true);
+            TheMenu.SetEnabled("Options:>Draw",             true);
+            --project items
+            TheMenu.SetEnabled("Project:>Load:>".._sGame,   false);
+            TheMenu.SetEnabled("Project:>Browse",           true);
+            TheMenu.SetCallback("Project:>Browse", eMenu.OnSelected, function(tItem) Shell.Execute(_pGame, "open", "", "", SW_SHOWNORMAL); end);
+            --set items
+            TheMenu.SetEnabled("Set:>New",                  true);
+            TheMenu.SetEnabled("Set:>Load",                 true);
+            TheMenu.SetEnabled("Window",                    true);
+            TheMenu.SetEnabled("Help:>Documentation",       true);
+
             tSupport.RereshSetsList();
             --TheMenu.Refresh();
 

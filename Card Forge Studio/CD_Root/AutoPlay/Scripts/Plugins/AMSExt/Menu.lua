@@ -153,6 +153,54 @@ return class("Menu",
             return this;
         end,
 
+        ClearChildren = function(this, cdat, sPath)
+            local pri = cdat.pri;
+
+            if not (rawtype(sPath) == "string" and not sPath:isempty()) then
+                error("Menu.ClearChildren: path must be a non-empty string. Got "..tostring(sPath)..'('..type(sPath)..')', 2);
+            end
+
+            local tRoot = pri.ItemsByPath[sPath];
+            if not tRoot then
+                return 0; --nothing to clear
+            end
+
+            local sDelim   = Menu.DELIMITER;
+            local sPrefix  = sPath..sDelim;
+            local nPrefixL = #sPrefix;
+
+            local tNewItems = {};
+            local nRemoved  = 0;
+
+            for i = 1, #pri.Items do
+                local tItem = pri.Items[i];
+                local p     = tItem.Path;
+
+                if (p == sPath) then
+                    -- keep the node itself
+                    tNewItems[#tNewItems + 1] = tItem;
+
+                elseif (rawtype(p) == "string" and p:sub(1, nPrefixL) == sPrefix) then
+                    -- remove descendants
+                    pri.ItemsByPath[p] = nil;
+                    nRemoved = nRemoved + 1;
+
+                else
+                    -- keep unrelated items
+                    tNewItems[#tNewItems + 1] = tItem;
+                end
+            end
+
+            pri.Items = tNewItems;
+
+            if (pri.AutoUpdate) then
+                this.Refresh();
+            end
+
+            return nRemoved;
+        end,
+
+
         GetItem = function(this, cdat, sPath)
             return clone(cdat.pri.ItemsByPath[sPath]);
         end,
@@ -361,7 +409,7 @@ return class("Menu",
         SetEnabled = function(this, cdat, vPath, bFlag, bSkipCallback)
             local pri   = cdat.pri;
             local tItem = pri.ItemsByPath[vPath];
-            
+
             if not tItem then
                 error("Menu.SetEnabled: No menu item at path: "..tostring(vPath), 2);
             end

@@ -533,6 +533,9 @@ return class("ProcSys",
 
                 --set the save file variables
                 _pActiveCSV = pFile;
+
+                --MainMenu.SetEnabled("Set:>Save",             true);
+                MainMenu.SetEnabled("Set:>Browse",           true);
             end
 
         end,

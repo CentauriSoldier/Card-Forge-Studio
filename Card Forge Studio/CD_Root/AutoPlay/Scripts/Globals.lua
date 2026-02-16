@@ -43,13 +43,12 @@ function NewGame()
 
         if (bIsFilesafe) then
             PrepGame(_pGames.."\\"..sGame);
+            MainMenu.RefreshGamesList();
             Page.Jump("Forge");
-
         else
             Dialog.Message("Error Creating Game", '"'..sGame.."\"\r\n is not file-safe.");
         end
 
-        Menu.File.RefreshGamesList();
     end
 
 end

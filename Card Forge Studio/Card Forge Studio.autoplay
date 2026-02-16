@@ -11872,20 +11872,6 @@ end</Script>
 </BookMarks>
 </Event>
 <Event>
-<Name>On Size</Name>
-<Args>number e_WindowWidth, number e_WindowHeight, number e_DialogWidth, number e_DialogHeight, number e_Type</Args>
-<Script/>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Event>
 <Name>On Key</Name>
 <Args>number e_Key, table e_Modifiers</Args>
 <Script/>
@@ -11930,6 +11916,20 @@ end</Script>
 <Event>
 <Name>On Mouse Wheel</Name>
 <Args>table e_Flags, number e_Delta, number e_X, number e_Y</Args>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Size</Name>
+<Args>number e_WindowWidth, number e_WindowHeight, number e_DialogWidth, number e_DialogHeight, number e_Type</Args>
 <Script/>
 <TreeStates>
 <TreeState>0</TreeState>
@@ -12070,9 +12070,9 @@ Please double-click on each item to find out how to install it.</DlgMsg>
 <HelpURL>http://www.yourdomain.com/help.htm</HelpURL>
 </MissingTechs>
 <ProgramPrefs>
-<OutputFolder/>
-<EXEName>autorun.exe</EXEName>
-<EnableAutoPlayFeatureBTF>1</EnableAutoPlayFeatureBTF>
+<OutputFolder>C:\Users\CS\Sync\Documents\AutoPlay Media Studio 9\Output\Card Forge Studio</OutputFolder>
+<EXEName>Card Forge Studio.exe</EXEName>
+<EnableAutoPlayFeatureBTF>0</EnableAutoPlayFeatureBTF>
 <EnableAutoPlayFeatureCDRW>1</EnableAutoPlayFeatureCDRW>
 <EnableAutoPlayFeatureISO>1</EnableAutoPlayFeatureISO>
 <EnableAutoPlayFeatureSFX>0</EnableAutoPlayFeatureSFX>
@@ -12086,7 +12086,7 @@ Please double-click on each item to find out how to install it.</DlgMsg>
 <CDVolumeIdentifier>NEWDISC</CDVolumeIdentifier>
 <CacheFileData>1</CacheFileData>
 <UseBurnProof>1</UseBurnProof>
-<BuildType>0</BuildType>
+<BuildType>1</BuildType>
 <DriveLetter/>
 <UsePassword>0</UsePassword>
 <OpenFolder>1</OpenFolder>
