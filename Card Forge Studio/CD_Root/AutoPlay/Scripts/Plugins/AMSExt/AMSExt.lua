@@ -1,3 +1,7 @@
+if not (LUAEX_INIT) then
+    error("Could not load AMSExt plugin. Requires LuaEx (best with AMS LuaExLoader plugin).");
+end
+
 local class         = class;
 local math          = math;
     local clamp     = math.clamp;
@@ -69,6 +73,7 @@ end
 
 Windows = require("Plugins.AMSExt.Windows");
 
+require("Plugins.AMSExt.KEY_CODES");
 require("Plugins.AMSExt.Application");
 require("Plugins.AMSExt.Color");
 require("Plugins.AMSExt.DialogEx");

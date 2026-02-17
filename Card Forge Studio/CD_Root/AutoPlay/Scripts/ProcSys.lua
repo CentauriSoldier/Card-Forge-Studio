@@ -293,7 +293,7 @@ local function LoadFileToGrid(pFile)
 
     --set loading to finished
     _bAllowSave = false;
-    xButton.SetEnabled("btn save data", false);
+    MainMenu.SetEnabled("Set:>Save", false);
     _bIsLoading = false;
 end
 
@@ -505,7 +505,7 @@ return class("ProcSys",
             --set defaults
             _pActiveCSV = "";
             _bAllowSave = false;
-            xButton.SetEnabled("btn save data", false);
+            MainMenu.SetEnabled("Set:>Save", false);
             local pFile;
 
             --load csv
@@ -599,7 +599,7 @@ return class("ProcSys",
 
                 --update saveability
                 _bAllowSave = true;
-                xButton.SetEnabled("btn save data", true);
+                MainMenu.SetEnabled("Set:>Save", true);
 
                 --update the draw call
                 if (MainMenu.IsChecked("Options:>Draw:>Redraw On Cell Changed")) then
@@ -638,13 +638,25 @@ return class("ProcSys",
                 tWindows[PANE.DATA_EDIT] = {
                     Object = oDataEdit,
                     WindowHandle = oDataEdit.GetWindowHandle(),
+                    Callback        = {
+                        OnClose         = oDataEdit.GetCallback(WinSys.EVENT.OnClose),
+                        OnMaximize      = oDataEdit.GetCallback(WinSys.EVENT.OnMaximize),
+                        OnResizeStop    = oDataEdit.GetCallback(WinSys.EVENT.OnResizeStop),
+                        OnRestore       = oDataEdit.GetCallback(WinSys.EVENT.OnRestore),
+                    },
                 };
 
                 --then the data viewer
                 local oDataView = WinAMS(OBJECT_GRID, "Final Data Viewer", 1400, 0, 800, 1000, "grd final data", nil, OnReadyGrids)--TODO get values from INI
                 tWindows[PANE.DATA_VIEW] = {
-                    Object = oDataView,
-                    WindowHandle = oDataView.GetWindowHandle(),
+                    Object          = oDataView,
+                    WindowHandle    = oDataView.GetWindowHandle(),
+                    Callback        = {
+                        OnClose         = oDataView.GetCallback(WinSys.EVENT.OnClose),
+                        OnMaximize      = oDataView.GetCallback(WinSys.EVENT.OnMaximize),
+                        OnResizeStop    = oDataView.GetCallback(WinSys.EVENT.OnResizeStop),
+                        OnRestore       = oDataView.GetCallback(WinSys.EVENT.OnRestore),
+                    },
                 };
 
                 local tPaneByHandle = {
@@ -653,16 +665,21 @@ return class("ProcSys",
                 };
 
                 local function RestoreWindow(hWnd)
-                    local ePane     = tPaneByHandle[hWnd];
-                    local sSection  = tostring(ePane);
-                    local nX        = tonumber(INIFile.GetValue(_pAppCFG, sSection, "X"))       or 0;
-                    local nY        = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Y"))       or 0;
-                    local nWidth    = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Width"))   or 800;
-                    local nHeight   = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Height"))  or 1000; --TODO MAGIC NUMBERS use defaults?
+                    local ePane         = tPaneByHandle[hWnd];
+                    local sSection      = tostring(ePane);
+                    local nX            = tonumber(INIFile.GetValue(_pAppCFG, sSection, "X"))           or 0;
+                    local nY            = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Y"))           or 0;
+                    local nWidth        = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Width"))       or 800;
+                    local nHeight       = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Height"))      or 1000; --TODO MAGIC NUMBERS use defaults?
+                    local bMaximized    = INIFile.GetValueBoolean(_pAppCFG, sSection,   "Maximized")  or false;
 
                     Window.SetSize(hWnd, nWidth, nHeight);
                     tWindows[ePane].Object.FillWindow();
                     Window.SetPos(hWnd, nX, nY);
+
+                    if (bMaximized) then
+                        Window.Maximize(hWnd);
+                    end
 
                     if not (INIFile.GetValueBoolean(_pAppCFG, tostring(ePane), "Visible")) then
                         Window.Hide(hWnd);
@@ -670,33 +687,54 @@ return class("ProcSys",
 
                 end
 
-                local fCurrentOnResizeStop = oDataEdit.GetCallback(WinSys.EVENT.OnResizeStop);
-                local function OnResizeStop(hWnd, nWidth, nHeight)
-                    fCurrentOnResizeStop(hWnd, nWidth, nHeight);
-
-                    --save the window's dimensions
-                    local sSection = tostring(tPaneByHandle[hWnd]);
-                    INIFile.SetValue(_pAppCFG, sSection, "Width", tostring(nWidth));
-                    INIFile.SetValue(_pAppCFG, sSection, "Height", tostring(nHeight));
-
-                    --save the window's location
-                    local tPos = Window.GetPos(hWnd);
-                    INIFile.SetValue(_pAppCFG, sSection, "X", tostring(tPos.X));
-                    INIFile.SetValue(_pAppCFG, sSection, "Y", tostring(tPos.Y));
-                end
-
-                local fCurrentOnClose = oDataEdit.GetCallback(WinSys.EVENT.OnClose);
                 local function OnClose(hWnd)
                     local ePane = tPaneByHandle[hWnd];
+
+                    --fire the original callback
+                    tWindows[ePane].Callback.OnClose(hWnd, nWidth, nHeight);
+
                     INIFile.SetValue(_pAppCFG, tostring(ePane), "Visible", "false");
                     fCurrentOnClose(hWnd);
                 end
 
+                local function FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, sCallback)
+                    local ePane = tPaneByHandle[hWnd];                    
+                    --fire the original callback
+                    tWindows[ePane].Callback[sCallback](hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight);
+
+                    --save the window's dimensions
+                    local sSection = tostring(ePane);
+                    INIFile.SetValue(_pAppCFG, sSection, "Width", tostring(nWidth));
+                    INIFile.SetValue(_pAppCFG, sSection, "Height", tostring(nHeight));
+
+                    INIFile.SetValue(_pAppCFG, sSection, "X", tostring(nX));
+                    INIFile.SetValue(_pAppCFG, sSection, "Y", tostring(nY));
+
+                    --update whether the window is maximized
+                    INIFile.SetValue(_pAppCFG, sSection, "Maximized", tostring(sCallback == "OnMaximize"));
+                end
+
+                local function OnMaximize(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
+                    FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, "OnMaximize");
+                end
+
+                local function OnResizeStop(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
+                    FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, "OnResizeStop");
+                end
+
+                local function OnRestore(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
+                    FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, "OnRestore");
+                end
+
                 --update the callbacks
-                oDataEdit.SetCallback(WinSys.EVENT.OnResizeStop,    OnResizeStop);
-                oDataView.SetCallback(WinSys.EVENT.OnResizeStop,    OnResizeStop);
                 oDataEdit.SetCallback(WinSys.EVENT.OnClose,         OnClose);
+                oDataEdit.SetCallback(WinSys.EVENT.OnMaximize,      OnMaximize);
+                oDataEdit.SetCallback(WinSys.EVENT.OnResizeStop,    OnResizeStop);
+                oDataEdit.SetCallback(WinSys.EVENT.OnRestore,       OnRestore);
                 oDataView.SetCallback(WinSys.EVENT.OnClose,         OnClose);
+                oDataView.SetCallback(WinSys.EVENT.OnMaximize,      OnMaximize);
+                oDataView.SetCallback(WinSys.EVENT.OnResizeStop,    OnResizeStop);
+                oDataView.SetCallback(WinSys.EVENT.OnRestore,       OnRestore);
 
 
                 RestoreWindow(tWindows[PANE.DATA_EDIT].WindowHandle);
@@ -852,7 +890,7 @@ return class("ProcSys",
                 --Grid.SaveToFile(_sFinalDataGrid, _pExportCSV);
 
                 _bAllowSave = false;
-                xButton.SetEnabled("btn save data", false);
+                MainMenu.SetEnabled("Set:>Save", false);
             end
 
         end,

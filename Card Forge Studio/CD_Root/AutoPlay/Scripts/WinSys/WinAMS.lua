@@ -1,21 +1,19 @@
 local Window = Window;
 local S = Windows.WINDOW_STYLE
 local _tObjects = {
-    [OBJECT_INPUT]     = Input,
-    [OBJECT_LISTBOX]   = ListBox,
-    [OBJECT_GRID]      = Grid,
+    [OBJECT_INPUT] = {
+        Style = S.WS_OVERLAPPED | S.WS_SYSMENU | S.WS_MINIMIZEBOX | S.WS_MAXIMIZEBOX | S.WS_THICKFRAME | S.WS_VSCROLL | S.WS_HSCROLL,
+        Table = Input,
+    },
+    [OBJECT_LISTBOX] = {
+        Style = S.WS_OVERLAPPED | S.WS_SYSMENU | S.WS_MINIMIZEBOX | S.WS_MAXIMIZEBOX | S.WS_THICKFRAME | S.WS_VSCROLL | S.WS_HSCROLL,
+        Table = ListBox,
+    },
+    [OBJECT_GRID] = {
+        Style = S.WS_OVERLAPPED | S.WS_SYSMENU | S.WS_MINIMIZEBOX | S.WS_MAXIMIZEBOX | S.WS_THICKFRAME,
+        Table = Grid,
+    },
 };
-
-
-local _SnStyle =
-      Windows.WINDOW_STYLE.WS_OVERLAPPEDWINDOW
-    --| Windows.WINDOW_STYLE.WS_VSCROLL
-    --| Windows.WINDOW_STYLE.WS_HSCROLL
-    | Windows.WINDOW_STYLE.WS_VISIBLE
-    & ~Windows.WINDOW_STYLE.WS_MAXIMIZEBOX
-
-local _nStyle =
-    S.WS_OVERLAPPED | S.WS_SYSMENU | S.WS_MINIMIZEBOX | S.WS_MAXIMIZEBOX | S.WS_THICKFRAME | S.WS_VSCROLL | S.WS_HSCROLL        -- keep this ONLY if you still want resizing
 
 -- hard-remove maximize
 --nStyle = nStyle & ~S.WS_MAXIMIZEBOX
@@ -47,16 +45,17 @@ return class("WinAMS",
             local pri           = cdat.pri;
             pri.Object          = sObject;
             pri.AMSObjectType   = nObjectType;
-            local tObject       = _tObjects[nObjectType];
+            local tObject       = _tObjects[nObjectType].Table;
+            local sStyle        = _tObjects[nObjectType].Style;
 
             local hObject = tObject.GetProperties(sObject).WindowHandle;
             pri.ObjectHandle = hObject;
 
             --TODO wrap and fire oncreate, onready
 
-            local OnReady = function(hWnd)
+            local OnReady = function(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
             	WindowWizard.EmbedWindow(hObject, hWnd);
-                tObject.SetProperties(sObject, {X = 0, Y = 0, Width = nWidth, Height = nHeight});
+                tObject.SetProperties(sObject, {X = 0, Y = 0, Width = nCWidth, Height = nCHeight});
 
                 if (type(fOnReady) == "function") then
                     fOnReady(hWnd, sObject);
@@ -64,17 +63,17 @@ return class("WinAMS",
 
             end
 
-            super(sTitle, nX, nY, nWidth, nHeight, _nStyle, _nStyleEx, nil, OnReady)
+            super(sTitle, nX, nY, nWidth, nHeight, sStyle, _nStyleEx, nil, OnReady)
 
-            local function OnResizeStop(hWnd, nWidth, nHeight)
-            	tObject.SetProperties(sObject, {Width = nWidth, Height = nHeight});
+            local function OnResizeStop(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
+            	tObject.SetProperties(sObject, {Width = nCWidth, Height = nCHeight});
             	--tObject.SetSize("Grid1", tSize.Width, tSize.Height);
             end
 
             this.SetCallback(WinSys.EVENT.OnResizeStop, OnResizeStop);
 
-            local function OnMaximize(hWnd, nWidth, nHeight)
-            	tObject.SetProperties(sObject, {Width = nWidth, Height = nHeight});
+            local function OnMaximize(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
+            	tObject.SetProperties(sObject, {Width = nCWidth, Height = nCHeight});
             	--tObject.SetSize("Grid1", tSize.Width, tSize.Height);
             end
 
@@ -87,12 +86,12 @@ return class("WinAMS",
             end
 
             this.SetCallback(WinSys.EVENT.OnClose, OnClose);
-
         end,
         FillWindow = function(this, cdat)
             local pri = cdat.pri;
-            local tObject = _tObjects[pri.AMSObjectType];
-            local tSize = Window.GetSize(this.GetWindowHandle());
+            local tObject = _tObjects[pri.AMSObjectType].Table;
+            --local tSize = Window.GetSize(this.GetWindowHandle());
+            local tSize = WindowWizard.GetClientSize(this.GetWindowHandle());
             tObject.SetSize(pri.Object, tSize.Width, tSize.Height);
             tObject.SetPos(pri.Object, 0, 0);
         end,

@@ -1,34 +1,3 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>CFS - Building a Forge</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-
-    <link rel="stylesheet" href="css/bootstrap.min.css">
-	<link rel="stylesheet" href="css/prism.css">
-	<link rel="stylesheet" href="css/tutorials.css">
-</head>
-<body class="bg-light" data-nav-active="forge-build">
-
-    <!-- BANNER / HEADER -->
-    <header class="bg-dark text-light py-4 mb-4">
-        <div class="container-fluid">
-            <h1 class="mb-1">Card Forge Studio</h1>
-            <p class="mb-0 text-muted">Tutorials</p>
-        </div>
-    </header>
-
-    <!-- MAIN CONTENT -->
-    <main class="container-fluid">
-        <div class="row">
-
-            <!-- SIDEBAR -->
-            <aside class="col-md-2 col-lg-2 mb-4">
-                <div id="tutorialNav" class="list-group"></div>
-            </aside>
-
-            <!-- CONTENT AREA -->
             <section class="col-md-9">
 
                 <h2 class="mb-1">Building a Forge</h2>
@@ -40,7 +9,7 @@
 							Goal: Understand what a Forge is, where it lives, and what your game must provide.
 						</div>
 					</div>
-				</div>                
+				</div>
 
                 <div class="alert alert-info">
                     Tip: A Forge is game-specific. Each game defines its own drawing &amp; output rules and export behavior.
@@ -61,13 +30,13 @@
 							<li>Hook and modify the user environment used in the Lua editor</li>
 						</ul>
 					</div>
-				</div>					
+				</div>
 				<div class="alert alert-primary d-flex align-items-start">
 							<strong class="me-2">Note:</strong>
 							<div>
 								Each time a project is loaded, the Lua package path is reset to include your game's <strong>Scripts</strong> directory.
 							</div>
-						</div>	
+						</div>
                 <div class="card mb-4">
                     <div class="card-body">
                         <h4 class="h5 mb-3">A Forge typically handles</h4>
@@ -128,13 +97,13 @@
 							<div>
 								We'll get more into class design later.
 							</div>
-						</div>						
+						</div>
 	                </div>
 				</div>
 				<div class="code-block position-relative mb-4">
 					<button class="btn btn-sm btn-outline-secondary copy-btn" type="button">
 						Copy
-					</button>	
+					</button>
 					<pre class="mb-4"><code class="language-lua">--============================================================
 --  InitForge.lua (example)
 --  Fantasy example: Card -> Creature -> Dragon
@@ -197,7 +166,7 @@ local _GetUserEnv = GetUserEnv;
 
 function GetUserEnv()
     local tRet = _GetUserEnv();
-	
+
 	--[[we can add functions, strings, and whatever
 		else we want to the user environment used
 		in the Lua editor]]
@@ -206,7 +175,7 @@ function GetUserEnv()
 			return tRow.Health + tRow.BonusHealth;
 		end
 	end
-	
+
 	--return the modified environment
 	return tRet;
 end
@@ -222,16 +191,3 @@ return Forge(1125, 825, 825, 1125);
                 </div>
 
             </section>
-        </div>
-    </main>
-
-    <!-- FOOTER -->
-    <footer class="text-center text-muted py-3 mt-5">
-        <small>Card Forge Studio — Tutorials</small>
-    </footer>
-
-    <script src="js/bootstrap.bundle.min.js"></script>
-    <script src="js/tutorials.js"></script>
-	<script src="js/prism.js"></script>
-</body>
-</html>

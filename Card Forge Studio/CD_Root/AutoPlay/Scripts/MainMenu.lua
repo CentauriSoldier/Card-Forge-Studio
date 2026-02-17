@@ -1,6 +1,7 @@
 local eMenu         = Menu.EVENT;
 local _sSection     = "";
 local _pINI         = "";
+local _sSub         = ":>";
 
 --happens only during startup
 local function Load(sValue, vType)
@@ -66,7 +67,6 @@ TheMenu.Add("Project",           _nIconID,   _bEnabled,      -_bChecked,     -_b
         end}).
         Add("Project:>Load",     _nIconID,   _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
         Add("Project:>Browse",   _nIconID,   _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks);
-
 --[[
 ███████╗███████╗████████╗
 ██╔════╝██╔════╝╚══██╔══╝
@@ -77,7 +77,8 @@ TheMenu.Add("Project",           _nIconID,   _bEnabled,      -_bChecked,     -_b
 TheMenu.Add("Set",           _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
         Add("Set:>New",      _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
         Add("Set:>Load",     _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Set:>Browse",   _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks);
+        Add("Set:>Save",     _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   {[eMenu.OnSelected] = function() ProcSys.SaveCSVs(); end}).
+        Add("Set:>Browse",   _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks);
         --Add("Set:>Save",     _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks);
 
 --[[
@@ -106,18 +107,18 @@ local sBE  = "Border Enabled";
 local sESC = "Export Selected Card";
 local sRCC = "Redraw On Cell Changed";
 
-TheMenu.Add(sOD,                _nIconID,       _bEnabled,      -_bChecked,                     -_bCheckable,   _tNoCallbacks).
-        Add(sOD..":>"..sHRE,    _nIconID,       _bEnabled,     LoadB(sHRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHRE:collapse(), -tItem.IsChecked) end}).
-        Add(sOD..":>"..sVRE,    _nIconID,       _bEnabled,     LoadB(sVRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVRE:collapse(), -tItem.IsChecked) end}).
-        Add(sOD..":>"..sHCE,    _nIconID,       _bEnabled,     LoadB(sHCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHCE:collapse(), -tItem.IsChecked) end}).
-        Add(sOD..":>"..sVCE,    _nIconID,       _bEnabled,     LoadB(sVCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVCE:collapse(), -tItem.IsChecked) end}).
-        Add(sOD..":>"..sOE,     _nIconID,       _bEnabled,     LoadB(sOE:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sOE:collapse(),  -tItem.IsChecked) end}).
-        Add(sOD..":>"..sBE,     _nIconID,       _bEnabled,     LoadB(sBE:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sBE:collapse(),  -tItem.IsChecked) end}).
-        Add(sOD..":>"..sESC,    _nIconID,       _bEnabled,     LoadB(sESC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sESC:collapse(), -tItem.IsChecked) end}).
-        Add(sOD..":>"..sRCC,    _nIconID,       _bEnabled,     LoadB(sRCC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sRCC:collapse(), -tItem.IsChecked) end});
+TheMenu.Add(sOD,                 _nIconID,       _bEnabled,    -_bChecked,                      -_bCheckable,    _tNoCallbacks).
+        Add(sOD.._sSub..sHRE,    _nIconID,       _bEnabled,     LoadB(sHRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHRE:collapse(), -tItem.IsChecked) end}).
+        Add(sOD.._sSub..sVRE,    _nIconID,       _bEnabled,     LoadB(sVRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVRE:collapse(), -tItem.IsChecked) end}).
+        Add(sOD.._sSub..sHCE,    _nIconID,       _bEnabled,     LoadB(sHCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHCE:collapse(), -tItem.IsChecked) end}).
+        Add(sOD.._sSub..sVCE,    _nIconID,       _bEnabled,     LoadB(sVCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVCE:collapse(), -tItem.IsChecked) end}).
+        Add(sOD.._sSub..sOE,     _nIconID,       _bEnabled,     LoadB(sOE:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sOE:collapse(),  -tItem.IsChecked) end}).
+        Add(sOD.._sSub..sBE,     _nIconID,       _bEnabled,     LoadB(sBE:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sBE:collapse(),  -tItem.IsChecked) end}).
+        Add(sOD.._sSub..sESC,    _nIconID,       _bEnabled,     LoadB(sESC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sESC:collapse(), -tItem.IsChecked) end}).
+        Add(sOD.._sSub..sRCC,    _nIconID,       _bEnabled,     LoadB(sRCC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sRCC:collapse(), -tItem.IsChecked) end});
 
 
-TheMenu.Add("Window",                   _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  _tNoCallbacks).
+TheMenu.Add("Window",                   _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Window:>Base Data",        _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] =
         function(tItem)
             ProcSys.SetWindowVisible(PANE.DATA_EDIT, true);
@@ -145,10 +146,11 @@ TheMenu.Add("Window",                   _nIconID,       -_bEnabled,     -_bCheck
 ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ]]
 TheMenu.Add("Help",                     _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Help:>Documentation",      _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(_pGame.."\\Docs\\".._sGame.." API.html", "", SW_SHOWNORMAL); end}).
+        Add("Help:>Tutorials",          _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(_pAppDir.."\\index.html", "", SW_SHOWNORMAL); end}).
         Add("Help:>Visit Website",      _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.OpenURL("https://www.cardforge.studio/", SW_SHOWNORMAL); end}).
         Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Help:>License",            _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("License", true, nil, nil); end}).
-        Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks). --TODO BUG FIX not showing a second divider, fix this in Menu
+        --Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Help:>About",              _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) end});--TODO
 
 TheMenu.SetAutoUpdate(true);
@@ -210,24 +212,43 @@ tSupport = {
 
     end,
     OnPreload = function(sPage)
+        local sWindow = "Window".._sSub;
 
         if (sPage == "Welcome") then
             tSupport.RefreshGamesList();
-            --disable draw options TODO do each individiaully...cleaner
-            TheMenu.SetEnabled("Options:>Draw",             false);
+            --options:>draw items
+            TheMenu.SetEnabled(sOD.._sSub..sHRE,            false);
+            TheMenu.SetEnabled(sOD.._sSub..sVRE,            false);
+            TheMenu.SetEnabled(sOD.._sSub..sHCE,            false);
+            TheMenu.SetEnabled(sOD.._sSub..sVCE,            false);
+            TheMenu.SetEnabled(sOD.._sSub..sOE,             false);
+            TheMenu.SetEnabled(sOD.._sSub..sBE,             false);
+            TheMenu.SetEnabled(sOD.._sSub..sESC,            false);
+            TheMenu.SetEnabled(sOD.._sSub..sRCC,            false);
             --project items
             TheMenu.SetEnabled("Project:>Browse",           false);
             --set items
             TheMenu.SetEnabled("Set:>New",                  false);
             TheMenu.SetEnabled("Set:>Load",                 false);
             --TheMenu.SetEnabled("Set:>Save",               false);
-            TheMenu.SetEnabled("Window",                    false);
             TheMenu.SetEnabled("Help:>Documentation",       false);
-
+            --window items
+            TheMenu.SetEnabled(sWindow.."Base Data",        false);
+            TheMenu.SetEnabled(sWindow.."Final Data",       false);
+            TheMenu.SetEnabled(sWindow.."Style Editor",     false);
+            TheMenu.SetEnabled(sWindow.."Mechanics Viewer", false);
             --TheMenu.Refresh();
 
         elseif (sPage == "Forge") then
-            TheMenu.SetEnabled("Options:>Draw",             true);
+            --options:>draw items
+            TheMenu.SetEnabled(sOD.._sSub..sHRE,            true);
+            TheMenu.SetEnabled(sOD.._sSub..sVRE,            true);
+            TheMenu.SetEnabled(sOD.._sSub..sHCE,            true);
+            TheMenu.SetEnabled(sOD.._sSub..sVCE,            true);
+            TheMenu.SetEnabled(sOD.._sSub..sOE,             true);
+            TheMenu.SetEnabled(sOD.._sSub..sBE,             true);
+            TheMenu.SetEnabled(sOD.._sSub..sESC,            true);
+            TheMenu.SetEnabled(sOD.._sSub..sRCC,            true);
             --project items
             TheMenu.SetEnabled("Project:>Load:>".._sGame,   false);
             TheMenu.SetEnabled("Project:>Browse",           true);
@@ -235,8 +256,13 @@ tSupport = {
             --set items
             TheMenu.SetEnabled("Set:>New",                  true);
             TheMenu.SetEnabled("Set:>Load",                 true);
-            TheMenu.SetEnabled("Window",                    true);
             TheMenu.SetEnabled("Help:>Documentation",       true);
+            --window items
+            TheMenu.SetEnabled(sWindow.."Base Data",        true);
+            TheMenu.SetEnabled(sWindow.."Final Data",       true);
+            TheMenu.SetEnabled(sWindow.."Style Editor",     true);
+            TheMenu.SetEnabled(sWindow.."Mechanics Viewer", true);
+
 
             tSupport.RereshSetsList();
             --TheMenu.Refresh();

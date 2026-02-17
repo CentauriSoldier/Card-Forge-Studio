@@ -28,6 +28,10 @@ constant("_pAppDir",        _AppDataLocal.."\\Card Forge");
 constant("_pGames",         _pAppDir.."\\Games");
 constant("_pAppCFG_T",      _pTemplates.."\\"..APP_CFG); --template
 constant("_pAppCFG",        _pAppDir.."\\"..APP_CFG);
+constant("_Tutorials",      _Docs.."\\Tutorials");
+
+constant("TIMER_HTML_PROCESS_INTERVAL", 3200);
+constant("TIMER_HTML_PROCESS_ID",       97);
 
 constant("LICENSE", TextFile.ReadToString(_Docs.."\\Licenses\\licenses.txt"));
 
@@ -195,6 +199,7 @@ Forge       = require("Forge");
 StyleEditor = require("StyleEditor");
 WinSys      = require("WinSys");
     WinAMS  = require("WinSys.WinAMS");
+Tutorial    = require("Tutorial");
 
 --TODO remove?
 Editor      = require("Editor");
@@ -356,7 +361,19 @@ function OnStartUp()--TODO move to its own module if it gets too big
     --load the menu
     MainMenu = require("MainMenu");
 
+    --copy the app's changelog to the github repo
+    if not (bIsCompiled) then
+        local sFile     = "\\Changelog.md";
+        local pSource   = _Docs..sFile;
+        local pDes      = io.normalizepath(_Docs.."\\..\\..\\..\\..\\")..sFile;
+        local sText     = TextFile.ReadToString(pSource);
+        TextFile.WriteFromString(pDes, sText, false);
+    end
 
+    --build the tutorials
+    if not (bIsCompiled and File.DoesExist(Tutorial.PATH_INDEX)) then
+        Tutorial.Init();
+    end
 
     --ScalerX.OnStartup(1400, 1200);
 end

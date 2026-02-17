@@ -1,9 +1,29 @@
-.code-block .copy-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 2;
+.code-block {
+    margin-bottom: 1rem;
 }
+
+.code-block .copy-btn {
+    position: static;        /* ← back into normal flow */
+    display: inline-block;   /* ensures it occupies its own line */
+    margin-bottom: 0.5rem;   /* space before the code */
+
+    /* make it obvious */
+    background: #0d6efd;
+    color: #fff;
+    border-color: #0d6efd;
+    font-weight: 600;
+}
+
+.code-block .copy-btn:hover {
+    background: #0b5ed7;
+    border-color: #0b5ed7;
+}
+
+
+.code-block .copy-btn:active {
+    transform: translateY(1px);
+}
+
 
 .goal-box {
     background: linear-gradient(90deg, rgba(13, 110, 253, 0.18), rgba(25, 135, 84, 0.18), rgba(255, 193, 7, 0.18));

@@ -50,9 +50,10 @@ local function FindNodeBySID(tList, sSID)
 end
 
 
-local function EnsureNode(tList, sFullPath, sText)
-    local sSID  = SID(sFullPath);
-    local tNode = FindNodeBySID(tList, sSID);
+local function EnsureNode(tList, sFullPath, sText, bForceNew)
+    --bForceNew tells us if this is a separator
+    local sSID = bForceNew and SID(sFullPath.."@@"..tostring(#tList + 1)) or SID(sFullPath);
+    local tNode = (not bForceNew) and FindNodeBySID(tList, sSID) or nil;
 
     if not (tNode) then
         tNode = {
@@ -200,7 +201,6 @@ return class("Menu",
             return nRemoved;
         end,
 
-
         GetItem = function(this, cdat, sPath)
             return clone(cdat.pri.ItemsByPath[sPath]);
         end,
@@ -252,52 +252,7 @@ return class("Menu",
             end
 
         end,
-        --accepts a path or MenuItem
-        --accepts a path or MenuItem TODO move vItem function uptop and let most methods use it for vItem lookup
-        RemoveOLD = function(this, cdat, vItem, bSkipRefresh) --TODO rewrite since changes to system
-            local pri     = cdat.pri;
-            local bRet = false;
 
-            local oItem;
-            local sPath;
-            local zItem = type(vItem);
-
-            -- normalize input
-            if (zItem == "string") then
-                sPath = vItem;
-                oItem = pri.ItemsByPath[sPath];
-            elseif (zItem == "MenuItem") then
-                oItem = vItem;
-                sPath = oItem.GetPath();
-            end
-
-            if (oItem ~= nil and type(sPath) == "string" and sPath ~= "") then
-                -- find item index
-                local nIndex;
-                for i = 1, #pri.Items do
-                    if (pri.Items[i] == oItem) then
-                        nIndex = i;
-                        break;
-                    end
-                end
-
-                if (nIndex ~= nil) then
-                    table.remove(pri.Items, nIndex);
-                    pri.ItemsByPath[sPath] = nil;
-
-                    if not (bSkipRefresh) then
-                        this.Refresh();
-                    end
-
-                    bRet = true;
-                else
-                    -- keep maps consistent if partially present
-                    pri.ItemsByPath[sPath] = nil;
-                end
-            end
-
-            return bRet;
-        end,
         Refresh = function(this, cdat)
             local pri        = cdat.pri;
             pri.AMSMenu      = {};
@@ -320,7 +275,8 @@ return class("Menu",
                 for nSegmentID, sSegment in ipairs(tSegments) do
                     sFull = (sFull == "") and sSegment or (sFull .. sDelimiter .. sSegment);
 
-                    local tNode = EnsureNode(tList, sFull, sSegment);
+                    local bForceNew  = (sSegment == "---")
+                    local tNode = EnsureNode(tList, sFull, sSegment, bForceNew);
 
                     if (nSegmentID == nSegments) then
                         -- assign AMS command ID HERE (leaf only)
@@ -349,6 +305,7 @@ return class("Menu",
 
             return clone(pri.AMSMenu)
         end,
+
         Remove = function(this, cdat, sPath)
             local pri = cdat.pri
 
@@ -378,6 +335,7 @@ return class("Menu",
 
             return true
         end,
+
         SetCallback = function(this, cdat, sPath, eMenuEvent, fCallback)
             local pri = cdat.pri;
 
@@ -406,6 +364,7 @@ return class("Menu",
 
             return this;
         end,
+
         SetEnabled = function(this, cdat, vPath, bFlag, bSkipCallback)
             local pri   = cdat.pri;
             local tItem = pri.ItemsByPath[vPath];

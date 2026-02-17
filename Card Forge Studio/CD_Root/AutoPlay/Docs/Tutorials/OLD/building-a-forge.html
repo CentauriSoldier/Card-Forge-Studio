@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>CFS - Building a Forge</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+	<link rel="stylesheet" href="css/prism.css">
+	<link rel="stylesheet" href="css/tutorials.css">
+</head>
+<body class="bg-light" data-nav-active="forge-build">
+
+    <!-- BANNER / HEADER -->
+    <header class="bg-dark text-light py-4 mb-4">
+        <div class="container-fluid">
+            <h1 class="mb-1">Card Forge Studio</h1>
+            <p class="mb-0 text-muted">Tutorials</p>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="container-fluid">
+        <div class="row">
+
+            <!-- SIDEBAR -->
+            <aside class="col-md-2 col-lg-2 mb-4">
+                <div id="tutorialNav"></div>
+            </aside>
+
+            <!-- CONTENT AREA -->
+            <section class="col-md-9">
+
+                <h2 class="mb-1">Building a Forge</h2>
+				<br>
+                <div class="goal-box mb-4 text-center">
+					<div class="goal-box-inner">
+						<div class="goal-label">Goal</div>
+						<div class="goal-text">
+							Goal: Understand what a Forge is, where it lives, and what your game must provide.
+						</div>
+					</div>
+				</div>                
+
+                <div class="alert alert-info">
+                    Tip: A Forge is game-specific. Each game defines its own drawing &amp; output rules and export behavior.
+                </div>
+
+                <h3 class="mt-4">What is a Forge?</h3>
+                <p>
+                    A <strong>Forge</strong> is the game-provided component that tells Card Forge Studio how to
+                    build and export cards for your game.
+				</p>
+				<div class="card mb-4">
+					<div class="card-body">
+						<h5 class="card-title mb-3">It's also where you</h5>
+						<ul class="mb-0">
+							<li>Bring in your game's custom classes</li>
+							<li>Register your cell processor lookup function</li>
+							<li>Define your own globals</li>
+							<li>Hook and modify the user environment used in the Lua editor</li>
+						</ul>
+					</div>
+				</div>					
+				<div class="alert alert-primary d-flex align-items-start">
+							<strong class="me-2">Note:</strong>
+							<div>
+								Each time a project is loaded, the Lua package path is reset to include your game's <strong>Scripts</strong> directory.
+							</div>
+						</div>	
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h4 class="h5 mb-3">A Forge typically handles</h4>
+                        <ul class="mb-0">
+                            <li>Card image sizing and layout rules</li>
+                            <li>Drawing and composition (frames, text, layers, etc.)</li>
+                            <li>Image and text rendering decisions</li>
+                            <li>Card export behavior (what gets generated and where)</li>
+                            <li>Any game-specific rules needed for card output</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3 class="mt-4">Where does the Forge live?</h3>
+                <p>
+                    Each game must include its Forge in the game’s <strong>Scripts</strong> directory.
+                </p>
+
+                <div class="alert alert-warning">
+                    <strong>Required file:</strong>
+                    Your game must provide a file named <strong>InitForge.lua</strong> in the Scripts directory.
+					<br>By default, an InitForge.lua file is created for you when you build a new project but you'll need to modify it to suit your game.
+                </div>
+
+                <h3 class="mt-4">InitForge.lua requirements</h3>
+                <p class="mb-3">
+                    The file <strong>must</strong>:
+                </p>
+
+                <ul>
+                    <li>Be named exactly: <strong>InitForge.lua</strong></li>
+                    <li>Be located in the game’s <strong>Scripts</strong> directory</li>
+                    <li><strong>Return a Forge</strong> object when loaded</li>
+                </ul>
+
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h4 class="h5 mb-3">What “return a Forge” means</h4>
+                        <p class="mb-0">
+                            Card Forge Studio loads a project's <strong>InitForge.lua</strong> when that project is loaded and expects it to return a Forge object.
+                            That returned Forge is what the editor uses for card rendering and exporting.
+							<br>
+							<br>
+							We need to register a cell processor resolver. In plain English, that means we need to tell the class responsible for processing each cell in our CSV data, how to find the cell processor class for each card class in our game.
+							<br>
+							<br>
+							In the example below, we're using a class structure that uses <strong>Card->Family->Type</strong> (like <strong>Creature->Dragon</strong>). The proc resolver finds and returns the processor class associated with each class (which is often each class itself or a parent).
+							<br>
+							<br>
+							While most classes will be their own cell processors, some games may be designed such that a parent class can be the processor for the child classes. This is shown in the example as well where the <strong>Orc</strong> class uses the cell processor from the <strong>Creature</strong> class.
+							<br>
+							<br>
+							This design can be useful if a lineage of cards needs only one cell processor. That decision is, of course, up to you.
+						</p>
+						<br>
+						<div class="alert alert-primary d-flex align-items-start">
+							<strong class="me-2">Note:</strong>
+							<div>
+								We'll get more into class design later.
+							</div>
+						</div>						
+	                </div>
+				</div>
+				<div class="code-block position-relative mb-4">
+					<button class="btn btn-sm btn-outline-secondary copy-btn" type="button">
+						Copy
+					</button>	
+					<pre class="mb-4"><code class="language-lua">--============================================================
+--  InitForge.lua (example)
+--  Fantasy example: Card -> Creature -> Dragon
+--                  Card -> Spell    -> Damage
+--============================================================
+
+local _tProcsByLineage = {};
+
+local function RegProc(sLineage, cProc)
+    _tProcsByLineage[sLineage] = cProc;
+end
+
+
+--🅻🅾🅰🅳 🅲🅰🆁🅳 🅲🅻🅰🆂🆂🅴🆂 🅰🅽🅳 🆁🅴🅶🅸🆂🆃🅴🆁 🅿🆁🅾🅲🆂
+Card        = require("Card");
+Creature    = require("Card.Creature");
+Spell       = require("Card.Spell");
+
+Dragon      = require("Card.Creature.Dragon");     RegProc("Card.Creature.Dragon",    Dragon);
+Goblin      = require("Card.Creature.Goblin");     RegProc("Card.Creature.Goblin",    Goblin);
+Orc         = require("Card.Creature.Goblin");     RegProc("Card.Creature.Goblin",    Creature);
+
+Damage      = require("Card.Spell.Damage");        RegProc("Card.Spell.Damage",       Damage);
+Healing     = require("Card.Spell.Healing");       RegProc("Card.Spell.Healing",      Healing);
+
+
+--🆁🅴🆂🅾🅻🆅🅴 🅿🆁🅾🅲 🅿🅴🆁 🆁🅾🆆
+--[[The Proc Resolver callback gives us the Card Set name
+	and the CSV row table for the selected row (the one that
+	is requesting the proc class)]]
+ProcSys.RegisterProcResolver(
+    function(sSet, tRow)
+        local sIndex =  tRow.Family ..'.'..
+                        tRow.Class
+
+        return _tProcsByLineage[sIndex];
+    end
+);
+
+
+--🅲🆁🅴🅰🆃🅴 🅰🅽🅳 🆁🅴🅶🅸🆂🆃🅴🆁 🅴🆇🅿🅾🆁🆃 🅵🆄🅽🅲🆃🅸🅾🅽🆂
+-- Example source CSV: Cards.csv
+-- Exports rendered images into:
+--   <_pCardExport>\<Family>\<Class>\<Type>\<Name>.png
+ProcSys.RegisterExporter(_pCSVSource.."\\Cards.csv",
+    function(D, hImage, cProc, tRow)
+        local pExport = _pCardExport.."\\"..tRow.Family.."\\"..tRow.Class;
+
+        if not (Folder.DoesExist(pExport)) then
+            Folder.Create(pExport);
+        end
+
+        DrawingImage.Save(hImage, pExport.."\\"..tRow.Name..".png", DRAW_FORMAT_PNG);
+    end
+);
+
+
+--override the basic GetUserEnv function
+local _GetUserEnv = GetUserEnv;
+
+function GetUserEnv()
+    local tRet = _GetUserEnv();
+	
+	--[[we can add functions, strings, and whatever
+		else we want to the user environment used
+		in the Lua editor]]
+	if not (tRet.GetMaxHealth)
+		tRet.GetMaxHealth = function()
+			return tRow.Health + tRow.BonusHealth;
+		end
+	end
+	
+	--return the modified environment
+	return tRet;
+end
+
+--🅴🆇🿿🅾🆁🆃 🆃🅷🅴 🅵🅾🆁🅶🅴
+return Forge(1125, 825, 825, 1125);
+					</code></pre>
+				</div>
+
+                <div class="d-flex gap-2 mt-4">
+                    <a id="tutorialPrev" class="btn btn-outline-secondary d-none"></a>
+                    <a id="tutorialNext" class="btn btn-primary d-none"></a>
+                </div>
+
+            </section>
+        </div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="text-center text-muted py-3 mt-5">
+        <small>Card Forge Studio — Tutorials</small>
+    </footer>
+
+    <script src="js/bootstrap.bundle.min.js"></script>
+	<script src="js/prism.js"></script>
+    <script src="js/tutorials.js"></script>
+</body>
+</html>

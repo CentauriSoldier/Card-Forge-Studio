@@ -426,9 +426,9 @@ return class("Forge",
 
             if (pri.Orientation ~= _nLastOrientation) then
                 Input.SetVisible(pri.CanvasNameHor, not bIsVertical);
-                Input.SetEnabled(pri.CanvasNameHor, not bIsVertical);
+                --Input.SetEnabled(pri.CanvasNameHor, not bIsVertical);
                 Input.SetVisible(pri.CanvasNameVer, bIsVertical);
-                Input.SetEnabled(pri.CanvasNameVer, bIsVertical);
+                --Input.SetEnabled(pri.CanvasNameVer, bIsVertical);
                 _nLastOrientation = pri.Orientation;
             end
 

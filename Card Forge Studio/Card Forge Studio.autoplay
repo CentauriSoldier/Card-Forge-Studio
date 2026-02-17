@@ -91,7 +91,6 @@ _bLoaded = false;</Script>
 <Plugin>ColorPicker\ColorPicker.lmd</Plugin>
 <Plugin>Draw\Draw.lmd</Plugin>
 <Plugin>GlobalPaths\GlobalPaths.lmd</Plugin>
-<Plugin>Menu\Menu.lmd</Plugin>
 <Plugin>ScalerX\ScalerX.lmd</Plugin>
 <Plugin>WindowWizard\WindowWizard.lmd</Plugin>
 </ActionPlugins>
@@ -285,7 +284,8 @@ WinSys.OnShutdown();</Script>
 <Args/>
 <Script>Paragraph.SetText("par version", 'v'..APP_VERSION.." (Alpha)");
 ScalerX.OnPreload(this);
-MainMenu.OnPreload(this);</Script>
+MainMenu.OnPreload(this);
+</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
@@ -299,14 +299,17 @@ MainMenu.OnPreload(this);</Script>
 <Event>
 <Name>On Show</Name>
 <Args/>
-<Script>--TODO GET POS AND SET</Script>
+<Script>--TODO GET POS AND SET
+local bAllowHTMLProcessing = not Application.IsCompiled();
+CheckBox.SetVisible("chk process html", bAllowHTMLProcessing);
+CheckBox.SetEnabled("chk process html", bAllowHTMLProcessing);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>22</DesignCodeCol>
+<DesignCodeLine>1</DesignCodeLine>
+<DesignCodeCol>33</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -327,14 +330,16 @@ MainMenu.OnPreload(this);</Script>
 <Event>
 <Name>On Timer</Name>
 <Args>number e_ID</Args>
-<Script/>
+<Script>if (e_ID == TIMER_HTML_PROCESS_ID) then
+	Tutorial.Init();
+end</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeLine>1</DesignCodeLine>
+<DesignCodeCol>14</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -1402,6 +1407,119 @@ DialogEx.Show("TestD");</Script>
 <MouseClickSound/>
 </Text>
 </Object>
+<Object>
+<Type>15</Type>
+<Name>chk process html</Name>
+<VisibleAtDesignTime>1</VisibleAtDesignTime>
+<VisibleAtRunTime>0</VisibleAtRunTime>
+<Locked>0</Locked>
+<Enabled>0</Enabled>
+<ToolTip/>
+<Cursor>0</Cursor>
+<Group>0</Group>
+<MaintainAspectRatio>0</MaintainAspectRatio>
+<Pin>0</Pin>
+<TabIndex>-1</TabIndex>
+<AutoResize>0</AutoResize>
+<Coordinates>
+<Top>9</Top>
+<Bottom>42</Bottom>
+<Left>7</Left>
+<Right>251</Right>
+</Coordinates>
+<Ratios>
+<WidthRatio>-1.000000</WidthRatio>
+<HeightRatio>-1.000000</HeightRatio>
+</Ratios>
+<Event>
+<Name>On Click</Name>
+<Args/>
+<Script>if CheckBox.GetChecked(this) then
+	Page.StartTimer(TIMER_HTML_PROCESS_INTERVAL, TIMER_HTML_PROCESS_ID);
+else
+	Page.StopTimer(TIMER_HTML_PROCESS_ID);
+end</Script>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>1</DesignCodeLine>
+<DesignCodeCol>44</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Right-Click</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Enter</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Leave</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Actions/>
+<Options>
+<Text>Live Process HTML</Text>
+<NormalColor format="hex">ff0000</NormalColor>
+<HighlightColor format="hex">ff0000</HighlightColor>
+<MouseDownColor format="hex">ff0000</MouseDownColor>
+<Disabled format="hex">c0c0c0</Disabled>
+<Alignment>0</Alignment>
+<ButtonAlign>0</ButtonAlign>
+<RTLReadingOrder>0</RTLReadingOrder>
+<Checked>0</Checked>
+<MouseOverSoundMode>0</MouseOverSoundMode>
+<MouseOverSound/>
+<MouseClickSoundMode>0</MouseClickSoundMode>
+<MouseClickSound/>
+</Options>
+<Font>
+<FontData>
+<FontName>Segoe UI</FontName>
+<CharacterSet>0</CharacterSet>
+<Height>-24</Height>
+<Weight>700</Weight>
+<Italic>0</Italic>
+<Underline>0</Underline>
+<StrikeOut>0</StrikeOut>
+<AntiAlias>1</AntiAlias>
+</FontData>
+</Font>
+</Object>
 <HGuidelines/>
 <VGuidelines/>
 </Page>
@@ -1527,14 +1645,17 @@ ProcSys.GetForge():OnShow();</Script>
 <Event>
 <Name>On Key</Name>
 <Args>number e_Key, table e_Modifiers</Args>
-<Script/>
+<Script>if (e_Modifiers.Ctrl and KEY_CODES(e_Key, "R")) then
+	ProcSys.ProcessActiveRow();
+end
+p(e_Key)</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeLine>3</DesignCodeLine>
+<DesignCodeCol>7</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -1580,128 +1701,6 @@ ProcSys.GetForge():OnShow();</Script>
 <BookMarks count="0">
 </BookMarks>
 </Event>
-<Object>
-<Type>20</Type>
-<Name>btn save data</Name>
-<VisibleAtDesignTime>1</VisibleAtDesignTime>
-<VisibleAtRunTime>1</VisibleAtRunTime>
-<Locked>0</Locked>
-<Enabled>0</Enabled>
-<ToolTip/>
-<Cursor>0</Cursor>
-<Group>0</Group>
-<MaintainAspectRatio>0</MaintainAspectRatio>
-<Pin>0</Pin>
-<TabIndex>-1</TabIndex>
-<AutoResize>0</AutoResize>
-<Coordinates>
-<Top>47</Top>
-<Bottom>77</Bottom>
-<Left>1260</Left>
-<Right>1388</Right>
-</Coordinates>
-<Ratios>
-<WidthRatio>-1.000000</WidthRatio>
-<HeightRatio>-1.000000</HeightRatio>
-</Ratios>
-<Event>
-<Name>On Click</Name>
-<Args/>
-<Script>ProcSys.SaveCSVs();</Script>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>16</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Event>
-<Name>On Right-Click</Name>
-<Args/>
-<Script/>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Event>
-<Name>On Enter</Name>
-<Args/>
-<Script/>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Event>
-<Name>On Leave</Name>
-<Args/>
-<Script/>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Event>
-<Name>On Hyperlink</Name>
-<Args>string e_Hyperlink</Args>
-<Script/>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Actions/>
-<Options>
-<Text>Save</Text>
-<TextColor format="hex">000000</TextColor>
-<EnableMarkup>0</EnableMarkup>
-<ButtonImage>AutoPlay\Images\Buttons\Save.png</ButtonImage>
-<TextAlignment>2</TextAlignment>
-<ImageAlignment>0</ImageAlignment>
-<ImageTextRelation>3</ImageTextRelation>
-<Theme>6</Theme>
-<Style>0</Style>
-<State>0</State>
-<MouseOverSoundMode>0</MouseOverSoundMode>
-<MouseOverSound/>
-<MouseClickSoundMode>0</MouseClickSoundMode>
-<MouseClickSound/>
-</Options>
-<FontData>
-<FontName>Segoe UI</FontName>
-<CharacterSet>0</CharacterSet>
-<Height>-12</Height>
-<Weight>400</Weight>
-<Italic>0</Italic>
-<Underline>0</Underline>
-<StrikeOut>0</StrikeOut>
-<AntiAlias>1</AntiAlias>
-</FontData>
-</Object>
 <Object>
 <Type>17</Type>
 <Name>grd final data</Name>
@@ -1999,7 +1998,7 @@ ProcSys.GetForge():OnShow();</Script>
 <VisibleAtDesignTime>1</VisibleAtDesignTime>
 <VisibleAtRunTime>1</VisibleAtRunTime>
 <Locked>0</Locked>
-<Enabled>1</Enabled>
+<Enabled>0</Enabled>
 <ToolTip/>
 <Cursor>0</Cursor>
 <Group>0</Group>

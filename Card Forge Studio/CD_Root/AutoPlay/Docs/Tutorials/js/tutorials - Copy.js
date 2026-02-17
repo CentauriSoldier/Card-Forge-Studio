@@ -149,42 +149,6 @@
 
     //can optionally use : to scroll to item in new section loaded (g.g., #build-a-forge:materials)
     document.addEventListener('click', function (e) {
-
-        //============================================================
-        // COPY BUTTON (for .code-block)
-        //============================================================
-        var copyBtn = e.target.closest('.copy-btn');
-        if (copyBtn) {
-            var block = copyBtn.closest('.code-block');
-            if (!block) return;
-
-            var code = block.querySelector('code');
-            if (!code) return;
-
-            var text = code.innerText;
-
-            e.preventDefault();
-
-            // modern clipboard API
-            navigator.clipboard.writeText(text).then(function () {
-                var old = copyBtn.textContent;
-                copyBtn.textContent = 'Copied!';
-                copyBtn.disabled = true;
-
-                setTimeout(function () {
-                    copyBtn.textContent = old;
-                    copyBtn.disabled = false;
-                }, 1200);
-            }).catch(function (err) {
-                console.error('Copy failed', err);
-            });
-
-            return; // stop here so it doesn't fall into anchor handling
-        }
-
-        //============================================================
-        // ANCHOR -> loadTutorial(key[:anchor])
-        //============================================================
         var a = e.target.closest('a[href^="#"]');
         if (!a) return;
 
@@ -212,7 +176,6 @@
             }, 0);
         }
     });
-
 
 
 
