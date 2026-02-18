@@ -64,10 +64,6 @@ local _sBottom = [[
 </html>
 ]];
 
-local function BuildJSON()
-
-end
-
 local function GetFileInfo(pFile)
 
     if not (type(pFile) == "string" and File.DoesExist(pFile)) then
@@ -90,68 +86,6 @@ local function GetFileInfo(pFile)
 
     return sSection, nOrder, sTitle, sHTML;
 end
-
-local function BuildJSON(tSections, tSectionOrder, tFlatOrder)
-    if not (type(tSections) == "table") then
-        error("BuildJSON: tSections must be a table.", 2);
-    end
-
-    if not (type(tSectionOrder) == "table") then
-        error("BuildJSON: tSectionOrder must be a table.", 2);
-    end
-
-    if not (type(tFlatOrder) == "table") then
-        error("BuildJSON: tFlatOrder must be a table.", 2);
-    end
-
-    local tJS = {};
-    tJS[#tJS + 1] = "<script>";
-    tJS[#tJS + 1] = "window.TUTORIAL_DATA = {";
-    tJS[#tJS + 1] = "    \"sections\": {";
-
-    for s = 1, #tSectionOrder do
-        local sSection = tSectionOrder[s];
-        local tItems   = tSections[sSection];
-
-        tJS[#tJS + 1] = "        "..string.format("%q", sSection)..": {";
-        tJS[#tJS + 1] = "            \"items\": {";
-
-        if (type(tItems) == "table") then
-            for i = 1, #tItems do
-                local tItem = tItems[i];
-                local sComma = (i < #tItems and "," or "");
-
-                local sKey   = tostring(tItem.Key or "");
-                local sTitle = tostring(tItem.Title or "UNKNOWN");
-                local sHTML  = tostring(tItem.HTML or "");
-                local sB64   = base64.enc(sHTML) or "";
-
-                tJS[#tJS + 1] = "                "..string.format("%q", sKey)..": {";
-                tJS[#tJS + 1] = "                    \"title\": "..string.format("%q", sTitle)..",";
-                tJS[#tJS + 1] = "                    \"html_b64\": "..string.format("%q", sB64);
-                tJS[#tJS + 1] = "                }"..sComma;
-            end
-        end
-
-        tJS[#tJS + 1] = "            }";
-        tJS[#tJS + 1] = "        }"..(s < #tSectionOrder and "," or "");
-    end
-
-    tJS[#tJS + 1] = "    },";
-    tJS[#tJS + 1] = "    \"order\": [";
-
-    for i = 1, #tFlatOrder do
-        local sComma = (i < #tFlatOrder and "," or "");
-        tJS[#tJS + 1] = "        "..string.format("%q", tFlatOrder[i])..sComma;
-    end
-
-    tJS[#tJS + 1] = "    ]";
-    tJS[#tJS + 1] = "}";
-    tJS[#tJS + 1] = "</script>";
-
-    return table.concat(tJS, "\n");
-end
-
 
 
 return class("Tutorial",

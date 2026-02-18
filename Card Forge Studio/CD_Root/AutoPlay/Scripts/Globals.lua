@@ -124,13 +124,26 @@ function PrepGame(pGame)
     --add game's scripts folder to the package path
     package.path = _sOriginalPackagePath..";".._pGame.."\\Scripts\\?.lua";
 
+    --load the config files
+    CFG = require("Config");
+
+    --reset the BuildMechanics var (it gets reloaded in InitForge.lua if present)
+    BuildMechanics = nil;
+
     --init and set the game's forge
     ProcSys.PrepActiveGame();
     local oForge = require("InitForge");
     ProcSys.SetForge(oForge);
 
-    --load the config files
-    CFG = require("Config");
+    --build the user's mechanics html if it exists
+    if type(BuildMechanics) == "function" then
+        local sHTML = BuildMechanics(CFG);
+
+        if (type(sHTML) == "string") then
+            TextFile.WriteFromString(_pGame.."\\Mechanics.html", sHTML, false);
+        end
+
+    end
 
     ProcessDox(pGame);--TODO get this boolean from INI file before running Dox
 end
@@ -331,6 +344,70 @@ end
 function Status.Append(vStatus)
     local sStatus = vStatus and tostring(vStatus) or "";
     Paragraph.SetText(sPar, Paragraph.GetText(sPar)..sStatus.."\r\n");
+end
+
+Description = require("Description");
+
+function BuildJSON(tSections, tSectionOrder, tFlatOrder)
+
+    if not (type(tSections) == "table") then
+        error("BuildJSON: tSections must be a table.", 2);
+    end
+
+    if not (type(tSectionOrder) == "table") then
+        error("BuildJSON: tSectionOrder must be a table.", 2);
+    end
+
+    if not (type(tFlatOrder) == "table") then
+        error("BuildJSON: tFlatOrder must be a table.", 2);
+    end
+
+    local tJS = {};
+    tJS[#tJS + 1] = "<script>";
+    tJS[#tJS + 1] = "window.TUTORIAL_DATA = {";
+    tJS[#tJS + 1] = "    \"sections\": {";
+
+    for s = 1, #tSectionOrder do
+        local sSection = tSectionOrder[s];
+        local tItems   = tSections[sSection];
+
+        tJS[#tJS + 1] = "        "..string.format("%q", sSection)..": {";
+        tJS[#tJS + 1] = "            \"items\": {";
+
+        if (type(tItems) == "table") then
+            for i = 1, #tItems do
+                local tItem = tItems[i];
+                local sComma = (i < #tItems and "," or "");
+
+                local sKey   = tostring(tItem.Key or "");
+                local sTitle = tostring(tItem.Title or "UNKNOWN");
+                local sHTML  = tostring(tItem.HTML or "");
+                local sB64   = base64.enc(sHTML) or "";
+
+                tJS[#tJS + 1] = "                "..string.format("%q", sKey)..": {";
+                tJS[#tJS + 1] = "                    \"title\": "..string.format("%q", sTitle)..",";
+                tJS[#tJS + 1] = "                    \"html_b64\": "..string.format("%q", sB64);
+                tJS[#tJS + 1] = "                }"..sComma;
+            end
+        end
+
+        tJS[#tJS + 1] = "            }";
+        tJS[#tJS + 1] = "        }"..(s < #tSectionOrder and "," or "");
+    end
+
+    tJS[#tJS + 1] = "    },";
+    tJS[#tJS + 1] = "    \"order\": [";
+
+    for i = 1, #tFlatOrder do
+        local sComma = (i < #tFlatOrder and "," or "");
+        tJS[#tJS + 1] = "        "..string.format("%q", tFlatOrder[i])..sComma;
+    end
+
+    tJS[#tJS + 1] = "    ]";
+    tJS[#tJS + 1] = "}";
+    tJS[#tJS + 1] = "</script>";
+
+    return table.concat(tJS, "\n");
 end
 
 

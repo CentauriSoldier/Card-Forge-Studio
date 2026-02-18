@@ -1,4 +1,0 @@
-Profile: 0.114s, 11 samples
- 81.82% ?
-  9.09% Lua:.\AutoPlay\Scripts\Forge\FontStyle.lua:?:358
-  9.09% Lua:.\AutoPlay\Scripts\Forge\FontStyle.lua:?:359

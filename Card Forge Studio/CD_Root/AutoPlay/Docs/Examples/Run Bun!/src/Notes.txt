@@ -1,0 +1,79 @@
+RUN, BUN! — FULL SUMMARY (concise)
+
+Type: PvP party game
+
+Players: 3–8
+
+Roles:
+
+Exactly 1 Dog
+
+All other players are Bunny players
+
+Bunnies:
+
+Each Bunny player controls 2 Bunnies
+
+Turn order:
+
+Dog always goes first
+
+Dog turn:
+
+Dog gets 1 chase per Bunny player
+
+Each chase targets one Bunny
+
+A Bunny may only be chased once per Dog turn
+
+Bunny play:
+
+Bunnies are reactive only (play cards when targeted)
+
+Bunny-on-bunny betrayal is intentional and encouraged
+
+Win conditions:
+
+Dog wins if it eats both Bunnies of any one Bunny player
+
+Bunnies win if any Bunny player gets both of their Bunnies to escape
+
+When one Bunny escapes, start a 3-Dog-turn timer:
+
+If the partner Bunny does not escape in time, the escaped Bunny returns
+
+When a Bunny player wins by escaping both Bunnies, all remaining Bunnies are eaten immediately
+
+Card types so far:
+
+Bone
+
+Bunny: guaranteed escape (not counterable)
+
+Dog: +1 extra chase this turn
+
+Carrot
+
+Bunny: redirect chase to another Bunny
+
+Dog: lock target (no redirect)
+
+Hidey Hole
+
+Bunny: remove self from play for 1 turn (not last Bunny)
+
+Dog: +2 extra chases this turn
+
+Theme & tone:
+
+Steampunk cartoon
+
+Cute visuals, mean gameplay
+
+Fast, loud, social, betrayal-driven
+
+Design goal:
+
+Explainable in ~1 minute
+
+Minimal rules, high table talk, constant pressure
