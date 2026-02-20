@@ -944,10 +944,10 @@ end</Script>
 <TabIndex>-1</TabIndex>
 <AutoResize>0</AutoResize>
 <Coordinates>
-<Top>96</Top>
-<Bottom>151</Bottom>
-<Left>29</Left>
-<Right>279</Right>
+<Top>72</Top>
+<Bottom>127</Bottom>
+<Left>-276</Left>
+<Right>-26</Right>
 </Coordinates>
 <Ratios>
 <WidthRatio>-1.000000</WidthRatio>
@@ -1543,15 +1543,15 @@ end</Script>
 <Event>
 <Name>On Preload</Name>
 <Args/>
-<Script>--ScalerX.OnPreload(this);
+<Script>ScalerX.OnPreload(this);
 MainMenu.OnPreload(this);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>1</DesignCodeLine>
-<DesignCodeCol>25</DesignCodeCol>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -1993,7 +1993,7 @@ p(e_Key)</Script>
 </Object>
 <Object>
 <Type>7</Type>
-<Name>cvs card ver</Name>
+<Name>cvs card</Name>
 <VisibleAtDesignTime>1</VisibleAtDesignTime>
 <VisibleAtRunTime>1</VisibleAtRunTime>
 <Locked>0</Locked>
@@ -11377,20 +11377,6 @@ end</Script>
 </BookMarks>
 </Event>
 <Event>
-<Name>On Size</Name>
-<Args>number e_WindowWidth, number e_WindowHeight, number e_DialogWidth, number e_DialogHeight, number e_Type</Args>
-<Script/>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Event>
 <Name>On Key</Name>
 <Args>number e_Key, table e_Modifiers</Args>
 <Script/>
@@ -11446,6 +11432,20 @@ end</Script>
 <BookMarks count="0">
 </BookMarks>
 </Event>
+<Event>
+<Name>On Size</Name>
+<Args>number e_WindowWidth, number e_WindowHeight, number e_DialogWidth, number e_DialogHeight, number e_Type</Args>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
 <Object>
 <Type>9</Type>
 <Name>lst sizes</Name>
@@ -11471,20 +11471,6 @@ end</Script>
 <HeightRatio>-1.000000</HeightRatio>
 </Ratios>
 <Event>
-<Name>On Select</Name>
-<Args/>
-<Script/>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>1784827680</DesignCodeLine>
-<DesignCodeCol>7627621</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Event>
 <Name>On Double-Click</Name>
 <Args/>
 <Script/>
@@ -11495,6 +11481,20 @@ end</Script>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
 <DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Select</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>1784827680</DesignCodeLine>
+<DesignCodeCol>7627621</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
