@@ -1,4 +1,5 @@
 local _sDefaultSection = "Basics";
+local _pTutorials      = FS.Tutorials;
 
 local function FixPath(sPath)
     return "file:///"..sPath:gsub("\\", '/'):gsub('//', '/'):gsub(' ', "%%20");
@@ -95,11 +96,11 @@ return class("Tutorial",
     {--STATIC PUBLIC
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
         --Tutorial = function(cClass, sAuthCode)
-        PATH_INDEX__RO = _pAppDir.."\\index.html",
+        PATH_INDEX__RO = FS.AppDir.."\\index.html",
         --end, --static constructor (runs after class object creation)
         BuildHTML = function()
-            local tFiles            = File.Find(_Tutorials.."\\", "*.html", false, false, nil, nil);
-            local pTutorialsFixed   = FixPath(_Tutorials);
+            local tFiles            = File.Find(_pTutorials.."\\", "*.html", false, false, nil, nil);
+            local pTutorialsFixed   = FixPath(_pTutorials);
             local pImg              = pTutorialsFixed.."/img";
 
             local tSections      = {}; -- keyed by section name

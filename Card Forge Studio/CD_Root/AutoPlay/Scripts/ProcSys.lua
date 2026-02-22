@@ -26,6 +26,8 @@ local _nLastRow             = -1;
 local _tWindows             = {}; --stores windows
 local bWindowsBuilt         = false;
 
+local _pAppCFG              = FS.AppCFG;
+
 --[[!
     @fqxn CFS.Classes.ProcSys.Enums.PANE
     @desc Identifiers for ProcSys window panes.
@@ -69,14 +71,9 @@ local function TryDrawCard(cProc, nRow, tRow)
 
         --make sure there's data in the row
         if (#tRow > 0) then
-            --set the Forge's orientation
-            local nOrientation = tonumber(tRow.IsVertical);
-            local nOrientation = (type(nOrientation) == "number" and nOrientation == HOR) and HOR or VER;
-            _cForge.SetOrientation(nOrientation);
-
             --check for export call
             local fExport = _tExporters[_sGame][_pActiveCSV];
-            local bExport = MainMenu.IsChecked("Options:>Draw:>Export Selected Card") and rawtype(fExport) == "function";
+            local bExport = MainMenu.IsChecked("Options:>Draw:>Export Selected Card") and rawtype(fExport) == "function"; --TODO FINISH use new/custom exporter system BUT dnot here...do not draw for every export, simply export
 
             --tell Forge to draw (and possibly export) the card
             _cForge.DrawCard(cProc, tRow, bExport, fExport);
@@ -299,7 +296,7 @@ end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.StaticPrivate.Methods.TryBackupFile
+    @fqxn CFS.Classes.ProcSys.StaticPrivate.Methods.TryBackupSetData
     @desc Creates a timestamped backup of a CSV file when backup rules allow.
     @param string pFile Path to the source CSV file.
     @return boolean bWritten True if a new backup file was created.
@@ -310,6 +307,49 @@ end
             <li>Oldest backups are deleted when retention limits are exceeded.</li>
         </ul>
 !]]
+local function TryBackupSetData(pSet)
+    --local pFile = tFiles[1];
+    local tParts = String.SplitPath(pFile);
+
+    --create this csv's backup folder (if it doesn't exist)
+    local sFilename = tParts.Filename;
+    local pFolder = _pCSVBackup.."\\"..sFilename;
+
+    if not (Folder.DoesExist(pFolder)) then
+        Folder.Create(pFolder);
+    end
+
+    --find all the csv files in this folder
+    local tFiles        = File.Find(pFolder.."\\", "*.csv", false, false, nil, nil);--FoundCallback);
+    local bWriteFile    = true;
+    local bDeleteFile   = false;
+
+    --get the current timestamp (removing the seconds)
+    local nCurrentTimestamp     = isotominutes(System.GetDate(DATE_FMT_ISO)..System.GetTime(TIME_FMT_MIL));
+
+    if (tFiles and #tFiles > 0) then
+        --sort the dates
+        table.sort(tFiles);
+
+        local nFiles = #tFiles;
+        --get the current timestamp of the latest file (removing the seconds), using safety here in case of nil
+        local nLatestFileTimestamp  = tonumber(String.SplitPath(tFiles[nFiles]).Filename) or nCurrentTimestamp;
+        bWriteFile            = math.abs(nCurrentTimestamp - nLatestFileTimestamp) > BACKUP_MINIMUM_INTERVAL;
+        bDeleteFile           = bWriteFile and (nFiles >= BACKUP_MAX_FILE_COUNT) or false;
+    end
+
+    --delete the oldest backup if needed
+    if (bDeleteFile) then
+        File.Delete(tFiles[1], false, false, true, nil);
+    end
+
+    --write the backup if needed
+    if (bWriteFile) then
+        File.Copy(pFile, pFolder.."\\"..nCurrentTimestamp..".csv", true, true, false, true, nil);
+    end
+
+    return bWriteFile;
+end
 local function TryBackupFile(pFile)--tFiles)
     --local pFile = tFiles[1];
     local tParts = String.SplitPath(pFile);
@@ -353,7 +393,6 @@ local function TryBackupFile(pFile)--tFiles)
 
     return bWriteFile;
 end
-
 
 --[[!
     @fqxn CFS.Classes.ProcSys
@@ -474,7 +513,7 @@ return class("ProcSys",
         end,
 
 
-        --[[!
+        --[[! TODO FIX REDO
             @fqxn CFS.Classes.ProcSys.Methods.GetSetName
             @desc Returns the active card set name.
             @return string sSetName Active card set identifier.
@@ -483,12 +522,14 @@ return class("ProcSys",
             return _sSetName;
         end,
 
-        --[[!
-            @fqxn CFS.Classes.ProcSys.Methods.LoadSet
+        --[[!TODO FINISH UPDATE
+            @fqxn CFS.Classes.ProcSys.Methods.LoadCardSet
             @desc Loads a card set CSV into the Base and Final grids.
             @param string|nil vFile Optional CSV file path; prompts when omitted or invalid.
         !]]
-        LoadSet = function(vFile)
+        LoadCardSet = function(oCardSet)
+
+            --TODO assert type
 
             if (_bAllowSave) then
                 local nYesNoCancel = Dialog.Message("Warning!", "You have unsaved changes.\r\nWould you like to save them now?", MB_YESNOCANCEL, MB_ICONEXCLAMATION, MB_DEFBUTTON1);
@@ -506,36 +547,40 @@ return class("ProcSys",
             _pActiveCSV = "";
             _bAllowSave = false;
             MainMenu.SetEnabled("Set:>Save", false);
-            local pFile;
+            --local pSet;
 
             --load csv
-            if (type(vFile) == "string") then
-                pFile = File.DoesExist(vFile) and vFile or nil;
-            end
+            --if (type(pSet) == "string") then
+            --    pFile = ProcSys.SetIsValid(pSet) and pSet or nil;
+            --end
 
-            if not (pFile) then
-                local tFiles = Dialog.FileBrowse(true, "Load CSV File", _pCSVSource, "CSV Files (*.csv)|*.csv|", "", "csv", false, true);
+            --if not (pSet) then
+                --local pSet = Dialog.FolderBrowse("Load Set:", _pSets);
 
-                if (rawtype(tFiles) == "table" and #tFiles > 0 and File.DoesExist(tFiles[1])) then
-                    pFile = tFiles[1];
-                end
+                --if (pSet:isempty() or pSet == "CANCEL") then
+                --    pSet = nil; --TODO ERROR HERE???/
+                --else
+                --    pSet = ProceSys.SetIsValid(pSet) and pSet or nil;
+            --    end
 
-            end
+        --    end
 
-            if (pFile) then
+            local pData = oCardSet.GetDataPath();
+
+            if (pData) then
                 --backup the file (if needed)
-                TryBackupFile(pFile);
+                --TryBackupFile(pData);
 
                 --store the set name
-                _sSetName = String.SplitPath(pFile).Filename;
+                _sSetName = oCardSet.GetName();--String.SplitPath(pData).Filename; --TODO remove/update
 
-                LoadFileToGrid(pFile);
+                LoadFileToGrid(pData);
 
                 --set the save file variables
-                _pActiveCSV = pFile;
+                _pActiveCSV = pData;
 
-                --MainMenu.SetEnabled("Set:>Save",             true);
-                MainMenu.SetEnabled("Set:>Browse",           true);
+                --MainMenu.SetEnabled("Set:>Save", true);
+                MainMenu.SetEnabled("Set:>Browse", true);
             end
 
         end,
@@ -698,7 +743,7 @@ return class("ProcSys",
                 end
 
                 local function FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, sCallback)
-                    local ePane = tPaneByHandle[hWnd];                    
+                    local ePane = tPaneByHandle[hWnd];
                     --fire the original callback
                     tWindows[ePane].Callback[sCallback](hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight);
 
@@ -902,7 +947,7 @@ return class("ProcSys",
                 string  = string,
             }, { __index = _G });
 
-            local fChunk, sError = load(TextFile.ReadToString(_pDrafts), "Drafts.lua", "t", wEnv);
+            local fChunk, sError = load(TextFile.ReadToString(FS.Drafts), "Drafts.lua", "t", wEnv); --TODO QUESTION IS THIS EVEN BEING USED ANYMORE???
 
             if not (fChunk) then
                 --error(sError, 3);
@@ -935,6 +980,24 @@ return class("ProcSys",
              _tProcResolvers[_sGame]    = nil;
         end,
 
+
+        SetIsValid = function(pFolder)
+            local function CheckFile(sFile)
+                return File.DoesExist((pFolder.."\\"..sFile):gsub("\\\\", "\\"));
+            end
+--TODO check other things as needed
+            local bFilesAreValid =
+                rawtype(pFolder) == "string"        and
+                Folder.DoesExist(pFolder)           and
+                Path.GetEndFolder(pFolder):isuuid() and
+                CheckFile("Data.csv")               and
+                CheckFile("Draw.lua")               and
+                CheckFile("Info.cfg")               and
+                CheckFile("Proc.lua")
+
+            local pSetID = bFilesAreValid and Path.GetEndFolder(pFolder) or "NO_SET_FOUND";
+            return bFilesAreValid, pSetID;
+        end,
 
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.SetForge

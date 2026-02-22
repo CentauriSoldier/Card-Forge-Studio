@@ -35,8 +35,8 @@ TheMenu.SetAutoUpdate(false);
 local _nIconID = -1;
 local _bEnabled, _bChecked, _bCheckable = true, true, true;
 local _tNoCallbacks = nil;
-local _tGamePaths   = {};
-local _tSetPaths    = {};
+--local _tGamePaths   = {};
+--local _tSetPaths    = {};
 
 
 --[[
@@ -95,7 +95,7 @@ TheMenu.Add("Options",      _nIconID,       _bEnabled,      -_bChecked,     -_bC
 ██  ██ ██▄█▄ ██▀██ ██ ▄ ██
 ████▀  ██ ██ ██▀██  ▀█▀█▀  ]]
 _sSection     = "Options";
-_pINI         = _pAppCFG;
+_pINI         = FS.AppCFG;
 
 local sOD  = "Options:>Draw";
 local sHRE = "Horizontal Ruler Enabled";
@@ -145,8 +145,8 @@ TheMenu.Add("Window",                   _nIconID,       _bEnabled,      -_bCheck
 ██║  ██║███████╗███████╗██║
 ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ]]
 TheMenu.Add("Help",                     _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
-        Add("Help:>Documentation",      _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(_pGame.."\\Docs\\".._sGame.." API.html", "", SW_SHOWNORMAL); end}).
-        Add("Help:>Tutorials",          _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(_pAppDir.."\\index.html", "", SW_SHOWNORMAL); end}).
+        Add("Help:>Documentation",      _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(FS.Game.."\\Docs\\"..Game.GetActive().GetName().." API.html", "", SW_SHOWNORMAL); end}).
+        Add("Help:>Tutorials",          _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(FS.AppDir.."\\index.html", "", SW_SHOWNORMAL); end}).
         Add("Help:>Visit Website",      _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.OpenURL("https://www.cardforge.studio/", SW_SHOWNORMAL); end}).
         Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Help:>License",            _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("License", true, nil, nil); end}).
@@ -158,55 +158,47 @@ TheMenu.Refresh();
 
 local tSupport;
 tSupport = {
-    RefreshGamesList = function(sPage)
-        local tGames = Folder.Find(_pGames.."\\", "*", false, nil);
+    RefreshGamesList = function(sPage)--TODO FIX FINISH USE the Game class to help with this
+        --clear the games list
+        TheMenu.ClearChildren("Project:>Load");
 
-        if (tGames) then
-            --clear the games list
-            TheMenu.ClearChildren("Project:>Load");
-            table.sort(tGames, Path.SortByEndFolder); --sort by game name
+        for _, oGame in ipairs(Game.GetAll()) do
+            local sGame = oGame.GetName();
 
-            for nIndex, pFolder in ipairs(tGames) do
-                local sGame = Path.GetEndFolder(pFolder);
-                local sMenuPath = "Project:>Load:>"..sGame;
-                    TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, {
-                        [eMenu.OnSelected] = function(tItem)
-                            --TODO check that the current project isn't loaded first and that there are no unssaved changes
-                            PrepGame(pFolder);
-                            Page.Jump("Forge");
-                        end
-                });
+            local sMenuPath = "Project:>Load:>"..sGame;
+                TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, {
+                    [eMenu.OnSelected] = function(tItem)
+                        --TODO check that the current project isn't loaded first and that there are no unssaved changes
+                        PrepGame(sGame);
+                        Page.Jump("Forge");
+                    end
+            });
 
-                _tGamePaths[sGame] = pFolder;
-            end
-
-            TheMenu.Refresh();
+            --_tGamePaths[sGame] = pFolder;
         end
+
+        TheMenu.Refresh();
+        --end
 
     end,
     RereshSetsList = function(sPage)
-        local tCardSets = File.Find(_pCSVSource.."\\", "*.csv", true, false, nil, nil);
+        --clear the cards list
+        TheMenu.ClearChildren("Set:>Load");
 
-        if (tCardSets) then
-            --clear the cards list
-            TheMenu.ClearChildren("Set:>Load");
-            table.sort(tCardSets, PathSorter); --sort by game name
+        --get all the set folders
+        local tCardSets = Game.GetActive().GetAllCardSets();
 
-            for nIndex, pFile in ipairs(tCardSets) do
+        for _, oCardSet in ipairs(tCardSets) do
+            --local bIsValid, sSetID = ProcSys.SetIsValid(pSet);
+                local sSet      = oCardSet.GetName();
+                local sMenuPath = "Set:>Load:>"..sSet;
+                TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, _tNoCallbacks);
+                --_tSetPaths[sSet] = pSet; --TODO QUESTION FOR WHAT IS THIS BEING USED?
 
-                if not (pFile:find(".ignore")) then
-                    local sSet  = Path.GetEndFolder(pFile);
-                    local sMenuPath = "Set:>Load:>"..sSet;
-                    TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, _tNoCallbacks);
-                    _tSetPaths[sSet] = pFile;
-
-                    TheMenu.SetCallback(sMenuPath, Menu.EVENT.OnSelected, function(tItem)
-                        ProcSys.LoadSet(pFile);
-                        INIFile.SetValue(_pInfo, "SESSION", "LastSet", String.SplitPath(pFile).Filename);
-                    end);
-                end
-
-            end
+                TheMenu.SetCallback(sMenuPath, Menu.EVENT.OnSelected, function(tItem)
+                    ProcSys.LoadCardSet(oCardSet);
+                    INIFile.SetValue(FS.Info, "SESSION", "LastSet", oCardSet.GetUUID());
+                end);
 
         end
 
@@ -252,7 +244,7 @@ tSupport = {
             --project items
             TheMenu.SetEnabled("Project:>Load:>".._sGame,   false);
             TheMenu.SetEnabled("Project:>Browse",           true);
-            TheMenu.SetCallback("Project:>Browse", eMenu.OnSelected, function(tItem) Shell.Execute(_pGame, "open", "", "", SW_SHOWNORMAL); end);
+            TheMenu.SetCallback("Project:>Browse", eMenu.OnSelected, function(tItem) Shell.Execute(FS.Game, "open", "", "", SW_SHOWNORMAL); end);
             --set items
             TheMenu.SetEnabled("Set:>New",                  true);
             TheMenu.SetEnabled("Set:>Load",                 true);

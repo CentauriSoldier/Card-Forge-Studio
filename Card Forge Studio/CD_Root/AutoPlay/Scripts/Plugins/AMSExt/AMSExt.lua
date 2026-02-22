@@ -79,5 +79,5 @@ require("Plugins.AMSExt.Color");
 require("Plugins.AMSExt.DialogEx");
 require("Plugins.AMSExt.Grid");
 require("Plugins.AMSExt.INIFile");
-require("Plugins.AMSExt.Path");
+--require("Plugins.AMSExt.Path");
 Menu = require("Plugins.AMSExt.Menu");

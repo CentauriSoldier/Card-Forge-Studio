@@ -12,6 +12,8 @@ local clicks = 0;
 local floor         = math.floor;
 local clamp         = math.clamp;
 
+local _pAppCFG      = FS.AppCFG;
+
 local Color         = Color;
 local Drawing       = Drawing;
 local DrawingFont   = DrawingFont;
@@ -30,7 +32,10 @@ local _bForgeAutoSizing     = false;
 local _nPageWidth           = -1;
 local _nPageHeight          = -1;
 
-local _hWndCardVer;
+local _hWndCardVer;  --TODO FIX REMOVE THIS
+
+local _sCanvas = CANVAS_NAME;
+
 
 local _tHorRuler            = {--TODO static functions and variables io change these values
     Y           = 0,
@@ -54,12 +59,13 @@ local _tCenterLines = {
     Color       = Color.RGBA(50, 50, 255, 255),
 };
 
+--[[
 local function IsCardVertical(tRow)
     local sIsVertical = tRow.IsVertical;
     local nIsVertical = sIsVertical and tonumber(sIsVertical) or 0;
     nIsVertical       = (nIsVertical == 0 or nIsVertical == 1) and nIsVertical or 0;
     return #nIsVertical;
-end
+end]]
 
 --TODO FIX FINISH  make images for each card type as needed! modify code to reflect this change
 
@@ -124,28 +130,19 @@ return class("Forge",
         ------------------------------
         AutoUpdateStyle__AUTO__     = false,
         Orientation                 = VER,
-        WidthHor__AUTOR_            = null,
-        WidthVer__AUTOR_            = null,
-        HeightHor__AUTOR_           = null,
-        HeightVer__AUTOR_           = null,
-        CanvasHor__AUTOR_           = null,
-        CanvasVer__AUTOR_           = null,
-        CanvasNameExport__AUTOR_    = null,
+        Width__AUTOR_               = null,
+        Height__AUTOR_              = null,
+        Canvas__AUTOR_              = null, --TODO QUESTION IS THIS USED???
         CanvasName__AUTOR_          = null,
-        CanvasExportCreated         = false,--TODO RO these
         CanvasCreated               = false,
         CanvasWidth                 = 0,
         CanvasHeight                = 0,
         CoVXWidth                   = 0,
         CoVYHeight                  = 0,
-        ImageHandleHor              = null,
-        ImageHandleVer              = null,
-        ImageIDHor                  = null,
-        ImageIDVer                  = null,
-        UtilImageHandleHor          = null,
-        UtilImageHandleVer          = null,
-        UtilImageIDHor              = null,
-        UtilImageIDVer              = null,
+        ImageHandle                 = null,
+        ImageID                     = null,
+        UtilImageHandle             = null,
+        UtilImageID                 = null,
         Name__AUTOR_                = null,
         StylesINI__AUTOA_           = "", --TODO FINISH STYLE NAMES MUST BE VARIABLE COMPLIANT
 
@@ -155,15 +152,10 @@ return class("Forge",
             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
         end,
 
-        CreateImage = function(this, cdat, sHandleIndex, sIDIndex, vOrientation)
+        CreateImage = function(this, cdat, sHandleIndex, sIDIndex)
             local pri = cdat.pri;
-            local nOrientation  = (type(vOrientation) == "number" and (vOrientation == HOR or vOrientation == VER)) and vOrientation or VER;
-            local bIsVertical   = nOrientation == VER;
-            local nWidth        = bIsVertical and pri.WidthVer      or pri.WidthHor;
-            local nHeight       = bIsVertical and pri.HeightVer     or pri.HeightHor;
-            --local sCanvas       = bIsVertical and pri.CanvasName    or pri.CanvasNameExport;
-            local sCanvas       = pri.CanvasName;
-            local sOrientation  = bIsVeritcal and "vertical"        or "horizontal";
+            local nWidth        = pri.Width;
+            local nHeight       = pri.Height;
             local sName         = pri.Name
             local sBaseError    = "Error in Forge, \"${game}\": Could not";
 
@@ -171,14 +163,14 @@ return class("Forge",
             if (pri[sHandleIndex] == null and pri[sIDIndex] == null) then
                 --create, check, and store the image handle
                 local hImage        = DrawingImage.New(nWidth, nHeight, BIT_DEPTH_32, DRAW_IMAGE_TRANSPARENT);
-                local sMessage      = sBaseError.." create ${orientation} image for canvas object, \"${canvas}\".";
-                assert(hImage, sMessage % {game = sName, orientation = sOrientation, canvas = sCanvas});
+                local sMessage      = sBaseError.." create image for canvas object, \"${canvas}\".";
+                assert(hImage, sMessage % {game = sName, canvas = _sCanvas});
                 pri[sHandleIndex]   = hImage;
 
                 --get, check, and store the image ID
                 local nImageID      = DrawingImage.GetID(hImage);
-                sMessage            = sBaseError.." get ${orientation} image ID for canvas object, \"${canvas}\".";
-                assert(nImageID, sMessage % {game = sName, orientation = sOrientation, canvas = sCanvas});
+                sMessage            = sBaseError.." get image ID for canvas object, \"${canvas}\".";
+                assert(nImageID, sMessage % {game = sName, canvas = _sCanvas});
                 pri[sIDIndex]       = nImageID;
             end
 
@@ -187,8 +179,8 @@ return class("Forge",
         DrawCenterLineHor = function(this, cdat, sObject, D, hInternalDC)
             local pri           = cdat.pri;
             local bIsVeritcal   = pri.Orientation == VER;
-            local nWidth        = bIsVeritcal and pri.WidthVer  or pri.WidthHor;
-            local nHeight       = bIsVeritcal and pri.HeightVer or pri.HeightHor;
+            local nWidth        = pri.Width;
+            local nHeight       = pri.Height;
 
             if (bIsVeritcal) then
                 local nMidPointY = floor(nHeight / 2);
@@ -203,8 +195,8 @@ return class("Forge",
         DrawCenterLineVer = function(this, cdat, sObject, D, hInternalDC)
             local pri           = cdat.pri;
             local bIsVeritcal   = pri.Orientation == VER;
-            local nWidth        = bIsVeritcal and pri.WidthVer  or pri.WidthHor;
-            local nHeight       = bIsVeritcal and pri.HeightVer or pri.HeightHor;
+            local nWidth        = pri.Width;
+            local nHeight       = pri.Height;
 
             if (bIsVeritcal) then
                 local nMidPointX = floor(nWidth / 2);
@@ -219,7 +211,7 @@ return class("Forge",
             local pri            = cdat.pri;
             local bIsVeritcal    = pri.Orientation == VER;
             local nY             = _tHorRuler.Y;
-            local nWidth         = bIsVeritcal and pri.WidthVer or pri.WidthHor;
+            local nWidth         = pri.Width;
             local nMajorStep     = _tHorRuler.MajorStep;
             local nMinorStep     = _tHorRuler.MinorStep;
             local nMajorHeight   = _tHorRuler.MajorHeight;
@@ -251,7 +243,7 @@ return class("Forge",
             local pri            = cdat.pri;
             local bIsVeritcal    = pri.Orientation == VER;
             local nX             = _tVerRuler.X;
-            local nHeight        = bIsVeritcal and pri.HeightVer or pri.HeightHor;
+            local nHeight        = pri.Height;
             local nMajorStep     = _tVerRuler.MajorStep;
             local nMinorStep     = _tVerRuler.MinorStep;
             local nMajorWidth    = _tVerRuler.MajorWidth;
@@ -284,8 +276,8 @@ return class("Forge",
         DrawUtilObjects = function(this, cdat, sObject, D, hInternalDC)
             local pri = cdat.pri;
             local bIsVertical   = pri.Orientation == VER;
-            local nWidth        = bIsVertical and pri.WidthVer  or pri.WidthHor;
-            local nHeight       = bIsVertical and pri.HeightVer or pri.HeightHor;
+            local nWidth        = pri.Width;
+            local nHeight       = pri.Height;
 
             pri.ClearToTransparent(nWidth, nHeight, D);
 
@@ -317,21 +309,15 @@ return class("Forge",
 
     },
     {--PUBLIC
-        Forge = function(this, cdat, nWidthHor,     nHeightHor,
-                                    nWidthVer,      nHeightVer)
-                                            --sCanvasNameExport, sCanvasName)
+        Forge = function(this, cdat, nWidth, nHeight)
             --TODO Assertions
-            pri                     = cdat.pri;
-            pri.WidthHor            = nWidthHor;
-            pri.HeightHor           = nHeightHor;
-            pri.WidthVer            = nWidthVer;
-            pri.HeightVer           = nHeightVer;
-            --pri.CanvasNameExport    = "cvs card hor";--sCanvasNameExport;--TODO MOVE TO CONstant
-            pri.CanvasName          = "cvs card";--sCanvasName;
-            pri.Name                = _sGame;
+            pri         = cdat.pri;
+            pri.Width   = nWidth;
+            pri.Height  = nHeight;
+            pri.Name                = Game.GetActive().GetName();
 
             --import the styles
-            local pStyles = _pStyles;
+            local pStyles = FS.Styles;
             pri.StylesINI = pStyles;
 
             --TODO check for file and other things...do error checsk later --THROW ERROR if not
@@ -392,12 +378,9 @@ return class("Forge",
             local tPos  = Window.GetPos(HWND_APP);
             local tSize = Window.GetSize(HWND_APP);
 
-            --get the size of the canvases
-            --local tSizeHor = Input.GetSize(pri.CanvasNameExport);
-            local tSizeVer = Input.GetSize(pri.CanvasName);
-
-            --Input.SetPos(pri.CanvasNameExport, (_nPageWidth - tSizeHor.Width) / 2, (_nPageHeight - tSizeHor.Height) / 2);
-            Input.SetPos(pri.CanvasName, (_nPageWidth - tSizeVer.Width) / 2, (_nPageHeight - tSizeVer.Height) / 2);
+            --get the size of the canvas
+            local tSize = Input.GetSize(_sCanvas);
+            Input.SetPos(_sCanvas, (_nPageWidth - tSize.Width) / 2, (_nPageHeight - tSize.Height) / 2);
         end,
         CenterOnX = function(this, cdat, nVal, nTextWidth) --TODO BUG FIX FINISH These functions NOT working properly on angled text
             local nRet = nVal or 0;
@@ -425,25 +408,15 @@ return class("Forge",
 
         end,
         --assumes tRow and cProc are valid
-        DrawCard = function(this, cdat, cProc, tRow, bExport, fExport)
+        DrawCard = function(this, cdat, cProc, tRow, bExport, fExport) --TODO move this out to private static to be used here and in new export function
             local pri = cdat.pri;
             local bIsVertical   = pri.Orientation == VER;
-            local nWidth        = bIsVertical and pri.WidthVer              or pri.WidthHor;
-            local nHeight       = bIsVertical and pri.HeightVer             or pri.HeightHor;
-            --local sCanvas       = bIsVertical and pri.CanvasName         or pri.CanvasNameExport;
-            local sCanvas       = pri.CanvasName;
-            local hImage        = bIsVertical and pri.ImageHandleVer        or pri.ImageHandleHor;
-            local hUtilImage    = bIsVertical and pri.UtilImageHandleVer    or pri.UtilImageHandleHor;
-            local nImageID      = bIsVertical and pri.ImageIDVer            or pri.ImageIDHor;
-            local nUtilImageID  = bIsVertical and pri.UtilImageIDVer        or pri.UtilImageIDHor;
-
-            if (pri.Orientation ~= _nLastOrientation) then
-                --Input.SetVisible(pri.CanvasNameExport, not bIsVertical);
-                --Input.SetEnabled(pri.CanvasNameExport, not bIsVertical);
-                --Input.SetVisible(pri.CanvasName, bIsVertical);
-                --Input.SetEnabled(pri.CanvasName, bIsVertical);
-                _nLastOrientation = pri.Orientation;
-            end
+            local nWidth        = pri.Width;
+            local nHeight       = pri.Height;
+            local hImage        = pri.ImageHandle;
+            local nImageID      = pri.ImageID;
+            local hUtilImage    = pri.UtilImageHandle;
+            local nUtilImageID  = pri.UtilImageID;
 
             --draw the card
             local function ProcDraw(sObject, D, hInternalDC)
@@ -463,8 +436,11 @@ return class("Forge",
                 fProcDraw(sObject, D, hInternalDC);
             end
 
+            --reset the image size to its original size
+            --hImage:Resize(nWidth, nHeight, DRAW_RESIZE_RAW);
+
             --clear the canvas
-            Canvas.Clear(sCanvas, _oClear);
+            Canvas.Clear(_sCanvas, _oClear);
 
             --draw on the card image
             hImage:Draw(ProcDraw);
@@ -472,8 +448,12 @@ return class("Forge",
             --draw on the util image
             hUtilImage:Draw(pri.DrawUtilObjects);
 
+            --resize the image to the canvas size
+            local tSize = Input.GetSize(_sCanvas);
+            --hImage:Resize(tSize.Width, tSize.Height, DRAW_RESIZE_RAW);
+
             --draw the card and util images onto the canvas (since drawing directly on the canvas is no bueno)
-            Canvas.Draw(sCanvas,
+            Canvas.Draw(_sCanvas,
                         function(sObject, D, hInternalDC)
                             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
                             D.DrawImage(nImageID, 0, 0);
@@ -481,13 +461,13 @@ return class("Forge",
                         end
             );
 
-            if (bExport and fExport and type(fExport) == "function") then
+            if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..Teach export should not be displayed first
                 fExport(pri.D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
             end
 
             --[[
             --saves the entire canvas!
-            local hNew = Canvas.GrabImage(sCanvas);
+            local hNew = Canvas.GrabImage(_sCanvas);
             if(hNew)then
                 DrawingImage.Save(hNew, tRow.Name..".png", DRAW_FORMAT_PNG);
                 DrawingImage.Free(hNew);
@@ -504,7 +484,7 @@ return class("Forge",
             --D.DrawImage(nImage, nX, nY, nWidth, nHeight);
             local nCoVXWidth     = pri.CoVXWidth;
             local nCoVYHeight    = pri.CoVYHeight;
-            D.DrawImage(nImage, nX * nCoVXWidth, nCoVYHeight * nY, nCoVXWidth * nWidth, nCoVYHeight * nHeight);
+            D.DrawImage(nImage, nX, nY, nWidth, nHeight);
         end,
         --may be called ONLY in the proc's draw
         DrawText = function(this, cdat, sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)
@@ -827,17 +807,13 @@ return class("Forge",
 
             return nBaseX, nBaseY, nBlockW, nBlockH;
         end,
-        GetCanvasName = function(this, cdat)
-            local pri = cdat.pri;
-            return pri.Orientation == VER and pri.CanvasName or pri.CanvasNameExport;
-        end,
         GetCenterX = function(this, cdat)
             local pri = cdat.pri;
-            return pri.Orientation == VER and pri.WidthVer / 2 or pri.WidthHor / 2;
+            return pri.Width / 2;
         end,
         GetCenterY = function(this, cdat)
             local pri = cdat.pri;
-            return pri.Orientation == VER and pri.HeightVer / 2 or pri.HeightHor / 2;
+            return pri.Height / 2;
         end,
         GetContext = function(this, cdat)
             local pri = cdat.pri;
@@ -845,25 +821,25 @@ return class("Forge",
         end,
         GetHeight = function(this, cdat)
             local pri = cdat.pri;
-            return pri.Orientation == VER and pri.HeightVer or pri.HeightHor;
+            return pri.Height;
         end,
         GetOrientation = function(this, cdat)
             return cdat.pri.Orientation;
         end,
         GetWidth = function(this, cdat)
             local pri = cdat.pri;
-            return pri.Orientation == VER and pri.WidthVer or pri.WidthHor;
+            return pri.Width;
         end,
         --SetAutoUpdateStyle =  function(this, cdat, vFlag)
     --        cdat.pri.AutoUpdateStyle = rawtype(vFlag) == "boolean" and vFlag or false;
 --        end,
-        SetOrientation = function(this, cdat, vOrientation)
+        --[[SetOrientation = function(this, cdat, vOrientation)
             local pri = cdat.pri;
             local nOrientation = rawtype(vOrientation) == "number" and vOrientation or VER;
             nOrientation       = (nOrientation == HOR or nOrientation == VER) and nOrientation or VER;
             pri.Orientation    = nOrientation;
             return this;
-        end,
+        end,]]
     --[[    OnMenu = function(nID, tItemInfo)
 
 
@@ -874,35 +850,26 @@ return class("Forge",
             local fImage    = pri.CreateImage
             --TODO FINISH streamline/condense this section
 
-            --create the horizontal canvas
-            --[[if not (pri.CanvasExportCreated) then
-                local bHorCanvasCreated = Canvas.Create(pri.CanvasNameExport);
-                assert(bHorCanvasCreated, "Error in Forge, \"${game}\": Could not create horizontal canvas for object, \"${canvas}\"." % {game = pri.Name, canvas = pri.CanvasNameExport});
-                pri.CanvasExportCreated = true;
-            end]]
-
             --create the canvas
             if not (pri.CanvasCreated) then
-                local bVerCanvasCreated = Canvas.Create(pri.CanvasName);
-                assert(bVerCanvasCreated, "Error in Forge, \"${game}\": Could not create vertical canvas for object, \"${canvas}\"." % {game = pri.Name, canvas = pri.CanvasName});
+                local bCanvasCreated = Canvas.Create(_sCanvas);
+                assert(bCanvasCreated, "Error in Forge, \"${game}\": Could not create canvas for object, \"${canvas}\"." % {game = pri.Name, canvas = _sCanvas});
                 pri.CanvasCreated = true;
             end
 
             --create the images that will be drawn on the canvas
-            fImage("ImageHandleHor",        "ImageIDHor", HOR);
-            fImage("ImageHandleVer",        "ImageIDVer", VER);
-            fImage("UtilImageHandleHor",    "UtilImageIDHor", HOR);
-            fImage("UtilImageHandleVer",    "UtilImageIDVer", VER);
+            fImage("ImageHandle",       "ImageID");
+            fImage("UtilImageHandle",   "UtilImageID");
 
             --mouse event callback functions
             local function MouseUpdate(eEvent)
 
-                if(eEvent.EventCode == CANVAS_MOUSE_MOVE)then
+                if(eEvent.EventCode == CANVAS_MOUSE_MOVE) then
                     _nX = eEvent.Mouse.x;
                     _nY = eEvent.Mouse.y;
                     local bIsVertical = pri.Orientation == VER;
-                    local nNegXAdjust = bIsVertical and pri.WidthVer    or pri.WidthHor;
-                    local nNegYAdjust = bIsVertical and pri.HeightVer   or pri.WidthVer;
+                    --local nNegXAdjust = pri.Width;
+                    --local nNegYAdjust = bIsVertical and pri.Height   or pri.Width;
 
                     if not (_hWndCardVer) then
                         _hWndCardVer = ProcSys.GetWindowHandle(PANE.CARD_VER);
@@ -916,8 +883,7 @@ return class("Forge",
 
             end
 
-            --Canvas.SetCallback(pri.CanvasNameExport, MouseUpdate);
-            Canvas.SetCallback(pri.CanvasName, MouseUpdate);
+            Canvas.SetCallback(_sCanvas, MouseUpdate);
 
             --set the Forge's window size and adjust the images
             local sSection = "ForgeWindow";
@@ -942,10 +908,12 @@ return class("Forge",
             this.CenterCardDisplay();
 
             --load last set if present
-            local pLastSet = _pCSVSource.."\\"..INIFile.GetValue(_pInfo, "SESSION", "LastSet")..".csv";
+            local sLastCardSetUUID  = INIFile.GetValue(FS.Info, "SESSION", "LastSet");
+            local oGame             = Game.GetActive();
+            local oLastCardSet      = oGame.GetCardSet(sLastCardSetUUID);
 
-            if (File.DoesExist(pLastSet)) then
-                ProcSys.LoadSet(pLastSet);
+            if (type(oLastCardSet) == "CardSet") then
+                ProcSys.LoadCardSet(oLastCardSet);
             end
 
         end,
@@ -964,14 +932,19 @@ return class("Forge",
             _nPageWidth     = nPageWidth;
             _nPageHeight    = nPageHeight;
 
-            --TODO FINISH adjust canvas size using math.rect functions
+            --TODO FINISH adjust canvas size using math.rect functions TODO use set data in the module (for width and height)
+            local tOuter    = {x = 0, y = 0, width = nPageWidth, height = nPageHeight};
+            local tInner    = {x = 0, y = 0, width = pri.Width, height = pri.Height};
+            local tRect     = math.geometry.fitrect(tOuter, tInner, true);
+            Input.SetSize(_sCanvas, tRect.width, tRect.height);
+            Input.SetPos(_sCanvas, tRect.x, tRect.y);
 
-            --store the canvas size info --TODO FINISH USE SET SIZE WITH FALLBACK TO FORGE IF SET SIZE NOT VALID
-            local tSize         = Input.GetSize(pri.CanvasName);
+            --store the canvas size info --TODO FINISH USE CARD SET SIZE WITH FALLBACK TO FORGE IF SET SIZE NOT VALID
+            local tSize         = Input.GetSize(_sCanvas);
             pri.CanvasWidth     = tSize.Width;
             pri.CanvasHeight    = tSize.Height;
-            pri.CoVXWidth       = tSize.Width   / pri.WidthVer;
-            pri.CoVYHeight      = tSize.Height  / pri.HeightVer;
+            pri.CoVXWidth       = tSize.Width   / pri.Width;
+            pri.CoVYHeight      = tSize.Height  / pri.Height;
 
             --center the images
             this.CenterCardDisplay();
@@ -986,28 +959,15 @@ return class("Forge",
         end,
         X = function(this, cdat, nVal) --releative functions...get the x value relative otthe build size
             local pri = cdat.pri;
-            nRet = -1;
+            local nWidth = pri.Width;
 
-            if (pri.Orientation == VER) then
-                local nWidth = pri.WidthVer;
-                nRet = (nVal / nWidth) * Input.GetSize(pri.CanvasName).Width;
-                else
-        --TODO
-            end
-
-            return nRet;
+            return (nVal / nWidth) * Input.GetSize(_sCanvas).Width;
         end,
         Y = function(this, cdat, nVal)
-            nRet = -1;
+            local pri = cdat.pri;
+            local nHeight = pri.Height;
 
-            if (cdat.pri.Orientation == VER) then
-                local nHeight = pri.HeightVer;
-                nRet = (nVal / nHeight) * Input.GetSize(pri.CanvasName).Height;
-            else
-        --TODO
-            end
-
-            return nRet;
+            return (nVal / nHeight) * Input.GetSize(_sCanvas).Height;
         end,
     },
     nil,   --extending class
