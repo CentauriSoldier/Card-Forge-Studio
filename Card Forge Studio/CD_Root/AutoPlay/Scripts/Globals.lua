@@ -136,8 +136,8 @@ Editor      = require("Editor");
 
 
 --[[!
-    @fqxn CFS.UserEnv
-    @desc The Lua environment used in Card Forge Studio's lua editor.
+    @fqxn CFS.GetUserEnv
+    @desc The Lua environment used in Card Forge Studio's lua editor as well as in CardSet's Draw, Proc, and other injected scripts.
     <br>You can hook this function to inject whatever you need into your game's User Envrironment so you have access to them inside the editor.
     <br>Generally, it's best to do this in your game's InitForge.lua file.
     @ex
@@ -192,7 +192,7 @@ Editor      = require("Editor");
         return tEnv;
     end
 !]]
-function GetUserEnv()
+function GetUserEnv()--TODO QUESTION SHOULD THIS RETURN A PER_BUILT ONE? Or do we want a new one each time?
     local tRet = {
         -- Lua basics
        ipairs       = ipairs,
@@ -205,6 +205,7 @@ function GetUserEnv()
        table        = table,
 
        -- LuaEx basics
+       base64       = base64,
        RNG          = RNG,
        array        = array,
        class        = class,
@@ -212,6 +213,8 @@ function GetUserEnv()
        rawtype      = rawtype,
        struct       = struct,
        structfactory= structfactory,
+       serialize    = serialize,
+       deserialize  = deserialize,
 
        clamp        = math.clamp,
        drift        = math.drift,
@@ -225,15 +228,16 @@ function GetUserEnv()
 
        S            = null, --Style
        CFG          = CFG,
+       Draw         = Draw,
     };
 
     tRet.S = {};
 
-    local tStyles = INIFile.GetSectionNames(FS.Styles);
+    --local tStyles = INIFile.GetSectionNames(FS.Styles); --_TODO load this from forge, not from INI...too slow
 
-    if (tStyles) then
+    --if (tStyles) then
 
-        for _, sStyle in ipairs(tStyles) do
+        for _, sStyle in pairs(ProcSys.GetForge().STYLE) do
             tRet.S[sStyle] = setmetatable(
             {
                 O = '<'..sStyle..'>',
@@ -247,7 +251,7 @@ function GetUserEnv()
             );
         end
 
-    end
+    --end
 
     return tRet;
 end
@@ -335,6 +339,8 @@ function OnStartUp()--TODO move to its own module if it gets too big
     math.random();
 
     local bIsCompiled = Application.IsCompiled();
+    _DisableRuntimeErrorDialog = true;--bIsCompiled;
+    Debug.ShowWindow(true);
 
     --TODO make all basic files as needed here
     if not (File.DoesExist(FS.AppCFG)) then

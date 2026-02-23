@@ -28,6 +28,61 @@ local bWindowsBuilt         = false;
 
 local _pAppCFG              = FS.AppCFG;
 
+local _oActiveCardSet           = false;
+
+local _nFileSyncTimerID         = PROCSYS_FILE_SYNC_TIMER_ID;
+local _nFileSyncTimerInterval   = PROCSYS_FILE_SYNC_TIMER_INTERVAL;
+
+--[[TODO USE TO SET UP PROC ENV LEFT OFF HERE
+
+--get the proc's draw method
+local fProcDraw         = cProc.DrawCard(this, cProc, tRow, nWidth, nHeight);
+local fSetOnImageDraw   = sink;
+local oCardSet          = ProcSys.GetActiveCardSet();
+
+if (type(oCardSet) == "CardSet") then
+    --get the chunk from the active card set
+    local sDrawChunk = oCardSet.GetCallCode("Draw");
+
+    --the error message in case things go south
+    local sCardSetName  = oCardSet.GetName();
+    local sChunkName    = sCardSetName.." Draw";
+
+    --get and modify the user env
+    local wUser = GetUserEnv();
+
+    -- injected context
+    wUser.oForge        = this;
+    wUser.tRow          = tRow;
+    wUser.nCardWidth    = nWidth;
+    wUser.nCardHeight   = nHeight;
+    wUser.pGame         = FS.Game;
+    wUser.pSymbols      = FS.Symbols;
+    --wUser.pDocs         = FS.Docs;
+    wUser.pCardSet      = oCardSet.GetPath();
+    wUser.bDrawBorder   = MainMenu.IsChecked("Options:>Draw:>Border Enabled");
+    wUser.bDrawOverlay  = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled");
+
+    --try to load the chuck
+    --p(type(sDrawChunk), type(sChunkName), type(wUser))
+    local fChunk, sError = load(sDrawChunk, sChunkName, "t", wUser);
+    if not (fChunk) then
+        error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
+    end
+
+    --try to call the chunk
+    local bOk, vReturnOrError = pcall(fChunk);
+
+    if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
+        p(vReturnOrError)
+        --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
+    end
+
+    fSetOnImageDraw = vReturnOrError--(this, tRow, nWidth, nHeight);
+end
+]]
+
+
 --[[!
     @fqxn CFS.Classes.ProcSys.Enums.PANE
     @desc Identifiers for ProcSys window panes.
@@ -458,6 +513,9 @@ return class("ProcSys",
             @desc Returns the active Forge instance.
             @return Forge oForge The current Forge object.
         !]]
+        GetActiveCardSet = function()
+            return _oActiveCardSet;
+        end,
         GetForge = function()
             return _cForge;
         end,
@@ -546,6 +604,8 @@ return class("ProcSys",
             --set defaults
             _pActiveCSV = "";
             _bAllowSave = false;
+            _oActiveCardSet = oCardSet;
+
             MainMenu.SetEnabled("Set:>Save", false);
             --local pSet;
 
@@ -583,6 +643,7 @@ return class("ProcSys",
                 MainMenu.SetEnabled("Set:>Browse", true);
             end
 
+            Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
         end,
 
         --[[!
@@ -656,6 +717,26 @@ return class("ProcSys",
         end,
 
 
+        OnExit = function()
+
+            if (_bAllowSave) then
+                local nYesNoCancel = Dialog.Message("Warning!", "You have unsaved changes.\r\nWould you like to save them now?", MB_YESNOCANCEL, MB_ICONEXCLAMATION, MB_DEFBUTTON1);
+
+                if (nYesNoCancel == IDNO) then
+                    _bAllowSave = false;
+                    Application.Exit(0);
+                elseif (nYesNoCancel == IDYES) then
+                    ProcSys.SaveCSVs();
+                    Application.Sleep(2000);
+                    Application.Exit(0);
+                end
+
+            else
+                Application.Exit(0);
+            end
+
+        end,
+
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.OnShow
             @desc Initializes and restores the ProcSys data editor and viewer windows on Forge page OnShow event.
@@ -675,7 +756,7 @@ return class("ProcSys",
                 local tWindows = _tWindows;
 
                 local function OnReadyGrids(hWnd, sObject)
-            	       Grid.SetVisible(sObject, true);
+            	    Grid.SetVisible(sObject, true);
                 end
 
                 --create the data editor first
@@ -802,26 +883,19 @@ return class("ProcSys",
                     <li>Selecting Cancel aborts the exit.</li>
                 </ul>
         !]]
-        OnExit = function()
 
-            if (_bAllowSave) then
-                local nYesNoCancel = Dialog.Message("Warning!", "You have unsaved changes.\r\nWould you like to save them now?", MB_YESNOCANCEL, MB_ICONEXCLAMATION, MB_DEFBUTTON1);
+        OnTimer = function(nID)
 
-                if (nYesNoCancel == IDNO) then
-                    _bAllowSave = false;
-                    Application.Exit(0);
-                elseif (nYesNoCancel == IDYES) then
-                    ProcSys.SaveCSVs();
-                    Application.Sleep(2000);
-                    Application.Exit(0);
+            if (nID == _nFileSyncTimerID) then
+
+                if (_oActiveCardSet) then
+                    _oActiveCardSet.UpdateCallCode("Draw");
+                    _oActiveCardSet.UpdateCallCode("Proc");
                 end
 
-            else
-                Application.Exit(0);
             end
 
         end,
-
 
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.OnSelectionChanged

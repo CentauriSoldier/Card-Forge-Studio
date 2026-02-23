@@ -1,16 +1,17 @@
-local class         = class;
-local math          = math;
-local rawtype       = rawtype;
-local string        = string;
-local toboolean     = toboolean;
-local tonumber      = tonumber;
-local tostring      = tostring;
-local type          = type;
-    isnumber        = type.isnumber;
-    isstring        = type.istring;
+local class             = class;
+local math              = math;
+local rawtype           = rawtype;
+local string            = string;
+local toboolean         = toboolean;
+local tonumber          = tonumber;
+local tostring          = tostring;
+local type              = type;
+    isnumber            = type.isnumber;
+    isstring            = type.istring;
 local clicks = 0;
-local floor         = math.floor;
-local clamp         = math.clamp;
+local floor             = math.floor;
+local clamp             = math.clamp;
+local GetActiveCardSet  = ProcSys.GetActiveCardSet;
 
 local _pAppCFG      = FS.AppCFG;
 
@@ -18,8 +19,6 @@ local Color         = Color;
 local Drawing       = Drawing;
 local DrawingFont   = DrawingFont;
 local INIFile       = INIFile;
-local _nOrientation         = VER;
-local _nLastOrientation = VER;
 
 local _nX                   = 0;
 local _nY                   = 0;
@@ -34,8 +33,16 @@ local _nPageHeight          = -1;
 
 local _hWndCardVer;  --TODO FIX REMOVE THIS
 
-local _sCanvas = CANVAS_NAME;
+local _sCanvas = FORGE_CANVAS_NAME;
 
+--redraw and file sync fields
+local _cLastProc, _tLastRow;
+local _bRedrawRequested         = false;
+local _bIsResizing              = false;
+local _nTimeDelta               = 0;
+local _nSizingDelta             = FORGE_REDRAW_SIZING_INTERVAL;
+local _nRedrawTimerID           = FORGE_REDRAW_TIMER_ID;
+local _nRedrawTimerInterval     = FORGE_REDRAW_TIMER_INTERVAL;
 
 local _tHorRuler            = {--TODO static functions and variables io change these values
     Y           = 0,
@@ -59,6 +66,19 @@ local _tCenterLines = {
     Color       = Color.RGBA(50, 50, 255, 255),
 };
 
+local X, Y, W, H;
+
+--called by the Forge.OnSize method
+function UpdateCoVFunctions(nCoVXWidth, nCoVYHeight)
+    --update the CoV functions using the new CoV info
+    X = function(nX) return floor((nX or 0) * nCoVXWidth)     end
+    Y = function(nY) return floor((nY or 0) * nCoVYHeight)    end
+    W = function(nW) return floor((nW or 0) * nCoVXWidth)     end
+    H = function(nH) return floor((nH or 0) * nCoVYHeight)    end
+end
+
+local function sink() end
+
 --[[
 local function IsCardVertical(tRow)
     local sIsVertical = tRow.IsVertical;
@@ -73,7 +93,8 @@ end]]
 
 local FontStyle   = require("Forge.FontStyle");
 
-local _nX, _nY          = 0;
+
+
 local _tImageCache      = {};
 local _tUserImageCache  = {};
 local function ImageLoadError(sPath, sName, sMsg)
@@ -132,7 +153,7 @@ return class("Forge",
         Orientation                 = VER,
         Width__AUTOR_               = null,
         Height__AUTOR_              = null,
-        Canvas__AUTOR_              = null, --TODO QUESTION IS THIS USED???
+        --Canvas__AUTOR_              = null, --TODO QUESTION IS THIS USED???
         CanvasName__AUTOR_          = null,
         CanvasCreated               = false,
         CanvasWidth                 = 0,
@@ -141,8 +162,10 @@ return class("Forge",
         CoVYHeight                  = 0,
         ImageHandle                 = null,
         ImageID                     = null,
-        UtilImageHandle             = null,
-        UtilImageID                 = null,
+        ImageExportHandle           = null,
+        ImageExportID               = null,
+        ImageUtilHandle             = null,
+        ImageUtilID                 = null,
         Name__AUTOR_                = null,
         StylesINI__AUTOA_           = "", --TODO FINISH STYLE NAMES MUST BE VARIABLE COMPLIANT
 
@@ -325,7 +348,9 @@ return class("Forge",
             --local tNames        = {};
             local tStyles       = {};
 
-            for nIndex, sStyleRaw in pairs(tSections) do
+            table.sort(tSections);
+
+            for nIndex, sStyleRaw in ipairs(tSections) do
                 local sStyle = sStyleRaw:upper();
                 --store the style name
                 --tNames[nIndex]  = sStyle:upper();
@@ -361,6 +386,29 @@ return class("Forge",
                     end
 
                     tStyles[k] = v;
+                end,
+                __pairs = function()
+                    local nIndex    = 0;
+                    local nMax      = 0;
+                    local tKeys     = {};
+
+                    for vKey in pairs(tStyles) do
+                        nMax = nMax + 1;
+                        tKeys[nMax] = vKey;
+                    end
+
+                    table.sort(tKeys, fComp);
+
+                    return function()
+                        nIndex = nIndex + 1;
+
+                        if (nIndex <= nMax) then
+                            local sIndex = tKeys[nIndex];
+                            return nIndex, sIndex, tStyles[sIndex];
+                        end
+
+                    end
+
                 end,
             });
 
@@ -410,30 +458,78 @@ return class("Forge",
         --assumes tRow and cProc are valid
         DrawCard = function(this, cdat, cProc, tRow, bExport, fExport) --TODO move this out to private static to be used here and in new export function
             local pri = cdat.pri;
-            local bIsVertical   = pri.Orientation == VER;
             local nWidth        = pri.Width;
             local nHeight       = pri.Height;
             local hImage        = pri.ImageHandle;
             local nImageID      = pri.ImageID;
-            local hUtilImage    = pri.UtilImageHandle;
-            local nUtilImageID  = pri.UtilImageID;
+            local hUtilImage    = pri.ImageUtilHandle;
+            local nImageUtilID  = pri.ImageUtilID;
+            local nCanvasWidth  = pri.CanvasWidth;
+            local nCanvasHeight = pri.CanvasHeight;
+
+            --in case a resize happens
+            _cLastProc = cProc;
+            _tLastRow  = tRow;
 
             --draw the card
             local function ProcDraw(sObject, D, hInternalDC)
                 pri.ClearToTransparent(nWidth, nHeight, D);
                 --get the proc's draw method
-                local fProcDraw = cProc.DrawCard(this, cProc, tRow, nWidth, nHeight);
+                local fProcDraw         = cProc.DrawCard(this, cProc, tRow, nWidth, nHeight);
+                local fSetOnImageDraw   = sink;
+                local oCardSet          = ProcSys.GetActiveCardSet();
 
+                if (type(oCardSet) == "CardSet") then
+                    --get the chunk from the active card set
+                    local sDrawChunk = oCardSet.GetCallCode("Draw");
+
+                    --the error message in case things go south
+                    local sCardSetName  = oCardSet.GetName();
+                    local sChunkName    = sCardSetName.." Draw";
+
+                    --get and modify the user env
+                    local wUser = GetUserEnv();
+
+                    -- injected context
+                    wUser.oForge        = this;
+                    wUser.tRow          = tRow;
+                    wUser.nCardWidth    = nWidth;
+                    wUser.nCardHeight   = nHeight;
+                    wUser.pGame         = FS.Game;
+                    wUser.pSymbols      = FS.Symbols;
+                    --wUser.pDocs         = FS.Docs;
+                    wUser.pCardSet      = oCardSet.GetPath();
+                    wUser.bDrawBorder   = MainMenu.IsChecked("Options:>Draw:>Border Enabled");
+                    wUser.bDrawOverlay  = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled");
+
+                    --try to load the chuck
+                    --p(type(sDrawChunk), type(sChunkName), type(wUser))
+                    local fChunk, sError = load(sDrawChunk, sChunkName, "t", wUser);
+                    if not (fChunk) then
+                        error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
+                    end
+
+                    --try to call the chunk
+                    local bOk, vReturnOrError = pcall(fChunk);
+
+                    if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
+                        p(vReturnOrError)
+                        --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
+                    end
+
+                    fSetOnImageDraw = vReturnOrError--(this, tRow, nWidth, nHeight);
+                end
                 --check it
-                assert(rawtype(fProcDraw) == "function", "Error Drawing Card, \""..tRow.Name.."\".\r\nMissing static DrawCard function in "..tostring(cProc).." class or function not correctly implemented."); --TODO FINISH
+                --assert(rawtype(fProcDraw) == "function", "Error Drawing Card, \""..tRow.Name.."\".\r\nMissing static DrawCard function in "..tostring(cProc).." class or function not correctly implemented."); --TODO FINISH
 
-                --update private vars for use in DrawText
+                --update private vars for use in DrawText and other functions
                 pri.Object      = sObject;
                 pri.D           = D;
                 pri.InternalDC  = hInternalDC;
 
                 --execute the proc's draw method
-                fProcDraw(sObject, D, hInternalDC);
+                fSetOnImageDraw(sObject, D, hInternalDC);
+                --fProcDraw(sObject, D, hInternalDC)
             end
 
             --reset the image size to its original size
@@ -449,21 +545,23 @@ return class("Forge",
             hUtilImage:Draw(pri.DrawUtilObjects);
 
             --resize the image to the canvas size
-            local tSize = Input.GetSize(_sCanvas);
+            --local tSize = Input.GetSize(_sCanvas);
             --hImage:Resize(tSize.Width, tSize.Height, DRAW_RESIZE_RAW);
 
             --draw the card and util images onto the canvas (since drawing directly on the canvas is no bueno)
             Canvas.Draw(_sCanvas,
                         function(sObject, D, hInternalDC)
                             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
-                            D.DrawImage(nImageID, 0, 0);
-                            D.DrawImage(nUtilImageID, 0, 0);
+                            --D.DrawImage(nImageID, 0, 0)--, nCanvasWidth, nCanvasHeight);
+                            --D.DrawImage(nImageUtilID, 0, 0)--, nCanvasWidth, nCanvasHeight);
+                            D.DrawImage(nImageID, 0, 0, nCanvasWidth, nCanvasHeight);
+                            D.DrawImage(nImageUtilID, 0, 0, nCanvasWidth, nCanvasHeight);
                         end
             );
 
-            if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..Teach export should not be displayed first
-                fExport(pri.D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
-            end
+            --if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..Teach export should not be displayed first
+            --    fExport(pri.D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
+            --end
 
             --[[
             --saves the entire canvas!
@@ -482,8 +580,8 @@ return class("Forge",
             local hImage, nImage = LoadImage(pImage, sName);
             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND);
             --D.DrawImage(nImage, nX, nY, nWidth, nHeight);
-            local nCoVXWidth     = pri.CoVXWidth;
-            local nCoVYHeight    = pri.CoVYHeight;
+            --local nCoVXWidth     = pri.CoVXWidth;
+            --local nCoVYHeight    = pri.CoVYHeight;
             D.DrawImage(nImage, nX, nY, nWidth, nHeight);
         end,
         --may be called ONLY in the proc's draw
@@ -830,21 +928,6 @@ return class("Forge",
             local pri = cdat.pri;
             return pri.Width;
         end,
-        --SetAutoUpdateStyle =  function(this, cdat, vFlag)
-    --        cdat.pri.AutoUpdateStyle = rawtype(vFlag) == "boolean" and vFlag or false;
---        end,
-        --[[SetOrientation = function(this, cdat, vOrientation)
-            local pri = cdat.pri;
-            local nOrientation = rawtype(vOrientation) == "number" and vOrientation or VER;
-            nOrientation       = (nOrientation == HOR or nOrientation == VER) and nOrientation or VER;
-            pri.Orientation    = nOrientation;
-            return this;
-        end,]]
-    --[[    OnMenu = function(nID, tItemInfo)
-
-
-
-    end,]]
         OnShow = function(this, cdat)
             local pri       = cdat.pri;
             local fImage    = pri.CreateImage
@@ -859,7 +942,8 @@ return class("Forge",
 
             --create the images that will be drawn on the canvas
             fImage("ImageHandle",       "ImageID");
-            fImage("UtilImageHandle",   "UtilImageID");
+            fImage("ImageExportHandle", "ImageExportID");
+            fImage("ImageUtilHandle",   "ImageUtilID");
 
             --mouse event callback functions
             local function MouseUpdate(eEvent)
@@ -916,6 +1000,7 @@ return class("Forge",
                 ProcSys.LoadCardSet(oLastCardSet);
             end
 
+            Page.StartTimer(_nRedrawTimerInterval,      _nRedrawTimerID);
         end,
         OnSize = function(this, cdat, nWindowWidth, nWindowHeight, nPageWidth, nPageHeight, nType)
             local pri       = cdat.pri;
@@ -948,8 +1033,41 @@ return class("Forge",
 
             --center the images
             this.CenterCardDisplay();
+
+            --update the X, Y, W, H functions
+            --UpdateCoVFunctions(pri.CoVXWidth, pri.CoVYHeight);
+            if (_cLastProc and _tLastRow) then
+                _bRedrawRequested   = true;
+                _bIsResizing        = true;
+            end
+
         end,
         STYLE = null, --public enum
+        OnTimer = function(this, cdat, nID)
+
+            if (nID == _nRedrawTimerID) then
+                --increment the delta time
+                _nTimeDelta = _nTimeDelta + _nRedrawTimerInterval;
+
+                --check if a redraw request was made and that we're done resizing
+                if (_bRedrawRequested and not _bIsResizing) then
+                    --redraw the card
+                    this.DrawCard(_cLastProc, _tLastRow);
+                    --fullfill the request
+                    _bRedrawRequested = false;
+                end
+
+                --if enough time has passed...
+                if (_nTimeDelta >= _nSizingDelta) then
+                    --...indicate resizing has stopped
+                    _bIsResizing    = false;
+                    --...and reset the time delta
+                    _nTimeDelta     = 0;
+                end
+
+            end
+
+        end,
         UpdateStyles = function(this, cdat)
 
             for oStyle in pairs(cdat.pub.STYLE) do
@@ -957,7 +1075,7 @@ return class("Forge",
             end
 
         end,
-        X = function(this, cdat, nVal) --releative functions...get the x value relative otthe build size
+        X = function(this, cdat, nVal) --relative functions...get the x value relative otthe build size
             local pri = cdat.pri;
             local nWidth = pri.Width;
 

@@ -1,7 +1,9 @@
 local _tGames       = {}; --keys are uuids, values are {Game = GameObject, Name = NameString}
 local _oActiveGame  = false;
+local GetCRC        = File.GetCRC
+local ReadToString  = TextFile.ReadToString;
 local CardSet;
-
+local io            = io;
 --TODO with New methods, checkf or existing item first...do not overwrite
 
 --[[
@@ -103,6 +105,35 @@ local function SortByName(oItemA, oItemB)
     return oItemA.GetName() < oItemB.GetName();
 end
 
+local function UpdateCardSetCallCode(sCall, tCall)
+    local bRet = false;
+
+    --get the new CRC
+    local nCRC = GetCRC(tCall.Path);
+
+    if (nCRC == -1) then --an error occurred if it does == -1
+        --TODO ERROR HERE
+    end
+
+    --compare it the existing one
+    if (nCRC ~= tCall.CRC) then
+        --set the newest CRC for this call
+        tCall.CRC = nCRC;
+        local pCallCode = tCall.Path;
+
+        if not (File.DoesExist(pCallCode)) then
+            --TODO FINISH ERROR
+            error("NO FILE, OMG! AHHHHH!!!!")
+        end
+
+        local sCallCode = ReadToString(pCallCode);
+        tCall.Code = sCallCode;
+    end
+
+    return bRet;
+end
+
+
 --[[
 ██████╗ █████╗ ██████╗ ██████╗ ███████╗███████╗████████╗     ██████╗██╗      █████╗ ███████╗███████╗
 ██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝╚══██╔══╝    ██╔════╝██║     ██╔══██╗██╔════╝██╔════╝
@@ -121,10 +152,9 @@ CardSet = class("CardSet",
         --rebuilds all game objects and refreshes the private static info
     },
     {--PRIVATE
+        Calls               = {}, --holds things like Draw, Proc, etc.
         DataPath__AUTOR_    = null,
-        DrawerPath__AUTOR_  = null,
         InfoPath__AUTOR_    = null,
-        ProcPath__AUTOR_    = null,
         Name__AUTOA_        = '',
         Path__AUTOR_        = null,
         UUID__AUTOR_        = null,
@@ -144,11 +174,13 @@ CardSet = class("CardSet",
             local sUUID     = ValidateFolder(pFolder, "CardSet");
             local sName     = ValidateName(pFolder, "CardSet");
             local pData     = pFolder.."\\Data.csv";
-            local pDrawer   = pFolder.."\\Draw.lua";
             local pInfo     = pFolder.."\\Info.ini";
-            local pProc     = pFolder.."\\Proc.lua";
 
-            local tCheckFiles = {pData, pDrawer, pInfo, pProc};
+            --call files
+            local pDrawPath = pFolder.."\\Draw.lua";
+            local pProcPath = pFolder.."\\Proc.lua";
+
+            local tCheckFiles = {pData, pInfo, pDrawPath, pProcPath};
 
             for _, pFile in pairs(tCheckFiles) do
 
@@ -158,15 +190,49 @@ CardSet = class("CardSet",
 
             end
 
-            --set the game's folder
+            --set the game's info
             pri.DataPath    = pData;
-            pri.DrawerPath  = pDrawer;
             pri.InfoPath    = pInfo;
-            pri.ProcPath    = pProc;
             pri.Name        = sName;
             pri.Path        = pFolder;
             pri.UUID        = sUUID;
+
+            --setup the game's functions tables
+            pri.Calls = {
+                Draw = {
+                    Code        = ReadToString(pDrawPath),
+                    CRC         = GetCRC(pDrawPath),
+                    Path        = pDrawPath,
+                },
+                Proc = {
+                    Code        = ReadToString(pProcPath),
+                    CRC         = GetCRC(pProcPath),
+                    Path        = pProcPath,
+                },
+            };
+
         end,
+        GetCallCode = function(this, cdat, sCall)
+            local pri = cdat.pri;
+            local tCalls = pri.Calls;
+            --p(sCall, type(tCalls[sCall].Code))
+            if (tCalls[sCall] == nil) then
+                error("TODO ERROR CAN'T GET CALL - NO CARDSET CALL BY THAT NAME")
+            end
+
+            return tCalls[sCall].Code;
+        end,
+        --updates proc, draw, etc.
+        UpdateCallCode = function(this, cdat, sCall)
+            local pri = cdat.pri;
+            local tCalls = pri.Calls;
+
+            if (tCalls[sCall] == nil) then
+                error("TODO ERROR CAN'T UPDATE CALL - NO CARDSET CALL BY THAT NAME")
+            end
+
+            return UpdateCardSetCallCode(sCall, tCalls[sCall]);
+        end
     },
     nil,   --extending class
     true,  --if the class is final

@@ -13,4 +13,11 @@ constant("APP_CFG", "Card Forge.cfg");
 --constant("TIMER_HTML_PROCESS_ID",       97);
 
 constant("LICENSE", TextFile.ReadToString(_Docs.."\\Licenses\\licenses.txt"));
-constant("CANVAS_NAME", "cvs card");
+
+constant("FORGE_CANVAS_NAME",               "cvs card");
+constant("FORGE_REDRAW_TIMER_ID",           100);
+constant("FORGE_REDRAW_TIMER_INTERVAL",     50);
+constant("FORGE_REDRAW_SIZING_INTERVAL",    300);
+
+constant("PROCSYS_FILE_SYNC_TIMER_ID",        101);
+constant("PROCSYS_FILE_SYNC_TIMER_INTERVAL",  1500);

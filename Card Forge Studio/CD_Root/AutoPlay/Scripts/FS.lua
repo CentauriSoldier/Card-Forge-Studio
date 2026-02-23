@@ -118,6 +118,7 @@ local tFSMeta     = {
         return tPaths[k] or tFunctions[k];
     end,
     __newindex = function(t, k, v) error("Atempt to write to read only FS table.") end,
+    --TODO Set __metatable = false after finding bug
 };
 
 local tFSDecoy    = {};

@@ -27,8 +27,8 @@
 <Movable>1</Movable>
 <AlwaysOnTop>0</AlwaysOnTop>
 <Resizable>1</Resizable>
-<MinWidth>100</MinWidth>
-<MinHeight>100</MinHeight>
+<MinWidth>400</MinWidth>
+<MinHeight>300</MinHeight>
 </WindowOptions>
 <TransparentWindow>
 <TransparentImage/>
@@ -1566,8 +1566,8 @@ ProcSys.GetForge():OnShow();</Script>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>2</DesignCodeLine>
-<DesignCodeCol>28</DesignCodeCol>
+<DesignCodeLine>1</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -1588,14 +1588,15 @@ ProcSys.GetForge():OnShow();</Script>
 <Event>
 <Name>On Timer</Name>
 <Args>number e_ID</Args>
-<Script>ProcSys.GetForge().OnTimer(e_ID);</Script>
+<Script>ProcSys.OnTimer(e_ID);
+ProcSys.GetForge().OnTimer(e_ID);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>19</DesignCodeCol>
+<DesignCodeCol>0</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
