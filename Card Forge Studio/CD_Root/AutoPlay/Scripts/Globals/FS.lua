@@ -109,7 +109,9 @@ local tFunctions = {
         package.path = _sOriginalPackagePath..";"..pGame.."\\Scripts\\?.lua";
 
         --load the game's config
-        CFG = require("Config");
+        --TODO BUG FIX FINISH LOAD IN safe USER ENV!!!!
+        CFG = require("Config"); --REMOVE GLOBAL REF
+        UserEnv.UpdateCFG(CFG);        
     end,
 };
 
@@ -125,4 +127,4 @@ local tFSDecoy    = {};
 
 setmetatable(tFSDecoy, tFSMeta);
 
-rawset(_G, "FS", tFSDecoy);
+return tFSDecoy;

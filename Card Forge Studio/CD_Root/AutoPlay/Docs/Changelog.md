@@ -3,10 +3,15 @@
 ---
 
 <details open>
-<summary><strong>v2026.47.x</strong></summary>
+<summary><strong>v2026.53.19</strong></summary>
 
 ### Added
 - Tutorial System and several turtorials
+- File path system (**FS**) that updates with active game
+
+### Changed
+- Display card is now resizable
+- Custom draw function is now retrieved from the active CardSet
 
 ### Fixed
 
@@ -27,7 +32,7 @@
 - Two-grid editing pipeline:
    - Base Grid (source data)
    - Final Grid (processed, export-ready data)
-- Per-row processor resolution, enabling game-specific logic.
+- Per-row processor resolution, enabling game-specific logic
 - Optional per-cell processing hooks for fine-grained transformations
 - Immediate synchronization between Base and Final grids on edit
 - Selection-driven card preview, using Final grid values only

@@ -173,14 +173,14 @@ CardSet = class("CardSet",
 
             local sUUID     = ValidateFolder(pFolder, "CardSet");
             local sName     = ValidateName(pFolder, "CardSet");
-            local pData     = pFolder.."\\Data.csv";
-            local pInfo     = pFolder.."\\Info.ini";
+            local pData     = pFolder.."\\"..FILER_CARDSET_DATA.Full;
+            local pInfo     = pFolder.."\\"..FILER_CARDSET_INFO.Full;
 
             --call files
-            local pDrawPath = pFolder.."\\Draw.lua";
-            local pProcPath = pFolder.."\\Proc.lua";
+            local pDrawPath     = pFolder.."\\"..FILER_CARDSET_DRAW.Full;
+            local pCellProcPath = pFolder.."\\"..FILER_CARDSET_CELLPROC.Full;
 
-            local tCheckFiles = {pData, pInfo, pDrawPath, pProcPath};
+            local tCheckFiles = {pData, pInfo, pDrawPath, pCellProcPath};
 
             for _, pFile in pairs(tCheckFiles) do
 
@@ -204,10 +204,10 @@ CardSet = class("CardSet",
                     CRC         = GetCRC(pDrawPath),
                     Path        = pDrawPath,
                 },
-                Proc = {
-                    Code        = ReadToString(pProcPath),
-                    CRC         = GetCRC(pProcPath),
-                    Path        = pProcPath,
+                CellProc = {
+                    Code        = ReadToString(pCellProcPath),
+                    CRC         = GetCRC(pCellProcPath),
+                    Path        = pCellProcPath,
                 },
             };
 
@@ -298,6 +298,49 @@ return class("Game",
             end
 
             return vRet;
+        end,
+        New = function()
+            local sGame             = Dialog.Input("Create New Game", "Game name:", "", MB_ICONINFORMATION);
+            local bCancelPressed    = sGame == "CANCEL";
+            local bIsEmpty          = sGame:isempty();
+
+            if (not bCancelPressed and not bIsEmpty) then
+
+                if (bIsFilesafe) then
+                    Game.Prep(sGame);
+                    MainMenu.RefreshGamesList();
+                end
+
+            end
+
+        end,
+        Prep = function(sGame) --TODO REDO THIS NOW THAT IT'S IN THIS MODULE TO INCLUDE VERIFYING THE INPUT
+
+            FS.PrepGame(sGame); --set the filepaths for the current game
+
+            --reset the BuildMechanics var (it gets reloaded in InitForge.lua if present)
+            BuildMechanics = nil;
+
+            --init and set the game's forge
+            ProcSys.PrepActiveGame();
+            --TODO LOAD THIS IN THE STANDARD USER ENV
+            local oForge = require("InitForge");
+            ProcSys.SetForge(oForge);
+
+            UserEnv.UpdateUser(); --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
+
+
+            --build the user's mechanics html if it exists
+            if type(BuildMechanics) == "function" then
+                local sHTML = BuildMechanics(CFG);
+
+                if (type(sHTML) == "string") then
+                    TextFile.WriteFromString(_pGame.."\\Mechanics.html", sHTML, false);
+                end
+
+            end
+
+            ProcessDox(pGame);--TODO get this boolean from INI file before running Dox
         end,
         --rebuilds all game objects and refreshes the private static info
         Refresh = function()

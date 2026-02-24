@@ -169,19 +169,15 @@ tSupport = {
                 TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, {
                     [eMenu.OnSelected] = function(tItem)
                         --TODO check that the current project isn't loaded first and that there are no unssaved changes
-                        PrepGame(sGame);
+                        Game.Prep(sGame);
                         Page.Jump("Forge");
                     end
             });
-
-            --_tGamePaths[sGame] = pFolder;
         end
 
         TheMenu.Refresh();
-        --end
-
     end,
-    RereshSetsList = function(sPage)
+    RereshSetsList = function(sPage)--TODO FIX FINISH USE the Game class to help with this
         --clear the cards list
         TheMenu.ClearChildren("Set:>Load");
 

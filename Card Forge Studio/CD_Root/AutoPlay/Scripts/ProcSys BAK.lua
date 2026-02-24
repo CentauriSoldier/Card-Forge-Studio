@@ -141,64 +141,6 @@ end
 
 
 
-local function BuildCellProc(nRow, nColumn, sColumn, tRow, sCellText, fGetFinalValue)
-    --get the proc's draw method
-    local oCardSet = _oActiveCardSet;
-
-    if (type(oCardSet) == "CardSet") then
-        --get the chunk from the active card set
-        local sDrawChunk = oCardSet.GetCallCode("CellProc");
-
-        --the error message in case things go south
-        local sCardSetName  = oCardSet.GetName();
-        local sChunkName    = sCardSetName.." CellProc";
-
-        --get and modify the user env
-        local wUser = UserEnv.Get();
-
-        -- injected context
-        --wUser.oForge        = _cForge;
-        wUser.nRow              = nRow;
-        wUser.nColumn           = nColumn;
-        wUser.sColumn           = sColumn;
-        wUser.tRow              = tRow;
-        wUser.sCellText         = sCellText;
-        wUser.GetFinalValue     = fGetFinalValue;
-        wUser.pGame             = FS.Game; --TODO GENERALIZE GETTING THESE...??
-        wUser.pCardSet          = oCardSet.GetPath();
-        wUser.pSymbols          = FS.Symbols;
-        --wUser.pDocs         = FS.Docs;
-
-        --try to load the chuck
-        --p(type(sDrawChunk), type(sChunkName), type(wUser))
-        local fChunk, sError = load(sDrawChunk, sChunkName, "t", wUser);
-        if not (fChunk) then
-            error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
-        end
-
-        --try to call the chunk
-        local bOk, vReturnOrError = pcall(fChunk);
-
-        if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
-            p(vReturnOrError)
-            --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
-        end
-
-        fSetOnImageDraw = vReturnOrError--(this, tRow, nWidth, nHeight);
-    end
-
-end
-
-
-
-
-
-
-
-
-
-
-
 
 
 local function PrepUpdateGrids()
@@ -221,6 +163,7 @@ local function UpdateGrids()--TODO FINISH MOVE Color stuff out to a theme system
         [_sBaseDataGrid]    = -1,
         [_sFinalDataGrid]   = -1,
     };
+
 
     local function LoadColor(sSection, sColorValue)
     	local nColor;
@@ -636,7 +579,7 @@ return class("ProcSys",
             local sChunkName    = sCardSetName.." Draw";
 
             --get and modify the user env
-            local wUser = UserEnv.Get();
+            local wUser = GetUserEnv();
 
             -- injected context
             wUser.oForge        = this;
@@ -661,7 +604,7 @@ return class("ProcSys",
             local bOk, vReturnOrError = pcall(fChunk);
 
             if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
-                --p(vReturnOrError) --TODO this is trowning en error to do with an upvalue....
+                p(vReturnOrError)
                 --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
             end
 

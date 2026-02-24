@@ -1,3 +1,25 @@
+
+--[[tUserEnv.S = {}; --TODO MOVE THIS TO FORGE!!!!
+--local tStyles = INIFile.GetSectionNames(FS.Styles); --_TODO load this from forge, not from INI...too slow
+
+--if (tStyles) then
+
+    for _, sStyle in pairs(ProcSys.GetForge().STYLE) do
+        tUserEnv.S[sStyle] = setmetatable(
+        {
+            O = '<'..sStyle..'>',
+            C = '</'..sStyle..'>',
+        },
+        {
+            __call = function(t, vText)
+                return '<'..sStyle..'>'..tostring(vText)..'</'..sStyle..'>'
+            end,
+        }
+        );
+    end
+
+--end]]
+
 local class             = class;
 local math              = math;
 local rawtype           = rawtype;
@@ -12,6 +34,7 @@ local clicks = 0;
 local floor             = math.floor;
 local clamp             = math.clamp;
 local GetActiveCardSet  = ProcSys.GetActiveCardSet;
+local SanitizePath      = SanitizePath;
 
 local _pAppCFG      = FS.AppCFG;
 
@@ -36,7 +59,7 @@ local _hWndCardVer;  --TODO FIX REMOVE THIS
 local _sCanvas = FORGE_CANVAS_NAME;
 
 --redraw and file sync fields
-local _cLastProc, _tLastRow;
+local _tLastRow;
 local _bRedrawRequested         = false;
 local _bIsResizing              = false;
 local _nTimeDelta               = 0;
@@ -456,7 +479,7 @@ return class("Forge",
 
         end,
         --assumes tRow and cProc are valid
-        DrawCard = function(this, cdat, cProc, tRow, bExport, fExport) --TODO move this out to private static to be used here and in new export function
+        DrawCard = function(this, cdat, tRow)--, bExport, fExport) --TODO move this out to private static to be used here and in new export function
             local pri = cdat.pri;
             local nWidth        = pri.Width;
             local nHeight       = pri.Height;
@@ -468,18 +491,17 @@ return class("Forge",
             local nCanvasHeight = pri.CanvasHeight;
 
             --in case a resize happens
-            _cLastProc = cProc;
             _tLastRow  = tRow;
 
             --draw the card
             local function ProcDraw(sObject, D, hInternalDC)
                 pri.ClearToTransparent(nWidth, nHeight, D);
                 --get the proc's draw method
-                local fProcDraw         = cProc.DrawCard(this, cProc, tRow, nWidth, nHeight);
+                --local fProcDraw         = cProc.DrawCard(this, cProc, tRow, nWidth, nHeight);
                 local fSetOnImageDraw   = sink;
                 local oCardSet          = ProcSys.GetActiveCardSet();
 
-                if (type(oCardSet) == "CardSet") then
+                if (type(oCardSet) == "CardSet") then --TODO MOVE THIS OUT TO ITS OWN PRIVATE FUNCTION
                     --get the chunk from the active card set
                     local sDrawChunk = oCardSet.GetCallCode("Draw");
 
@@ -487,24 +509,27 @@ return class("Forge",
                     local sCardSetName  = oCardSet.GetName();
                     local sChunkName    = sCardSetName.." Draw";
 
-                    --get and modify the user env
-                    local wUser = GetUserEnv();
+                    --update the Forge index in the user env
+                    UserEnv.UpdateForge {
+                        DrawImage       = this.DrawImage,
+                        DrawStyledText  = this.DrawStyledText,
+                        DrawText        = this.DrawText,
+                        Row            = tRow,
+                        CardWidth      = nWidth,
+                        CardHeight     = nHeight,
+                        DrawBorder     = MainMenu.IsChecked("Options:>Draw:>Border Enabled"),
+                        DrawOverlay    = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled"),
+                    };
+                    local k = UserEnv.Get();
 
-                    -- injected context
-                    wUser.oForge        = this;
-                    wUser.tRow          = tRow;
-                    wUser.nCardWidth    = nWidth;
-                    wUser.nCardHeight   = nHeight;
-                    wUser.pGame         = FS.Game;
-                    wUser.pSymbols      = FS.Symbols;
+                    --wUser.pGame         = FS.Game;
+                    --wUser.pCardSet      = oCardSet.GetPath();
+                    --wUser.pSymbols      = FS.Symbols;
                     --wUser.pDocs         = FS.Docs;
-                    wUser.pCardSet      = oCardSet.GetPath();
-                    wUser.bDrawBorder   = MainMenu.IsChecked("Options:>Draw:>Border Enabled");
-                    wUser.bDrawOverlay  = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled");
 
                     --try to load the chuck
                     --p(type(sDrawChunk), type(sChunkName), type(wUser))
-                    local fChunk, sError = load(sDrawChunk, sChunkName, "t", wUser);
+                    local fChunk, sError = load(sDrawChunk, sChunkName, "t", UserEnv.Get());
                     if not (fChunk) then
                         error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
                     end
@@ -513,11 +538,11 @@ return class("Forge",
                     local bOk, vReturnOrError = pcall(fChunk);
 
                     if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
-                        p(vReturnOrError)
+                        p("ERror 539 - Forge: "..vReturnOrError)
                         --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
                     end
 
-                    fSetOnImageDraw = vReturnOrError--(this, tRow, nWidth, nHeight);
+                    fSetOnImageDraw = vReturnOrError;--(this, tRow, nWidth, nHeight);
                 end
                 --check it
                 --assert(rawtype(fProcDraw) == "function", "Error Drawing Card, \""..tRow.Name.."\".\r\nMissing static DrawCard function in "..tostring(cProc).." class or function not correctly implemented."); --TODO FINISH
@@ -577,7 +602,7 @@ return class("Forge",
             local D             = pri.D;
             local hInternalDC   = pri.InternalDC;
 
-            local hImage, nImage = LoadImage(pImage, sName);
+            local hImage, nImage = LoadImage(FS.Game.."\\"..SanitizePath(pImage), sName);
             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND);
             --D.DrawImage(nImage, nX, nY, nWidth, nHeight);
             --local nCoVXWidth     = pri.CoVXWidth;
@@ -1036,7 +1061,7 @@ return class("Forge",
 
             --update the X, Y, W, H functions
             --UpdateCoVFunctions(pri.CoVXWidth, pri.CoVYHeight);
-            if (_cLastProc and _tLastRow) then
+            if (_tLastRow) then
                 _bRedrawRequested   = true;
                 _bIsResizing        = true;
             end
@@ -1052,8 +1077,8 @@ return class("Forge",
                 --check if a redraw request was made and that we're done resizing
                 if (_bRedrawRequested and not _bIsResizing) then
                     --redraw the card
-                    this.DrawCard(_cLastProc, _tLastRow);
-                    --fullfill the request
+                    this.DrawCard(_tLastRow);
+                    --fulfill the request
                     _bRedrawRequested = false;
                 end
 

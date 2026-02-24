@@ -21,3 +21,31 @@ constant("FORGE_REDRAW_SIZING_INTERVAL",    300);
 
 constant("PROCSYS_FILE_SYNC_TIMER_ID",        101);
 constant("PROCSYS_FILE_SYNC_TIMER_INTERVAL",  1500);
+
+
+local function BuildFilerTable(sName, sExt)
+    local tActual   = {
+        Name        = sName,
+        Filename    = sName,
+        Ext         = sExt,
+        Extension   = sExt,
+        Full        = sName..'.'..sExt,
+    };
+    local tDecoy    = {};
+    local tMeta     = {
+        __index = function(t, k)
+            return tActual[k];
+        end,
+        __newindex = function(t, k, v) error("Attempt to write to read-only Filer constant.", 2) end
+    };
+
+    setmetatable(tDecoy, tMeta);
+
+    return tDecoy;
+end
+
+--filenames/extensions
+constant("FILER_CARDSET_DATA",      BuildFilerTable("Data",     "csv"));
+constant("FILER_CARDSET_DRAW",      BuildFilerTable("Draw",     "lua"));
+constant("FILER_CARDSET_INFO",      BuildFilerTable("Info",     "ini"));
+constant("FILER_CARDSET_CELLPROC",  BuildFilerTable("CellProc", "lua"));

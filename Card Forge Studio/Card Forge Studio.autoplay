@@ -2327,10 +2327,10 @@ p(e_Key)</Script>
 <TabIndex>-1</TabIndex>
 <AutoResize>0</AutoResize>
 <Coordinates>
-<Top>10</Top>
-<Bottom>40</Bottom>
-<Left>1224</Left>
-<Right>1393</Right>
+<Top>4</Top>
+<Bottom>37</Bottom>
+<Left>964</Left>
+<Right>1354</Right>
 </Coordinates>
 <Ratios>
 <WidthRatio>-1.000000</WidthRatio>
@@ -2408,7 +2408,7 @@ p(e_Key)</Script>
 </Event>
 <Actions/>
 <Options>
-<Text>Reprocess Active Row</Text>
+<Text>Reprocess Active Row TODO - MOVE TO CANVAS CALLBACK</Text>
 <TextColor format="hex">000000</TextColor>
 <EnableMarkup>0</EnableMarkup>
 <ButtonImage>AutoPlay\Images\Buttons\Reprocess Row.png</ButtonImage>

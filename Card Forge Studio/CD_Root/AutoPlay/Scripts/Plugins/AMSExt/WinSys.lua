@@ -1,4 +1,3 @@
-
 --keeps track of windows created and destroys them on app close (if they still exist)
 local _tCensus = {};
 

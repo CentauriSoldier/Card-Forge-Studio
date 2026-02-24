@@ -79,5 +79,7 @@ require("Plugins.AMSExt.Color");
 require("Plugins.AMSExt.DialogEx");
 require("Plugins.AMSExt.Grid");
 require("Plugins.AMSExt.INIFile");
---require("Plugins.AMSExt.Path");
+
 Menu = require("Plugins.AMSExt.Menu");
+WinSys = require("Plugins.AMSExt.WinSys");
+WinAMS = require("Plugins.AMSExt.WinSys.WinAMS");

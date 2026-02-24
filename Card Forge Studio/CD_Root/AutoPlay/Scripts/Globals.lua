@@ -1,122 +1,16 @@
 local math = math;
 local clamp = math.clamp;
-
 _NoExitScriptOnPageJump = true;
 
-require("constants");   --load the constants
-require("FS");          --load the program's file/path management system
+CFG             = {}; --TODO lock/unlock table as needed TODO REMOVE THIS...IT WILL BE PUSHED IN DURING PREP OR THE LIKE
 
-CFG             = {}; --TODO lock/unlock table as needed
---[[
-function SortByEndFolder(a, b)
-    local sGameA = io.getenddir(a);
-    local sGameB = io.getenddir(b);
-    return sGameA < sGameB;
-end]]
-
-function NewGame() --TODO move to game module
-    local sGame             = Dialog.Input("Create New Game", "Game name:", "", MB_ICONINFORMATION);
-    local bCancelPressed    = sGame == "CANCEL";
-    local bIsEmpty          = sGame:isempty();
-    --local bIsFilesafe       = sGame:isfilesafe();
-
-    if (not bCancelPressed and not bIsEmpty) then
-
-        if (bIsFilesafe) then
-            PrepGame(sGame);
-            MainMenu.RefreshGamesList();
-            Page.Jump("Forge");
-        --else
-            --Dialog.Message("Error Creating Game", '"'..sGame.."\"\r\n is not file-safe.");
-        end
-
-    end
-
-end
+require("Constants");   --load the constants
+FS              = require("Globals.FS");  --load the program's file/path management system
+Import          = require("Globals.Import");
+UserEnv         = require("Globals.UserEnv");
+ProcessDox      = require("Globals.ProcessDox");
 
 
-
---assumes the path is good...even though it need not exist
-function PrepGame(sGame) --TODO move to game module
-
-    FS.PrepGame(sGame); --set the filepaths for the current game
-
-    --reset the BuildMechanics var (it gets reloaded in InitForge.lua if present)
-    BuildMechanics = nil;
-
-    --init and set the game's forge
-    ProcSys.PrepActiveGame();
-    local oForge = require("InitForge");
-    ProcSys.SetForge(oForge);
-
-    --build the user's mechanics html if it exists
-    if type(BuildMechanics) == "function" then
-        local sHTML = BuildMechanics(CFG);
-
-        if (type(sHTML) == "string") then
-            TextFile.WriteFromString(_pGame.."\\Mechanics.html", sHTML, false);
-        end
-
-    end
-
-    ProcessDox(pGame);--TODO get this boolean from INI file before running Dox
-end
---common files
---_pStyles    = _pGame.."\\Styles.ini" ???Why is this commented out?
-
-function ProcessDox(pGame)
-    local sName             = INIFile.GetValue(FS.Info, "SETTINGS", "Name");
-    local sName             = ( type.isstring(sName) and not sName:isempty() and sName:isfilesafe()) and
-                                sName or "Card Forge";
-    local bIncludePlugins   = INIFile.GetValueBoolean(FS.Info, "SETTINGS", "IncludePlugins");
-
-    local tFiles = {};
-    local oDoxLua = DoxLua(sName); --create the dox object
-
-    local function ImportFile(pFile) --callback function for found files
-        oDoxLua.importFile(pFile, true);
-        return true;
-    end
-
-    --start with the app scripts
-    local pScripts = FS.Scripts;
-    File.Find(pScripts.."\\", "*.lua", false, false, nil, ImportFile);
-
-    local sPluginsRoot          = pScripts.."\\Plugins";
-    local nPluginsRootLength    = #sPluginsRoot;
-
-    --add files from the app's Scripts subfolders
-    for nIndex, pFolder in ipairs(Folder.Find(pScripts, "*", false, nil)) do
-
-        if (pFolder:sub(1, nPluginsRootLength) == sPluginsRoot) then
-
-            --don't run Dox inside the Plugins dir unless it's explicitly permitted
-            if (bIncludePlugins) then
-                File.Find(pFolder.."\\", "*.lua", true, false, nil, ImportFile);
-            end
-
-        else
-            File.Find(pFolder.."\\", "*.lua", true, false, nil, ImportFile);
-        end
-
-    end
-
-    --now, add any of the game's scripts that exist
-    File.Find(FS.Game.."\\", "*.lua", true, false, nil, ImportFile);
-
-    --if the user has included an intro doc in the game, load it too
-    local pIntro = FS.Docs.."\\intro"
-    if (File.DoesExist(pIntro)) then
-        oDoxLua.setIntro(TextFile.ReadToString(pIntro));
-    end
-
-    --refresh the dox content
-    oDoxLua.refresh();
-    --set the output path
-    oDoxLua.setOutputPath(FS.Docs);
-    --create the output
-    oDoxLua.export(sName.." API");
-end
 
 ELProfiler = require("Plugins.ELProfiler");
 ELProfiler.setClock(os.clock);
@@ -125,136 +19,14 @@ ELProfiler.setClock(os.clock);
 ProcSys     = require("ProcSys");
 Forge       = require("Forge");
 StyleEditor = require("StyleEditor");
-WinSys      = require("WinSys");
-    WinAMS  = require("WinSys.WinAMS");
-Tutorial    = require("Tutorial");
 Game        = require("Game");
+Tutorial    = require("Tutorial");
 
---TODO remove?
-Editor      = require("Editor");
+--TODO Modify this entire system to be more universal?
+Description = require("Description");
 
-
-
---[[!
-    @fqxn CFS.GetUserEnv
-    @desc The Lua environment used in Card Forge Studio's lua editor as well as in CardSet's Draw, Proc, and other injected scripts.
-    <br>You can hook this function to inject whatever you need into your game's User Envrironment so you have access to them inside the editor.
-    <br>Generally, it's best to do this in your game's InitForge.lua file.
-    @ex
-    --store the original function so it can be hooked in the override
-    local _GetUserEnv = GetUserEnv;
-
-    --override the basic GetUserEnv function to include your game's required items and
-    --append as needed to the default env table (but only once for each item)
-    function GetUserEnv()
-        -- Get the default environment
-        local tEnv = _GetUserEnv()
-
-        -- Inject enums if missing
-        if not tEnv.Enums then
-            tEnv.Enums = {
-                DamageType = { Kinetic = 1, Energy = 2, True = 3 },
-                UnitLayer  = { Land = 1, Sea = 2, Air = 3 },
-            }
-        end
-
-        -- Inject read-only game helpers if missing
-        if not tEnv.Game then
-            tEnv.Game = {
-                GetTurn = function()
-                    return Game.GetTurn()
-                end,
-            }
-        end
-
-        -- Inject logging helpers if missing
-        if not tEnv.Log then
-            tEnv.Log = {
-                Info = function(msg)
-                    Editor.Log("INFO", msg)
-                end,
-                Warn = function(msg)
-                    Editor.Log("WARN", msg)
-                end,
-            }
-        end
-
-        -- Inject utility helpers if missing
-        if not tEnv.Math then
-            tEnv.Math = {
-                Clamp = function(v, min, max)
-                    return math.max(min, math.min(max, v))
-                end,
-            }
-        end
-
-        --return the modified environment
-        return tEnv;
-    end
-!]]
-function GetUserEnv()--TODO QUESTION SHOULD THIS RETURN A PER_BUILT ONE? Or do we want a new one each time?
-    local tRet = {
-        -- Lua basics
-       ipairs       = ipairs,
-       pairs        = pairs,
-       tonumber     = tonumber,
-       tostring     = tostring,
-       type         = type,
-       math         = math,
-       string       = string,
-       table        = table,
-
-       -- LuaEx basics
-       base64       = base64,
-       RNG          = RNG,
-       array        = array,
-       class        = class,
-       enum         = enum,
-       rawtype      = rawtype,
-       struct       = struct,
-       structfactory= structfactory,
-       serialize    = serialize,
-       deserialize  = deserialize,
-
-       clamp        = math.clamp,
-       drift        = math.drift,
-       driftf       = math.driftf,
-       rand         = math.random,
-       randf        = math.randomf,
-       min          = math.min,
-       max          = math.max,
-       pick         = RNG.pick,
-       print        = p,
-
-       S            = null, --Style
-       CFG          = CFG,
-       Draw         = Draw,
-    };
-
-    tRet.S = {};
-
-    --local tStyles = INIFile.GetSectionNames(FS.Styles); --_TODO load this from forge, not from INI...too slow
-
-    --if (tStyles) then
-
-        for _, sStyle in pairs(ProcSys.GetForge().STYLE) do
-            tRet.S[sStyle] = setmetatable(
-            {
-                O = '<'..sStyle..'>',
-                C = '</'..sStyle..'>',
-            },
-            {
-                __call = function(t, vText)
-                    return '<'..sStyle..'>'..tostring(vText)..'</'..sStyle..'>'
-                end,
-            }
-            );
-        end
-
-    --end
-
-    return tRet;
-end
+--TODO QUESTION DELETE?
+--Editor      = require("Editor");
 
 Status = {};
 local sPar = "par status";
