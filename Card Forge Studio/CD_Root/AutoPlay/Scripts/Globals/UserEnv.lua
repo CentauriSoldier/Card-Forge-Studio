@@ -1,4 +1,78 @@
 --[[
+██╗   ██╗███████╗███████╗██████╗ ███████╗███╗   ██╗██╗   ██╗
+██║   ██║██╔════╝██╔════╝██╔══██╗██╔════╝████╗  ██║██║   ██║
+██║   ██║███████╗█████╗  ██████╔╝█████╗  ██╔██╗ ██║██║   ██║
+██║   ██║╚════██║██╔══╝  ██╔══██╗██╔══╝  ██║╚██╗██║╚██╗ ██╔╝
+╚██████╔╝███████║███████╗██║  ██║███████╗██║ ╚████║ ╚████╔╝
+ ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝  ╚═══╝
+
+█ █ █▀▄ █   ▄▀▄ ▄▀▄ █▀▄   ▀█▀ █▄█ ██▀   █ █ ▄▀▀ ██▀ █▀▄   ██▀ █▄ █ █ █   ▀█▀ ▄▀▄ ██▄ █   ██▀   █ █▄ █ ▀█▀ ▄▀▄   ▀█▀ █▄█ ██▀   █▀▄ ██▀ █▀▄ ▄▀▄
+▀▄█ █▀  █▄▄ ▀▄▀ █▀█ █▄▀    █  █ █ █▄▄   ▀▄█ ▄██ █▄▄ █▀▄   █▄▄ █ ▀█ ▀▄▀    █  █▀█ █▄█ █▄▄ █▄▄   █ █ ▀█  █  ▀▄▀    █  █ █ █▄▄   █▀▄ █▄▄ █▀  ▀▄▀
+]]
+--envrepo.User = {
+local tEnv = { --TODO QUESTION do i need to protect this?
+   --math             = tMathDecoy,
+   --string           = tStringDecoy,
+   ---
+   --Color            = tColorDecoy,
+  --- Drawing          = tDrawingDecoy,
+   --VectorDrawing    = tVectorDrawingDecoy,
+   ---
+  -- RNG              = tRNGDecoy,
+   ---
+   ipairs           = ipairs,
+   pairs            = pairs,
+   ---
+   tonumber         = tonumber,
+   tostring         = tostring,
+   ---
+   type             = rawtype,
+   --
+   p                = p,
+   ---
+   serialize        = serialize,
+   deserialize      = deserialize,
+   --
+   --Forge            = tForgeDecoy,
+   --ProcSys          = tProcSysDecoy,
+   ---
+   --CFG              = tCFGDecoy,
+   ---
+   --User             = {}, --from InitForge
+};
+
+-- decoy -> real backing table map (weak keys so nothing is kept alive)
+local tEnvBacking = setmetatable({}, { __mode = "k" })
+
+local function InjectEnv(sName, tActual)
+
+    if not (rawtype(sName) == "string" and not sName:isempty()) then
+        error("InjectEnv: sName must be non-empty string. Got " .. rawtype(sName) .. ".", 2);
+    end
+
+    if (rawtype(tActual) ~= "table") then
+        error("InjectEnv: tActual must be table. Got " .. rawtype(tActual) .. ".", 2);
+    end
+
+    local tDecoy = {};
+
+    -- 1) Map decoy -> actual (for command listing)
+    tEnvBacking[tDecoy] = tActual;
+
+    -- 2) Apply read-only decoy metatable
+    setmetatable(tDecoy, {
+        __index = tActual,
+        __newindex = function()
+            error("Attempt to write to read-only '" .. sName .. "'.", 2);
+        end,
+        __metatable = false,
+    })
+
+    -- 3) Inject into env
+    tEnv[sName] = tDecoy;
+end
+
+--[[
 ██████╗  █████╗ ███████╗███████╗ ██████╗ ██╗  ██╗
 ██╔══██╗██╔══██╗██╔════╝██╔════╝██╔════╝ ██║  ██║
 ██████╔╝███████║███████╗█████╗  ███████╗ ███████║
@@ -6,20 +80,10 @@
 ██████╔╝██║  ██║███████║███████╗╚██████╔╝     ██║
 ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝      ╚═╝
 ]]
-local tBase64 = {
+InjectEnv("base64", {
     dec = base64.dec,
     enc = base64.enc,
-};
-local base64Decoy = {};
-
-setmetatable(base64Decoy, {
-    __index = tBase64,
-    __newindex = function()
-        error("Attempt to write to read-only 'base64'.", 2);
-    end,
-    __metatable = false,
 });
-
 
 --[[
 ██████╗███████╗ ██████╗
@@ -29,17 +93,7 @@ setmetatable(base64Decoy, {
 ╚██████╗██║     ╚██████╔╝
 ╚═════╝╚═╝      ╚═════╝
 ]]
-local tCFG       = {};
-local tCFGDecoy  = {};
-
-setmetatable(tCFGDecoy, {
-    __index = tCFG,
-    __newindex = function(t, k, v)
-        tCFG[k] = v; -- user writes allowed
-    end,
-    __metatable = false,
-});
-
+InjectEnv("CFG", {});
 
 --[[
 ██████╗ ██████╗ ██╗      ██████╗ ██████╗
@@ -49,7 +103,7 @@ setmetatable(tCFGDecoy, {
 ╚██████╗╚██████╔╝███████╗╚██████╔╝██║  ██║
 ╚═════╝ ╚═════╝ ╚══════╝ ╚═════╝ ╚═╝  ╚═╝
 ]]
-local tColor = {
+InjectEnv("Color", {
     AlphaBlend         = Color.AlphaBlend,
     AlphaMix           = Color.AlphaMix,
     GetAlpha           = Color.GetAlpha,
@@ -70,15 +124,6 @@ local tColor = {
     SetBlue            = Color.SetBlue,
     SetGreen           = Color.SetGreen,
     SetRed             = Color.SetRed,
-};
-local tColorDecoy = {};
-
-setmetatable(tColorDecoy, {
-    __index = tColor,
-    __newindex = function()
-        error("Attempt to write to read-only 'Color'.", 2);
-    end,
-    __metatable = false,
 });
 
 
@@ -90,7 +135,7 @@ setmetatable(tColorDecoy, {
 ██████╔╝██║  ██║██║  ██║╚███╔███╔╝██║██║ ╚████║╚██████╔╝
 ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝
 ]]
-local tDrawing = {
+InjectEnv("Drawing",{
     ClearGradientColors          = Drawing.ClearGradientColors,
     DrawAlphaImage               = Drawing.DrawAlphaImage,
     DrawAngledText               = Drawing.DrawAngledText,
@@ -124,15 +169,6 @@ local tDrawing = {
     SetFrontColor                = Drawing.SetFrontColor,
     SetGradientColors            = Drawing.SetGradientColors,
     SetSingleGradientColor       = Drawing.SetSingleGradientColor,
-};
-local tDrawingDecoy = {};
-
-setmetatable(tDrawingDecoy, {
-    __index = tDrawing,
-    __newindex = function()
-        error("Attempt to write to read-only 'Drawing'.", 2);
-    end,
-    __metatable = false,
 });
 
 
@@ -144,15 +180,14 @@ setmetatable(tDrawingDecoy, {
 ██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
 ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 ]]
-local tForge = {};
-local tForgeDecoy   = {};
+InjectEnv("Forge", {});
 
-setmetatable(tForgeDecoy, {
-    __index = tForge,
-    __newindex = function()
-        error("Attempt to write to read-only 'Forge'.", 2);
-    end,
-    __metatable = false,
+
+
+InjectEnv("geometry", {
+    fitrect             = math.geometry.fitrect,
+    rectcontains        = math.geometry.rectcontains,
+    rectcontainsfully   = math.geometry.rectcontainsfully,
 });
 
 
@@ -164,22 +199,7 @@ setmetatable(tForgeDecoy, {
 ██║ ╚═╝ ██║██║  ██║   ██║   ██║  ██║
 ╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
 ]]
-local tGeometry = {
-    fitrect             = math.geometry.fitrect,
-    rectcontains        = math.geometry.rectcontains,
-    rectcontainsfully   = math.geometry.rectcontainsfully,
-};
-local tGeometryDecoy = {};
-
-setmetatable(tGeometryDecoy, {
-    __index = tGeometry,
-    __newindex = function()
-        error("Attempt to write to read-only 'math.geometry'.", 2);
-    end,
-    __metatable = false,
-});
-
-local tMath = {
+InjectEnv("Math", {
     abs                 = math.abs,
     acos                = math.acos,
     asin                = math.asin,
@@ -225,15 +245,6 @@ local tMath = {
     type                = math.type,
     ult                 = math.ult,
     whole               = math.whole,
-};
-local tMathDecoy = {};
-
-setmetatable(tMathDecoy, {
-    __index = tMath,
-    __newindex = function()
-        error("Attempt to write to read-only 'math'.", 2);
-    end,
-    __metatable = false,
 });
 
 
@@ -245,16 +256,7 @@ setmetatable(tMathDecoy, {
 ██║     ██║  ██║╚██████╔╝╚██████╗███████║   ██║   ███████║
 ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝   ╚═╝   ╚══════╝
 ]]
-local tProcSys = {};
-local tProcSysDecoy = {};
-
-setmetatable(tProcSysDecoy, {
-    __index = tProcSys,
-    __newindex = function()
-        error("Attempt to write to read-only 'ProcSys'.", 2);
-    end,
-    __metatable = false,
-});
+InjectEnv("ProcSys", {});
 
 
 --[[
@@ -265,7 +267,7 @@ setmetatable(tProcSysDecoy, {
 ██║  ██║██║ ╚████║╚██████╔╝
 ╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝
 ]]
-local tRNG = {
+InjectEnv("RNG", {
     binary          = RNG.binary,
     bipolar         = RNG.bipolar,
     boolean         = RNG.boolean,
@@ -277,14 +279,6 @@ local tRNG = {
     rollCheck       = RNG.rollCheck,
     rollDice        = RNG.rollDice,
     rollPercentage  = RNG.rollPercentage,
-};
-local tRNGDecoy = {};
-setmetatable(tRNGDecoy, {
-    __index = tRNG,
-    __newindex = function()
-        error("Attempt to write to read-only 'RNG'.", 2);
-    end,
-    __metatable = false,
 });
 
 
@@ -296,7 +290,7 @@ setmetatable(tRNGDecoy, {
 ███████║   ██║   ██║  ██║██║██║ ╚████║╚██████╔╝
 ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
 ]]
-local tString = {
+InjectEnv("string", {
     byte                = string.byte,
     cap                 = string.cap,
     capall              = string.capall,
@@ -328,17 +322,7 @@ local tString = {
     trimright           = string.trimright,
     upper               = string.upper,
     uuid                = string.uuid,
-};
-local tStringDecoy = {};
-
-setmetatable(tStringDecoy, {
-    __index = tString,
-    __newindex = function()
-        error("Attempt to write to read-only 'string'.", 2);
-    end,
-    __metatable = false,
 });
-
 
 --[[
 ████████╗ █████╗ ██████╗ ██╗     ███████╗
@@ -348,7 +332,7 @@ setmetatable(tStringDecoy, {
    ██║   ██║  ██║██████╔╝███████╗███████╗
    ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝
 ]]
-local tTable = {
+InjectEnv("table", {
     concat  = table.concat,
     insert  = table.insert,
     move    = table.move,
@@ -356,15 +340,6 @@ local tTable = {
     remove  = table.remove,
     sort    = table.sort,
     unpack  = table.unpack,
-};
-local tTableDecoy = {};
-
-setmetatable(tTableDecoy, {
-    __index = tTable,
-    __newindex = function()
-        error("Attempt to write to read-only 'table'.", 2);
-    end,
-    __metatable = false,
 });
 
 
@@ -376,17 +351,7 @@ setmetatable(tTableDecoy, {
 ╚██████╔╝███████║███████╗██║  ██║
  ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝
 ]]
-local tUser       = {};
-local tUserDecoy  = {};
-
-setmetatable(tUserDecoy, {
-    __index = tUser,
-    __newindex = function(t, k, v)
-        error("Attempt to write to read-only 'User'.", 2);
-    end,
-    __metatable = false,
-});
-
+InjectEnv("User", {});
 
 --[[
 ██╗   ██╗███████╗ ██████╗████████╗ ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗    ██╗██╗███╗   ██╗ ██████╗
@@ -396,70 +361,21 @@ setmetatable(tUserDecoy, {
  ╚████╔╝ ███████╗╚██████╗   ██║   ╚██████╔╝██║  ██║██████╔╝██║  ██║██║  ██║╚███╔███╔╝██║██║ ╚████║╚██████╔╝
   ╚═══╝  ╚══════╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝
 ]]
-local tVectorDrawing = {
+InjectEnv("VectorDrawing", {
     Arc         = VectorDrawing.Arc,
     FillPath   = VectorDrawing.FillPath,
     LineTo     = VectorDrawing.LineTo,
     MoveTo     = VectorDrawing.MoveTo,
     SetColor   = VectorDrawing.SetColor,
     StrokePath = VectorDrawing.StrokePath,
-};
-local tVectorDrawingDecoy = {};
-
-setmetatable(tVectorDrawingDecoy, {
-    __index = tVectorDrawing,
-    __newindex = function()
-        error("Attempt to write to read-only 'VectorDrawing'.", 2);
-    end,
-    __metatable = false,
 });
 
-
-
---[[
-██╗   ██╗███████╗███████╗██████╗ ███████╗███╗   ██╗██╗   ██╗
-██║   ██║██╔════╝██╔════╝██╔══██╗██╔════╝████╗  ██║██║   ██║
-██║   ██║███████╗█████╗  ██████╔╝█████╗  ██╔██╗ ██║██║   ██║
-██║   ██║╚════██║██╔══╝  ██╔══██╗██╔══╝  ██║╚██╗██║╚██╗ ██╔╝
-╚██████╔╝███████║███████╗██║  ██║███████╗██║ ╚████║ ╚████╔╝
- ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝  ╚═══╝
-
-█ █ █▀▄ █   ▄▀▄ ▄▀▄ █▀▄   ▀█▀ █▄█ ██▀   █ █ ▄▀▀ ██▀ █▀▄   ██▀ █▄ █ █ █   ▀█▀ ▄▀▄ ██▄ █   ██▀   █ █▄ █ ▀█▀ ▄▀▄   ▀█▀ █▄█ ██▀   █▀▄ ██▀ █▀▄ ▄▀▄
-▀▄█ █▀  █▄▄ ▀▄▀ █▀█ █▄▀    █  █ █ █▄▄   ▀▄█ ▄██ █▄▄ █▀▄   █▄▄ █ ▀█ ▀▄▀    █  █▀█ █▄█ █▄▄ █▄▄   █ █ ▀█  █  ▀▄▀    █  █ █ █▄▄   █▀▄ █▄▄ █▀  ▀▄▀
-]]
---envrepo.User = {
-local tEnv = { --TODO QUESTION do i need to protect this?
-   math             = tMathDecoy,
-   string           = tStringDecoy,
-   ---
-   Color            = tColorDecoy,
-   Drawing          = tDrawingDecoy,
-   VectorDrawing    = tVectorDrawingDecoy,
-   ---
-   RNG              = tRNGDecoy,
-   ---
-   ipairs           = ipairs,
-   pairs            = pairs,
-   ---
-   tonumber         = tonumber,
-   tostring         = tostring,
-   ---
-   type             = rawtype,
-   --
-   p                = p,
-   ---
-   serialize        = serialize,
-   deserialize      = deserialize,
-   --
-   Forge            = tForgeDecoy,
-   ProcSys          = tProcSysDecoy,
-   ---
-   CFG              = tCFGDecoy,
-   ---
-   --User             = {}, --from InitForge
-};
-
 --CFG              = {},--TODO REMOVE/REVISE -- MOST LIKELY MOVE TO PROCSYS
+
+
+
+-- (tCFGDecoy is writable; include it only if you want to list CFG.* commands)
+--tEnvBacking[tCFGDecoy]          = tCFG
 
 --[[
 ███████╗██╗   ██╗███╗   ██╗ ██████╗████████╗██╗ ██████╗ ███╗   ██╗███████╗
@@ -472,6 +388,69 @@ local tEnv = { --TODO QUESTION do i need to protect this?
 local tUserEnv = {
     Get = function()
         return tEnv;
+    end,
+    -- Returns a numerically-indexed, alphabetically-sorted list of callable commands
+    -- exposed by tEnv (including decoy tables that expose their real members via __index = table).
+    --
+    -- Example output entries:
+    --   "math.abs"
+    --   "Drawing.DrawLine"
+    --   "Color.RGBA"
+    --
+    GetCommandList = function()
+        local tRoot = tEnv -- upvalue
+
+        local tVisited = {}
+        local tOutSet  = {}
+        local tOut     = {}
+
+        local function AddCommand(sPath)
+            if (sPath ~= "" and not tOutSet[sPath]) then
+                tOutSet[sPath] = true
+                tOut[#tOut + 1] = sPath
+            end
+        end
+
+        local function EnumKeys(t)
+            local tKeys = {}
+
+            for k in pairs(t) do
+                if (rawtype(k) == "string") then
+                    tKeys[k] = true
+                end
+            end
+
+            local tBack = tEnvBacking[t]
+            if (rawtype(tBack) == "table") then
+                for k in pairs(tBack) do
+                    if (rawtype(k) == "string") then
+                        tKeys[k] = true
+                    end
+                end
+            end
+
+            return tKeys
+        end
+
+        local function Walk(t, sPrefix)
+            if (tVisited[t]) then return end
+            tVisited[t] = true
+
+            for k in pairs(EnumKeys(t)) do
+                local v = t[k]
+                local sPath = sPrefix and (sPrefix .. "." .. k) or k
+
+                if (rawtype(v) == "function") then
+                    AddCommand(sPath)
+                elseif (rawtype(v) == "table") then
+                    Walk(v, sPath)
+                end
+            end
+        end
+
+        Walk(tRoot, nil)
+        table.sort(tOut)
+        return tOut
     end,
     --expects new CFG to have brought in through the user env
     UpdateCFG = function(tInput)
@@ -550,7 +529,7 @@ local tUserEnv = {
             --import the new keys
             for sIndex, vItem in pairs(tInput) do
 
-                if (rawtype(sIndex) == "string") then                    
+                if (rawtype(sIndex) == "string") then
                     tEnv[sIndex] = vItem;
                 end
 

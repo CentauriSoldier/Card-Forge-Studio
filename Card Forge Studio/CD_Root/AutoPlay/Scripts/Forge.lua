@@ -520,7 +520,12 @@ return class("Forge",
                         DrawBorder     = MainMenu.IsChecked("Options:>Draw:>Border Enabled"),
                         DrawOverlay    = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled"),
                     };
-                    local k = UserEnv.Get();
+                    local st=""
+                    for k, v in pairs(UserEnv.GetCommandList()) do
+                        st = st.."|"..v;
+                    end
+
+                    p(st)
 
                     --wUser.pGame         = FS.Game;
                     --wUser.pCardSet      = oCardSet.GetPath();
