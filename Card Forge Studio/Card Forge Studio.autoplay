@@ -1560,14 +1560,14 @@ MainMenu.OnPreload(this);</Script>
 <Args/>
 <Script>--set and configure the Forge
 ProcSys.OnShow(this);
-ProcSys.GetForge():OnShow();</Script>
+Forge.OnShow();</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>1</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeLine>2</DesignCodeLine>
+<DesignCodeCol>5</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -1589,14 +1589,14 @@ ProcSys.GetForge():OnShow();</Script>
 <Name>On Timer</Name>
 <Args>number e_ID</Args>
 <Script>ProcSys.OnTimer(e_ID);
-ProcSys.GetForge().OnTimer(e_ID);</Script>
+Forge.OnTimer(e_ID);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeLine>1</DesignCodeLine>
+<DesignCodeCol>5</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -1617,14 +1617,14 @@ ProcSys.GetForge().OnTimer(e_ID);</Script>
 <Event>
 <Name>On Size</Name>
 <Args>number e_WindowWidth, number e_WindowHeight, number e_PageWidth, number e_PageHeight, number e_Type</Args>
-<Script>ProcSys.GetForge().OnSize(e_WindowWidth, e_WindowHeight, e_PageWidth, e_PageHeight, e_Type)</Script>
+<Script>Forge.OnSize(e_WindowWidth, e_WindowHeight, e_PageWidth, e_PageHeight, e_Type)</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>18</DesignCodeCol>
+<DesignCodeCol>5</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -1647,15 +1647,14 @@ ProcSys.GetForge().OnTimer(e_ID);</Script>
 <Args>number e_Key, table e_Modifiers</Args>
 <Script>if (e_Modifiers.Ctrl and KEY_CODES(e_Key, "R")) then
 	ProcSys.ProcessActiveRow();
-end
-p(e_Key)</Script>
+end</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>3</DesignCodeLine>
-<DesignCodeCol>7</DesignCodeCol>
+<DesignCodeLine>2</DesignCodeLine>
+<DesignCodeCol>3</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>

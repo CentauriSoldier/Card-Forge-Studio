@@ -16,7 +16,7 @@ local io            = io;
 
 
 --[[
-    @fqxn   Card Forge Studio.ValidateName
+    @fqxn   CFS.ValidateName
     @desc   Reads and validates the display name for a folder-backed object (Game/CardSet/etc.).
             Looks up "Name" under [SETTINGS] in "<Folder>\Info.ini".
             Throws if the value is missing/empty.
@@ -35,7 +35,6 @@ local function ValidateName(pFolder, sType)
 
     return sName;
 end
-
 
 
 local function ValidateFolder(pFolder, sType)
@@ -153,6 +152,8 @@ CardSet = class("CardSet",
     },
     {--PRIVATE
         Calls               = {}, --holds things like Draw, Proc, etc.
+        CardWidth__AUTOR_   = null,
+        CardHeight__AUTOR_  = null,
         DataPath__AUTOR_    = null,
         InfoPath__AUTOR_    = null,
         Name__AUTOA_        = '',
@@ -171,8 +172,6 @@ CardSet = class("CardSet",
                 error("Invalid CardSet: CardSet path must lead to an existing directory.", 3);
             end
 
-            local sUUID     = ValidateFolder(pFolder, "CardSet");
-            local sName     = ValidateName(pFolder, "CardSet");
             local pData     = pFolder.."\\"..FILER_CARDSET_DATA.Full;
             local pInfo     = pFolder.."\\"..FILER_CARDSET_INFO.Full;
 
@@ -189,6 +188,19 @@ CardSet = class("CardSet",
                 end
 
             end
+            --TODO SPECIAL COLUMNS!!!
+            local sUUID         = ValidateFolder(pFolder, "CardSet");
+            local sName         = ValidateName(pFolder, "CardSet");
+            local nCardWidth    = tonumber(INIFile.GetValue(pFolder.."\\Info.ini", "SETTINGS", "CardWidth"));
+            local nCardHeight   = tonumber(INIFile.GetValue(pFolder.."\\Info.ini", "SETTINGS", "CardHeight"));
+
+            if (not nCardWidth) then
+                error("Invalid ${type}: Malformed ${type} INI file at ${path}. Missing \"CardWidth\" value or non-numeric value given." % {path = pFolder, type = sType}, 2);
+            end
+
+            if (not nCardHeight) then
+                error("Invalid ${type}: Malformed ${type} INI file at ${path}. Missing \"CardHeight\" value or non-numeric value given." % {path = pFolder, type = sType}, 2);
+            end
 
             --set the game's info
             pri.DataPath    = pData;
@@ -196,6 +208,8 @@ CardSet = class("CardSet",
             pri.Name        = sName;
             pri.Path        = pFolder;
             pri.UUID        = sUUID;
+            pri.CardWidth   = math.abs(nCardWidth);
+            pri.CardHeight  = math.abs(nCardHeight);
 
             --setup the game's functions tables
             pri.Calls = {
@@ -221,6 +235,10 @@ CardSet = class("CardSet",
             end
 
             return tCalls[sCall].Code;
+        end,
+        GetCardSize = function(this, cdat)
+            local pri = cdat.pri;
+            return {Width = pri.CardWidth, Height = pri.CardHeight};
         end,
         --updates proc, draw, etc.
         UpdateCallCode = function(this, cdat, sCall)
@@ -318,19 +336,27 @@ return class("Game",
 
             FS.PrepGame(sGame); --set the filepaths for the current game
 
+            --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
+            --Load any config and user environment that may exist TODO BUG FIX - FINISH - USE PROTECTED environment for loading this
+            local tCFG, tEnv = require("InitForge");
+
+            if (type(tCFG) == "table") then
+                UserEnv.UpdateCFG(tCFG);
+            end
+
+            if (type(tEnv) == "table") then
+                UserEnv.UserUpdateRoot(tEnv);
+            end
+
+
+
             --reset the BuildMechanics var (it gets reloaded in InitForge.lua if present)
             BuildMechanics = nil;
 
             --init and set the game's forge
             ProcSys.PrepActiveGame();
-            --TODO LOAD THIS IN THE STANDARD USER ENV
-            local oForge = require("InitForge");
-            ProcSys.SetForge(oForge);
 
-            UserEnv.UpdateUser(); --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
-
-
-            --build the user's mechanics html if it exists
+            --build the user's mechanics html if it exists QUESTION qhat is this? Is it used?
             if type(BuildMechanics) == "function" then
                 local sHTML = BuildMechanics(CFG);
 
@@ -398,6 +424,8 @@ return class("Game",
         end
     },
     {--PRIVATE
+        Env__AUTOR_             = null,
+        CFG__AUTOR_             = null,
         CardSets                = {},
         IncludePlugins__AUTOA_  = false,
         Name__AUTOA_            = '',

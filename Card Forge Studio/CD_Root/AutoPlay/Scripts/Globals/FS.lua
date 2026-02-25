@@ -58,7 +58,7 @@ local tFunctions = {
 
     end,
     --assumes
-    PrepGame = function(sGame)
+    PrepGame = function(sGame) --TODO CHANGE THIS TO USE THE GAME OBJECT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         --reset the package path
         package.path = _sOriginalPackagePath;
 
@@ -107,11 +107,6 @@ local tFunctions = {
 
         --add game's scripts folder to the package path
         package.path = _sOriginalPackagePath..";"..pGame.."\\Scripts\\?.lua";
-
-        --load the game's config
-        --TODO BUG FIX FINISH LOAD IN safe USER ENV!!!!
-        CFG = require("Config"); --REMOVE GLOBAL REF
-        UserEnv.UpdateCFG(CFG);        
     end,
 };
 

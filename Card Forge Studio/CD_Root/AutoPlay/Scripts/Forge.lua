@@ -30,7 +30,6 @@ local tostring          = tostring;
 local type              = type;
     isnumber            = type.isnumber;
     isstring            = type.istring;
-local clicks = 0;
 local floor             = math.floor;
 local clamp             = math.clamp;
 local GetActiveCardSet  = ProcSys.GetActiveCardSet;
@@ -78,7 +77,7 @@ local _tHorRuler            = {--TODO static functions and variables io change t
 };
 local _tVerRuler            = {--TODO static functions and variables io change these values
     X           = 0,
-    HHeight      = 1125,
+    HHeight     = 1125,
     MajorStep   = 100,
     MinorStep   = 25,
     MajorWidth  = 16,
@@ -88,17 +87,6 @@ local _tVerRuler            = {--TODO static functions and variables io change t
 local _tCenterLines = {
     Color       = Color.RGBA(50, 50, 255, 255),
 };
-
-local X, Y, W, H;
-
---called by the Forge.OnSize method
-function UpdateCoVFunctions(nCoVXWidth, nCoVYHeight)
-    --update the CoV functions using the new CoV info
-    X = function(nX) return floor((nX or 0) * nCoVXWidth)     end
-    Y = function(nY) return floor((nY or 0) * nCoVYHeight)    end
-    W = function(nW) return floor((nW or 0) * nCoVXWidth)     end
-    H = function(nH) return floor((nH or 0) * nCoVYHeight)    end
-end
 
 local function sink() end
 
@@ -118,8 +106,38 @@ local FontStyle   = require("Forge.FontStyle");
 
 
 
+--set during Draw, used in DrawText, etc.
+local _Object       = null;
+local _D            = null;
+local _InternalDC   = null;
+-----------------------------------------------
+local _tStyle          = {};
+local _bAutoUpdateStyle = false;
+-----------------------------------------------
+local _bCanvasCreated   = false;
+local _nCanvasWidth     = 100;
+local _nCanvasHeight    = 100;
+-----------------------------------------------
+local _hImage           = null;
+local _nImageID         = null;
+local _hImageExport     = null;
+local _nImageExportID   = null;
+local _hImageUtil       = null;
+local _nImageUtilID     = null;
+-----------------------------------------------
 local _tImageCache      = {};
 local _tUserImageCache  = {};
+-----------------------------------------------
+_oActiveCardSet = false;
+_nCardWidth     = 100;
+_nCardHeight    = 100;
+_sCardSetName   = "";
+
+--local Styles           = ""; --TODO FINISH STYLE NAMES MUST BE VARIABLE COMPLIANT
+
+
+
+
 local function ImageLoadError(sPath, sName, sMsg)
     error("Error in Forge.LoadImage:\r\nError loading card image at path: \""..sPath.."\" with name, \""..sName.."\"."..#sName.."\r\n"..sMsg, 4);
 end
@@ -154,7 +172,149 @@ local function LoadImage(sPath, sName)
     end
 
     return _tUserImageCache[sPath].Handle, _tUserImageCache[sPath].ID;
+
 end
+
+
+local function CenterCardDisplay()
+    local tPos  = Window.GetPos(HWND_APP);
+    local tSize = Window.GetSize(HWND_APP);
+
+    --get the size of the canvas
+    local tSize = Input.GetSize(_sCanvas);
+    Input.SetPos(_sCanvas, (_nPageWidth - tSize.Width) / 2, (_nPageHeight - tSize.Height) / 2);
+end
+
+local function ClearToTransparent(nW, nH, D)
+    D.SetFilteringMode(DRAW_BLEND_ALLCHANNELS);
+    D.DrawRectangle(0, 0, nW, nH, Color.RGBA(0, 0, 0, 0));
+    D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+end
+
+local function CreateImage(hImage, nImageID)
+    local hRet          = hImage;
+    local nRet          = nImageID;
+    local sMessage;
+    local sBaseError    = "Forge.CreateImage (private static): Could not";
+
+    --create the image only if it's not already been created
+    if (hImage == null and nImageID == null) then
+        --create, check, and store the image handle
+        hRet        = DrawingImage.New(_nCardWidth, _nCardHeight, BIT_DEPTH_32, DRAW_IMAGE_TRANSPARENT);
+        sMessage    = sBaseError.." create image for canvas object, \"${canvas}\".";
+        assert(hImage, sMessage % {game = sName, canvas = _sCanvas}); --TODO REMOVE THE NAME OR GET THE NAME FROM GAME
+
+        --get, check, and store the image ID
+        nRet        = DrawingImage.GetID(hImage);
+        sMessage    = sBaseError.." get image ID for canvas object, \"${canvas}\".";
+        assert(nImageID, sMessage % {game = sName, canvas = _sCanvas});
+    end
+
+    return hRet, nRet;
+end
+
+local function DrawCenterLineHor(sObject, D, hInternalDC)
+    local nMidPointY = floor(nHeight / 2);
+    D.DrawLineEx(0, nMidPointY, _nCardWidth, nMidPointY, _tCenterLines.Color);
+end
+
+
+local function DrawCenterLineVer(sObject, D, hInternalDC)
+    local nMidPointX = floor(nWidth / 2);
+    D.DrawLineEx(nMidPointX, 0, nMidPointX, _nCardHeight, _tCenterLines.Color);
+end
+
+local function DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC)
+    local nY             = _tHorRuler.Y;
+    local nMajorStep     = _tHorRuler.MajorStep;
+    local nMinorStep     = _tHorRuler.MinorStep;
+    local nMajorHeight   = _tHorRuler.MajorHeight;
+    local nMinorHeight   = _tHorRuler.MinorHeight;
+    local nTextY         = nMajorHeight + 3;--TODO remove magic number
+    local oColor         = _tHorRuler.Color;
+    --TODO FIX draw the first text of the hor ONLY if the veritcal is NOT drawing...same adjust ver
+
+    local nXMax = _nCardWidth - 1;
+
+    D.DrawLineEx(0, nY, nXMax, nY, oColor);
+
+    for nX = 0, nXMax, nMinorStep do
+        --draw the line
+        local nHeight = (nX % nMajorStep == 0) and nMajorHeight or nMinorHeight;
+        D.DrawLineEx(nX, nY, nX, nY + nHeight, oColor);
+
+        --draw the position text
+        if (nX > 0) then
+            local sX = tostring(nX);
+            local nTextWidth = D.GetTextWidth(sX);
+            _tStyle.RULER.Draw(sObject, D, hInternalDC, floor(this.CenterOnX(nX, nTextWidth)), floor(nTextY), sX);
+        end
+    end
+
+end
+
+DrawRulerVer = function(bDrawRulerHor, sObject, D, hInternalDC)
+    local nX             = _tVerRuler.X;
+    local nMajorStep     = _tVerRuler.MajorStep;
+    local nMinorStep     = _tVerRuler.MinorStep;
+    local nMajorWidth    = _tVerRuler.MajorWidth;
+    local nMinorWidth    = _tVerRuler.MinorWidth;
+    local nTextX         = nMajorWidth + 3;
+    local oColor         = _tVerRuler.Color;
+
+    local nYMax = _nCardHeight - 1;
+
+    D.DrawLineEx(nX, 0, nX, nYMax, oColor);
+    D.SetDrawingFont(_tStyle.RULER.GetFont());--TODO FIX This must be gotten from the Forge
+
+    for nY = 0, nYMax, nMinorStep do
+        local nWidth        = (nY % nMajorStep == 0) and nMajorWidth or nMinorWidth;
+        local nLineLength   = nX + nWidth;
+
+        --draw the line
+        D.DrawLineEx(nX, nY, nLineLength, nY, oColor);
+
+        --draw the position text
+        if (nY > 0) then
+            local sY = tostring(nY);
+            local nTextHeight = D.GetTextHeight(sY);
+            _tStyle.RULER.Draw(sObject, D, hInternalDC, floor(nTextX), floor(this.CenterOnY(nY, nTextHeight)), sY);
+        end
+
+    end
+
+end
+
+DrawUtilObjects = function(sObject, D, hInternalDC)
+    ClearToTransparent(_nCardWidth, _nCardHeight, D);
+
+    --draw utility objects
+    local bDrawRulerHor = MainMenu.IsChecked("Options:>Draw:>Horizontal Ruler Enabled");
+    local bDrawRulerVer = MainMenu.IsChecked("Options:>Draw:>Vertical Ruler Enabled");
+
+    D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+
+    if (bDrawRulerHor) then
+        DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC);
+    end
+
+    if (bDrawRulerVer) then
+        DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC);
+    end
+
+    if (MainMenu.IsChecked("Options:>Draw:>Horizontal Centerline Enabled")) then
+        DrawCenterLineHor(sObject, D, hInternalDC);
+    end
+
+    if (MainMenu.IsChecked("Options:>Draw:>Vertical Centerline Enabled")) then
+        DrawCenterLineVer(sObject, D, hInternalDC);
+    end
+
+end
+
+
+
+
 
 
 return class("Forge",
@@ -165,337 +325,15 @@ return class("Forge",
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
         --Forge = function(this, sAuthCode) end, --static constructor (runs after class object creation)
         LoadImage = LoadImage,
-    },
-    {--PRIVATE
-        --set during Draw, used in DrawText, etc.
-        Object                      = null,
-        D                           = null,
-        InternalDC                  = null,
-        ------------------------------
-        AutoUpdateStyle__AUTO__     = false,
-        Orientation                 = VER,
-        Width__AUTOR_               = null,
-        Height__AUTOR_              = null,
-        --Canvas__AUTOR_              = null, --TODO QUESTION IS THIS USED???
-        CanvasName__AUTOR_          = null,
-        CanvasCreated               = false,
-        CanvasWidth                 = 0,
-        CanvasHeight                = 0,
-        CoVXWidth                   = 0,
-        CoVYHeight                  = 0,
-        ImageHandle                 = null,
-        ImageID                     = null,
-        ImageExportHandle           = null,
-        ImageExportID               = null,
-        ImageUtilHandle             = null,
-        ImageUtilID                 = null,
-        Name__AUTOR_                = null,
-        StylesINI__AUTOA_           = "", --TODO FINISH STYLE NAMES MUST BE VARIABLE COMPLIANT
+        STYLE = _tStyle,
 
-        ClearToTransparent = function(this, cdat, nW, nH, D)
-            D.SetFilteringMode(DRAW_BLEND_ALLCHANNELS);
-            D.DrawRectangle(0, 0, nW, nH, Color.RGBA(0, 0, 0, 0));
-            D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
-        end,
-
-        CreateImage = function(this, cdat, sHandleIndex, sIDIndex)
-            local pri = cdat.pri;
-            local nWidth        = pri.Width;
-            local nHeight       = pri.Height;
-            local sName         = pri.Name
-            local sBaseError    = "Error in Forge, \"${game}\": Could not";
-
-            --create the image only if it's not alreay been created
-            if (pri[sHandleIndex] == null and pri[sIDIndex] == null) then
-                --create, check, and store the image handle
-                local hImage        = DrawingImage.New(nWidth, nHeight, BIT_DEPTH_32, DRAW_IMAGE_TRANSPARENT);
-                local sMessage      = sBaseError.." create image for canvas object, \"${canvas}\".";
-                assert(hImage, sMessage % {game = sName, canvas = _sCanvas});
-                pri[sHandleIndex]   = hImage;
-
-                --get, check, and store the image ID
-                local nImageID      = DrawingImage.GetID(hImage);
-                sMessage            = sBaseError.." get image ID for canvas object, \"${canvas}\".";
-                assert(nImageID, sMessage % {game = sName, canvas = _sCanvas});
-                pri[sIDIndex]       = nImageID;
-            end
-
-        end,
-
-        DrawCenterLineHor = function(this, cdat, sObject, D, hInternalDC)
-            local pri           = cdat.pri;
-            local bIsVeritcal   = pri.Orientation == VER;
-            local nWidth        = pri.Width;
-            local nHeight       = pri.Height;
-
-            if (bIsVeritcal) then
-                local nMidPointY = floor(nHeight / 2);
-                D.DrawLineEx(0, nMidPointY, nWidth, nMidPointY, _tCenterLines.Color);
-            else
-                --TODO
-            end
-
-        end,
-
-
-        DrawCenterLineVer = function(this, cdat, sObject, D, hInternalDC)
-            local pri           = cdat.pri;
-            local bIsVeritcal   = pri.Orientation == VER;
-            local nWidth        = pri.Width;
-            local nHeight       = pri.Height;
-
-            if (bIsVeritcal) then
-                local nMidPointX = floor(nWidth / 2);
-                D.DrawLineEx(nMidPointX, 0, nMidPointX, nHeight, _tCenterLines.Color);
-            else
-                --TODO
-            end
-
-        end,
-
-        DrawRulerHor = function(this, cdat, bDrawRulerVer, sObject, D, hInternalDC)
-            local pri            = cdat.pri;
-            local bIsVeritcal    = pri.Orientation == VER;
-            local nY             = _tHorRuler.Y;
-            local nWidth         = pri.Width;
-            local nMajorStep     = _tHorRuler.MajorStep;
-            local nMinorStep     = _tHorRuler.MinorStep;
-            local nMajorHeight   = _tHorRuler.MajorHeight;
-            local nMinorHeight   = _tHorRuler.MinorHeight;
-            local nTextY         = nMajorHeight + 3;--TODO remove magic number
-            local oColor         = _tHorRuler.Color;
-            --TODO FIX draw the first text of the hor ONLY if the veritcal is NOT drawing...same adjust ver
-
-            local nXMax = nWidth - 1;
-
-            D.DrawLineEx(0, nY, nXMax, nY, oColor);
-
-            for nX = 0, nXMax, nMinorStep do
-                --draw the line
-                local nHeight = (nX % nMajorStep == 0) and nMajorHeight or nMinorHeight;
-                D.DrawLineEx(nX, nY, nX, nY + nHeight, oColor);
-
-                --draw the position text
-                if (nX > 0) then
-                    local sX = tostring(nX);
-                    local nTextWidth = D.GetTextWidth(sX);
-                    this.STYLE.RULER.Draw(sObject, D, hInternalDC, floor(this.CenterOnX(nX, nTextWidth)), floor(nTextY), sX);
-                end
-            end
-
-        end,
-
-        DrawRulerVer = function(this, cdat, bDrawRulerHor, sObject, D, hInternalDC)
-            local pri            = cdat.pri;
-            local bIsVeritcal    = pri.Orientation == VER;
-            local nX             = _tVerRuler.X;
-            local nHeight        = pri.Height;
-            local nMajorStep     = _tVerRuler.MajorStep;
-            local nMinorStep     = _tVerRuler.MinorStep;
-            local nMajorWidth    = _tVerRuler.MajorWidth;
-            local nMinorWidth    = _tVerRuler.MinorWidth;
-            local nTextX         = nMajorWidth + 3;
-            local oColor         = _tVerRuler.Color;
-
-            local nYMax = nHeight - 1;
-
-            D.DrawLineEx(nX, 0, nX, nYMax, oColor);
-            D.SetDrawingFont(this.STYLE.RULER.GetFont());--TODO FIX This must be gotten from the Forge
-
-            for nY = 0, nYMax, nMinorStep do
-                local nWidth        = (nY % nMajorStep == 0) and nMajorWidth or nMinorWidth;
-                local nLineLength   = nX + nWidth;
-
-                --draw the line
-                D.DrawLineEx(nX, nY, nLineLength, nY, oColor);
-
-                --draw the position text
-                if (nY > 0) then
-                    local sY = tostring(nY);
-                    local nTextHeight = D.GetTextHeight(sY);
-                    this.STYLE.RULER.Draw(sObject, D, hInternalDC, floor(nTextX), floor(this.CenterOnY(nY, nTextHeight)), sY);
-                end
-
-            end
-
-        end,
-        DrawUtilObjects = function(this, cdat, sObject, D, hInternalDC)
-            local pri = cdat.pri;
-            local bIsVertical   = pri.Orientation == VER;
-            local nWidth        = pri.Width;
-            local nHeight       = pri.Height;
-
-            pri.ClearToTransparent(nWidth, nHeight, D);
-
-            --draw utility objects
-            local bDrawRulerHor = MainMenu.IsChecked("Options:>Draw:>Horizontal Ruler Enabled");
-            local bDrawRulerVer = MainMenu.IsChecked("Options:>Draw:>Vertical Ruler Enabled");
-
-            D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
-
-            if (bDrawRulerHor) then
-                pri.DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC);
-            end
-
-            if (bDrawRulerVer) then
-                pri.DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC);
-            end
-
-            if (MainMenu.IsChecked("Options:>Draw:>Horizontal Centerline Enabled")) then
-                pri.DrawCenterLineHor(sObject, D, hInternalDC);
-            end
-
-            if (MainMenu.IsChecked("Options:>Draw:>Vertical Centerline Enabled")) then
-                pri.DrawCenterLineVer(sObject, D, hInternalDC);
-            end
-
-        end,
-    },
-    {--PROTECTED
-
-    },
-    {--PUBLIC
-        Forge = function(this, cdat, nWidth, nHeight)
-            --TODO Assertions
-            pri         = cdat.pri;
-            pri.Width   = nWidth;
-            pri.Height  = nHeight;
-            pri.Name                = Game.GetActive().GetName();
-
-            --import the styles
-            local pStyles = FS.Styles;
-            pri.StylesINI = pStyles;
-
-            --TODO check for file and other things...do error checsk later --THROW ERROR if not
-            local tSections     = INIFile.GetSectionNames(pStyles);
-            --local tNames        = {};
-            local tStyles       = {};
-
-            table.sort(tSections);
-
-            for nIndex, sStyleRaw in ipairs(tSections) do
-                local sStyle = sStyleRaw:upper();
-                --store the style name
-                --tNames[nIndex]  = sStyle:upper();
-                --create the style
-                --tStyles[nIndex] = FontStyle.FromINI(pStyles, sStyle);
-                tStyles[sStyle] = FontStyle.FromINI(pStyles, sStyle);
-                --run the initial update --TODO BUG fix the FontStyle so it does this upon and creation so it doesn't need done here
-                tStyles[sStyle]:Update();
-            end
-
-            --create and store the STYLE table
-            local sErrorPrefix = "Error assigning new FontStyle in Forge.STYLE: ";
-            cdat.pub.STYLE = setmetatable({}, {
-                __index = function(t, k)
-
-                    if rawtype(k) == "string" then
-                        return tStyles[k:upper()] or nil;
-                    end
-
-                end,
-                __newindex = function(t, k, v)
-
-                    if (type(k) ~= "string") then
-                        error(sErrorPrefix.."index must be variable-compliant string. Got "..type(k)..'.');
-                    end
-
-                    if not (k:variabalcompliant()) then
-                        error(sErrorPrefix.."index must be variable-compliant string. Got "..k..'.');
-                    end
-
-                    if not (type(v) == "FontStyle") then
-                        error(sErrorPrefix.."value must be FontStyle. Got "..type(v)..'.');
-                    end
-
-                    tStyles[k] = v;
-                end,
-                __pairs = function()
-                    local nIndex    = 0;
-                    local nMax      = 0;
-                    local tKeys     = {};
-
-                    for vKey in pairs(tStyles) do
-                        nMax = nMax + 1;
-                        tKeys[nMax] = vKey;
-                    end
-
-                    table.sort(tKeys, fComp);
-
-                    return function()
-                        nIndex = nIndex + 1;
-
-                        if (nIndex <= nMax) then
-                            local sIndex = tKeys[nIndex];
-                            return nIndex, sIndex, tStyles[sIndex];
-                        end
-
-                    end
-
-                end,
-            });
-
-        end,
-        CalcCoVXWidth = function(this, cdat, nXWidth)
-            return cdat.pri.CoVXWidth * nXWidth;
-        end,
-
-        CalcCoVYHeight = function(this, cdat, nYHeight)
-            return cdat.pri.CoVYHeight * nYHeight;
-        end,
-        CenterCardDisplay = function(this, cdat)
-            local pri = cdat.pri;
-
-            local tPos  = Window.GetPos(HWND_APP);
-            local tSize = Window.GetSize(HWND_APP);
-
-            --get the size of the canvas
-            local tSize = Input.GetSize(_sCanvas);
-            Input.SetPos(_sCanvas, (_nPageWidth - tSize.Width) / 2, (_nPageHeight - tSize.Height) / 2);
-        end,
-        CenterOnX = function(this, cdat, nVal, nTextWidth) --TODO BUG FIX FINISH These functions NOT working properly on angled text
-            local nRet = nVal or 0;
-
-            if (cdat.pri.Orientation == VER) then
-                nRet = this.X(nVal) - nTextWidth / 2;
-            else
-        --TODO
-            end
-
-            return nRet;
-        end,
-        CenterOnY = function(this, cdat, nVal, nTextHeight)
-            local nRet = nVal or 0;
-
-            if (cdat.pri.Orientation == VER) then
-                nRet = this.Y(nVal) - nTextHeight / 2;
-            else
-        --TODO
-            end
-
-            return nRet;
-        end,
-        CenterOn = function(this, cdat, nX, nY)
-
-        end,
-        --assumes tRow and cProc are valid
-        DrawCard = function(this, cdat, tRow)--, bExport, fExport) --TODO move this out to private static to be used here and in new export function
-            local pri = cdat.pri;
-            local nWidth        = pri.Width;
-            local nHeight       = pri.Height;
-            local hImage        = pri.ImageHandle;
-            local nImageID      = pri.ImageID;
-            local hUtilImage    = pri.ImageUtilHandle;
-            local nImageUtilID  = pri.ImageUtilID;
-            local nCanvasWidth  = pri.CanvasWidth;
-            local nCanvasHeight = pri.CanvasHeight;
-
+        DrawCard = function(tRow, nWidth, nHeight)--, bExport, fExport) --TODO move this out to private static to be used here and in new export function
             --in case a resize happens
             _tLastRow  = tRow;
 
             --draw the card
             local function ProcDraw(sObject, D, hInternalDC)
-                pri.ClearToTransparent(nWidth, nHeight, D);
+                ClearToTransparent(nWidth, nHeight, D);
                 --get the proc's draw method
                 --local fProcDraw         = cProc.DrawCard(this, cProc, tRow, nWidth, nHeight);
                 local fSetOnImageDraw   = sink;
@@ -510,22 +348,17 @@ return class("Forge",
                     local sChunkName    = sCardSetName.." Draw";
 
                     --update the Forge index in the user env
-                    UserEnv.UpdateForge {
-                        DrawImage       = this.DrawImage,
-                        DrawStyledText  = this.DrawStyledText,
-                        DrawText        = this.DrawText,
-                        Row            = tRow,
-                        CardWidth      = nWidth,
-                        CardHeight     = nHeight,
-                        DrawBorder     = MainMenu.IsChecked("Options:>Draw:>Border Enabled"),
-                        DrawOverlay    = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled"),
+                    UserEnv.ForgeUpdateRoot {
+                        _tRow            = tRow,
+                        _bDrawBorder     = MainMenu.IsChecked("Options:>Draw:>Border Enabled"),
+                        _bDrawOverlay    = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled"),
                     };
                     local st=""
                     for k, v in pairs(UserEnv.GetCommandList()) do
                         st = st.."|"..v;
                     end
 
-                    p(st)
+                    --p(st)
 
                     --wUser.pGame         = FS.Game;
                     --wUser.pCardSet      = oCardSet.GetPath();
@@ -553,9 +386,9 @@ return class("Forge",
                 --assert(rawtype(fProcDraw) == "function", "Error Drawing Card, \""..tRow.Name.."\".\r\nMissing static DrawCard function in "..tostring(cProc).." class or function not correctly implemented."); --TODO FINISH
 
                 --update private vars for use in DrawText and other functions
-                pri.Object      = sObject;
-                pri.D           = D;
-                pri.InternalDC  = hInternalDC;
+                _Object      = sObject;
+                _D           = D;
+                _InternalDC  = hInternalDC;
 
                 --execute the proc's draw method
                 fSetOnImageDraw(sObject, D, hInternalDC);
@@ -569,10 +402,10 @@ return class("Forge",
             Canvas.Clear(_sCanvas, _oClear);
 
             --draw on the card image
-            hImage:Draw(ProcDraw);
+            _hImage:Draw(ProcDraw);
 
             --draw on the util image
-            hUtilImage:Draw(pri.DrawUtilObjects);
+            _hUtilImage:Draw(DrawUtilObjects);
 
             --resize the image to the canvas size
             --local tSize = Input.GetSize(_sCanvas);
@@ -582,15 +415,13 @@ return class("Forge",
             Canvas.Draw(_sCanvas,
                         function(sObject, D, hInternalDC)
                             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
-                            --D.DrawImage(nImageID, 0, 0)--, nCanvasWidth, nCanvasHeight);
-                            --D.DrawImage(nImageUtilID, 0, 0)--, nCanvasWidth, nCanvasHeight);
-                            D.DrawImage(nImageID, 0, 0, nCanvasWidth, nCanvasHeight);
-                            D.DrawImage(nImageUtilID, 0, 0, nCanvasWidth, nCanvasHeight);
+                            D.DrawImage(_nImageID,      0, 0, _nCanvasWidth, _nCanvasHeight);
+                            D.DrawImage(_nImageUtilID,  0, 0, _nCanvasWidth, _nCanvasHeight);
                         end
             );
 
             --if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..Teach export should not be displayed first
-            --    fExport(pri.D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
+            --    fExport(D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
             --end
 
             --[[
@@ -603,35 +434,23 @@ return class("Forge",
         end,
         DrawImage = function(this, cdat, pImage, nX, nY, nWidth, nHeight, sName)
             --TODO assertions
-            local sObject       = pri.Object;
-            local D             = pri.D;
-            local hInternalDC   = pri.InternalDC;
-
             local hImage, nImage = LoadImage(FS.Game.."\\"..SanitizePath(pImage), sName);
             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND);
-            --D.DrawImage(nImage, nX, nY, nWidth, nHeight);
-            --local nCoVXWidth     = pri.CoVXWidth;
-            --local nCoVYHeight    = pri.CoVYHeight;
             D.DrawImage(nImage, nX, nY, nWidth, nHeight);
         end,
         --may be called ONLY in the proc's draw
         DrawText = function(this, cdat, sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)
             --TODO assertions
-            local pri           = cdat.pri;
-            local pub           = cdat.pub;
-            local eStyle        = pub.STYLE;
+            local eStyle        = _tStyle;
 
             local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
             local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
             local bCenterY      = rawtype(vCenterY)     == "boolean"    and vCenterY    or false;
             local oStyle        = eStyle[sStyle] --TODO add default style as fallback???
-            local sObject       = pri.Object;
-            local D             = pri.D;
-            local hInternalDC   = pri.InternalDC;
             local tLines        = {}; --used for text wrapping
             local nStartOffsetX, nStartOffsetY = 0, 0;
 
-            if (pri.AutoUpdateStyle) then --update the style (if requested)
+            if (_bAutoUpdateStyle) then --update the style (if requested)
                 oStyle.Update();
             end
 
@@ -669,25 +488,17 @@ return class("Forge",
 
                 --draw the text
                 --oStyle.Draw(sObject, D, hInternalDC, floor(nTrueX), floor(nTrueY), sLine, vAngle);
-                local nCoVXWidth     = pri.CoVXWidth;
-                local nCoVYHeight    = pri.CoVYHeight;
-                oStyle.Draw(sObject, D, hInternalDC, floor(nTrueX), floor(nTrueY), sLine, vAngle);
+                oStyle.Draw(_Object, _D, _InternalDC, floor(nTrueX), floor(nTrueY), sLine, vAngle);
             end
 
             return nLastX, nLastY, nLastWidth, nLastHeight;
         end,
         DrawStyledText = function(this, cdat, sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)--TODO BUG FIX USe HTML parser, not this
-            local pri           = cdat.pri;
-            local pub           = cdat.pub;
-            local eStyle        = pub.STYLE;
+            local eStyle        = _tStyle;
 
             local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
             local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
             local bCenterY      = rawtype(vCenterY)     == "boolean"    and vCenterY    or false;
-
-            local sObject       = pri.Object;
-            local D             = pri.D;
-            local hInternalDC   = pri.InternalDC;
 
             --------------------------------------------------------------------
             -- PARSE HELPERS
@@ -756,7 +567,7 @@ return class("Forge",
             --------------------------------------------------------------------
             -- UPDATE STYLES (if requested)
             --------------------------------------------------------------------
-            if (pri.AutoUpdateStyle) then
+            if (_bAutoUpdateStyle) then
                 local oDef = eStyle[sStyle];
                 if (oDef and oDef.Update) then
                     oDef.Update();
@@ -852,10 +663,10 @@ return class("Forge",
                     local sPart  = seg.Text;
 
                     -- ensure correct font set
-                    oStyle.Prep(D, sPart, false);
+                    oStyle.Prep(_D, sPart, false);
 
                     -- true ink bounds (includes your shadow/outline/etc via Prep)
-                    local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(D, sPart, true);
+                    local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sPart, true);
 
                     -- LAYOUT RULE:
                     -- place ink-box start at nX (so negative nMinX can't backtrack into previous segment)
@@ -911,9 +722,9 @@ return class("Forge",
                     local oStyle = eStyle[seg.Style] or eStyle[sStyle];
                     local sPart  = seg.Text;
 
-                    oStyle.Prep(D, sPart, false);
+                    oStyle.Prep(_D, sPart, false);
 
-                    local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(D, sPart, true);
+                    local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sPart, true);
 
                     -- KEY FIX:
                     -- draw so that the ink-box starts at nX (neutralizes negative bearings / kerning tuck)
@@ -925,7 +736,7 @@ return class("Forge",
                     --D.DrawRectangle(floor(nX), floor(nY), floor(nTotalW), floor(nTotalH), Color.RGBA(R(1, 255),R(1, 255),R(1, 255),60));
                     --TEST
 
-                    oStyle.Draw(sObject, D, hInternalDC, floor(nDrawX), floor(nDrawY), sPart, vAngle);
+                    oStyle.Draw(_Object, _D, _InternalDC, floor(nDrawX), floor(nDrawY), sPart, vAngle);
 
                     nX = nX + nTotalW + nPadX;
                 end
@@ -935,45 +746,94 @@ return class("Forge",
 
             return nBaseX, nBaseY, nBlockW, nBlockH;
         end,
-        GetCenterX = function(this, cdat)
-            local pri = cdat.pri;
-            return pri.Width / 2;
+        Init = function()
+            --import the styles
+            local pStyles = FS.Styles;
+            --StylesINI = pStyles;
+
+            --TODO check for file and other things...do error checsk later --THROW ERROR if not
+            local tSections     = INIFile.GetSectionNames(pStyles);
+            --local tNames        = {};
+            local tStyles       = {};
+
+            table.sort(tSections);
+
+            for nIndex, sStyleRaw in ipairs(tSections) do
+                local sStyle = sStyleRaw:upper();
+                --store the style name
+                --tNames[nIndex]  = sStyle:upper();
+                --create the style
+                --tStyles[nIndex] = FontStyle.FromINI(pStyles, sStyle);
+                tStyles[sStyle] = FontStyle.FromINI(pStyles, sStyle);
+                --run the initial update --TODO BUG fix the FontStyle so it does this upon and creation so it doesn't need done here
+                tStyles[sStyle]:Update();
+            end
+
+            --create and store the STYLE table
+            local sErrorPrefix = "Error assigning new FontStyle in Forge.STYLE: ";
+            _tStyle = setmetatable({}, {
+                __index = function(t, k)
+
+                    if rawtype(k) == "string" then
+                        return tStyles[k:upper()] or nil;
+                    end
+
+                end,
+                __newindex = function(t, k, v)
+
+                    if (type(k) ~= "string") then
+                        error(sErrorPrefix.."index must be variable-compliant string. Got "..type(k)..'.');
+                    end
+
+                    if not (k:variabalcompliant()) then
+                        error(sErrorPrefix.."index must be variable-compliant string. Got "..k..'.');
+                    end
+
+                    if not (type(v) == "FontStyle") then
+                        error(sErrorPrefix.."value must be FontStyle. Got "..type(v)..'.');
+                    end
+
+                    tStyles[k] = v;
+                end,
+                __pairs = function()
+                    local nIndex    = 0;
+                    local nMax      = 0;
+                    local tKeys     = {};
+
+                    for vKey in pairs(tStyles) do
+                        nMax = nMax + 1;
+                        tKeys[nMax] = vKey;
+                    end
+
+                    table.sort(tKeys, fComp);
+
+                    return function()
+                        nIndex = nIndex + 1;
+
+                        if (nIndex <= nMax) then
+                            local sIndex = tKeys[nIndex];
+                            return nIndex, sIndex, tStyles[sIndex];
+                        end
+
+                    end
+
+                end,
+            });
         end,
-        GetCenterY = function(this, cdat)
-            local pri = cdat.pri;
-            return pri.Height / 2;
-        end,
-        GetContext = function(this, cdat)
-            local pri = cdat.pri;
-            return pri.Object, pri.D, pri.InternalDC;
-        end,
-        GetHeight = function(this, cdat)
-            local pri = cdat.pri;
-            return pri.Height;
-        end,
-        GetOrientation = function(this, cdat)
-            return cdat.pri.Orientation;
-        end,
-        GetWidth = function(this, cdat)
-            local pri = cdat.pri;
-            return pri.Width;
-        end,
-        OnShow = function(this, cdat)
-            local pri       = cdat.pri;
-            local fImage    = pri.CreateImage
+        OnShow = function()
+            local fImage    = CreateImage
             --TODO FINISH streamline/condense this section
 
             --create the canvas
-            if not (pri.CanvasCreated) then
+            if not (_bCanvasCreated) then
                 local bCanvasCreated = Canvas.Create(_sCanvas);
-                assert(bCanvasCreated, "Error in Forge, \"${game}\": Could not create canvas for object, \"${canvas}\"." % {game = pri.Name, canvas = _sCanvas});
-                pri.CanvasCreated = true;
+                assert(bCanvasCreated, "Error in Forge, \"${game}\": Could not create canvas for object, \"${canvas}\"." % {game = "TODO GET GAME NAME", canvas = _sCanvas});
             end
 
-            --create the images that will be drawn on the canvas
-            fImage("ImageHandle",       "ImageID");
-            fImage("ImageExportHandle", "ImageExportID");
-            fImage("ImageUtilHandle",   "ImageUtilID");
+            --create the Forge images
+            _hImage,        _nImageID       = fImage(_hImage,         _nImageID);
+            _hImageExport,  _nImageExportID = fImage(_hImageExport,   _nImageExportID);
+            _hImageUtil,    _nImageUtilID   = fImage(_hImageUtil,     _nImageUtilID);
 
             --mouse event callback functions
             local function MouseUpdate(eEvent)
@@ -981,12 +841,9 @@ return class("Forge",
                 if(eEvent.EventCode == CANVAS_MOUSE_MOVE) then
                     _nX = eEvent.Mouse.x;
                     _nY = eEvent.Mouse.y;
-                    local bIsVertical = pri.Orientation == VER;
-                    --local nNegXAdjust = pri.Width;
-                    --local nNegYAdjust = bIsVertical and pri.Height   or pri.Width;
 
                     if not (_hWndCardVer) then
-                        _hWndCardVer = ProcSys.GetWindowHandle(PANE.CARD_VER);
+                        _hWndCardVer = ProcSys.GetWindowHandle(PANE.CARD_VER); --TODO ERROR NO LONGER USING THIS PANE NAME
                     end
 
                     Window.SetText(_hWndCardVer, floor(_nX)..", "..floor(_nY))
@@ -1019,9 +876,9 @@ return class("Forge",
             _bForgeAutoSizing = false;
 
             --center the images
-            this.CenterCardDisplay();
+            CenterCardDisplay();
 
-            --load last set if present
+            --load last set if present  --TODO MOVE THIS TO PROCSYS...IT HAS NO BUSINESS HERE
             local sLastCardSetUUID  = INIFile.GetValue(FS.Info, "SESSION", "LastSet");
             local oGame             = Game.GetActive();
             local oLastCardSet      = oGame.GetCardSet(sLastCardSetUUID);
@@ -1032,8 +889,7 @@ return class("Forge",
 
             Page.StartTimer(_nRedrawTimerInterval,      _nRedrawTimerID);
         end,
-        OnSize = function(this, cdat, nWindowWidth, nWindowHeight, nPageWidth, nPageHeight, nType)
-            local pri       = cdat.pri;
+        OnSize = function(nWindowWidth, nWindowHeight, nPageWidth, nPageHeight, nType)
             local tPos      = Window.GetPos(HWND_APP);
             local sSection  = "ForgeWindow";
 
@@ -1049,23 +905,20 @@ return class("Forge",
 
             --TODO FINISH adjust canvas size using math.rect functions TODO use set data in the module (for width and height)
             local tOuter    = {x = 0, y = 0, width = nPageWidth, height = nPageHeight};
-            local tInner    = {x = 0, y = 0, width = pri.Width, height = pri.Height};
+            local tInner    = {x = 0, y = 0, width = _nCardWidth, height = _nCardHeight};
+
             local tRect     = math.geometry.fitrect(tOuter, tInner, true);
             Input.SetSize(_sCanvas, tRect.width, tRect.height);
             Input.SetPos(_sCanvas, tRect.x, tRect.y);
 
-            --store the canvas size info --TODO FINISH USE CARD SET SIZE WITH FALLBACK TO FORGE IF SET SIZE NOT VALID
-            local tSize         = Input.GetSize(_sCanvas);
-            pri.CanvasWidth     = tSize.Width;
-            pri.CanvasHeight    = tSize.Height;
-            pri.CoVXWidth       = tSize.Width   / pri.Width;
-            pri.CoVYHeight      = tSize.Height  / pri.Height;
+            --store the canvas size info
+            local tSize     = Input.GetSize(_sCanvas);
+            _nCanvasWidth   = tSize.Width;
+            _nCanvasHeight  = tSize.Height;
 
             --center the images
-            this.CenterCardDisplay();
+            CenterCardDisplay();
 
-            --update the X, Y, W, H functions
-            --UpdateCoVFunctions(pri.CoVXWidth, pri.CoVYHeight);
             if (_tLastRow) then
                 _bRedrawRequested   = true;
                 _bIsResizing        = true;
@@ -1073,7 +926,7 @@ return class("Forge",
 
         end,
         STYLE = null, --public enum
-        OnTimer = function(this, cdat, nID)
+        OnTimer = function(nID)
 
             if (nID == _nRedrawTimerID) then
                 --increment the delta time
@@ -1082,7 +935,7 @@ return class("Forge",
                 --check if a redraw request was made and that we're done resizing
                 if (_bRedrawRequested and not _bIsResizing) then
                     --redraw the card
-                    this.DrawCard(_tLastRow);
+                    Forge.DrawCard(_tLastRow);
                     --fulfill the request
                     _bRedrawRequested = false;
                 end
@@ -1098,27 +951,33 @@ return class("Forge",
             end
 
         end,
+        SetActiveCardSet = function(oCardSet)
+
+            if not (type(oCardSet) == "CardSet") then
+                --TODO THROW ERROR
+            end
+
+            _oActiveCardSet = oCardSet;
+            _nCardWidth     = oCardSet.GetCardWidth();
+            _nCardHeight    = oCardSet.GetCardHeight();
+            _sCardSetName   = oCardSet.GetName();
+        end,
         UpdateStyles = function(this, cdat)
 
-            for oStyle in pairs(cdat.pub.STYLE) do
+            for oStyle in pairs(_tStyle) do
                 oStyle.Update();
             end
 
         end,
-        X = function(this, cdat, nVal) --relative functions...get the x value relative otthe build size
-            local pri = cdat.pri;
-            local nWidth = pri.Width;
-
-            return (nVal / nWidth) * Input.GetSize(_sCanvas).Width;
-        end,
-        Y = function(this, cdat, nVal)
-            local pri = cdat.pri;
-            local nHeight = pri.Height;
-
-            return (nVal / nHeight) * Input.GetSize(_sCanvas).Height;
-        end,
     },
-    nil,   --extending class
-    true, --if the class is final
-    nil    --interface(s) (either nil, or interface(s))
+    {--PRIVATE
+        Forge = function(this, cdat) end
+    },
+    {--PROTECTED
+
+    },
+    {},     --PUBLIC
+    nil,    --extending class
+    true,   --if the class is final
+    nil     --interface(s) (either nil, or interface(s))
 );

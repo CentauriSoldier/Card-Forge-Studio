@@ -14,7 +14,6 @@ local _bAutoSizeGrid        = true;
 local _sBaseDataGrid        = "grd base data";
 local _sFinalDataGrid       = "grd final data";
 local _bIsLoading           = false;
-local _cForge               = null;
 --local _RedrawOnCellChanged  = true;
 local _nDescriptionMaxWidth = 100;
 local class                 = class;
@@ -32,6 +31,10 @@ local _oActiveCardSet           = false;
 
 local _nFileSyncTimerID         = PROCSYS_FILE_SYNC_TIMER_ID;
 local _nFileSyncTimerInterval   = PROCSYS_FILE_SYNC_TIMER_INTERVAL;
+
+--stored after loading a card set
+local _nCardWidth = 0;
+local _nCardHeight = 0;
 
 --[[TODO USE TO SET UP PROC ENV LEFT OFF HERE
 
@@ -52,7 +55,6 @@ if (type(oCardSet) == "CardSet") then
     local wUser = GetUserEnv();
 
     -- injected context
-    wUser.oForge        = this;
     wUser.tRow          = tRow;
     wUser.nCardWidth    = nWidth;
     wUser.nCardHeight   = nHeight;
@@ -121,7 +123,7 @@ constant("GRID_FINAL",  _sFinalDataGrid);
         </ul>
 !]]
 --local function TryDrawCard(cProc, nRow, tRow)
-local function TryDrawCard(tRow)
+local function TryDrawCard(tRow, _nCardWidth, _nCardHeight)
 
     --if (cProc and type(cProc.DrawCard) == "function" and nRow > 0) then
 
@@ -132,7 +134,7 @@ local function TryDrawCard(tRow)
             --local bExport = MainMenu.IsChecked("Options:>Draw:>Export Selected Card") and rawtype(fExport) == "function"; --TODO FINISH use new/custom exporter system BUT dnot here...do not draw for every export, simply export
 
             --tell Forge to draw (and possibly export) the card
-            _cForge.DrawCard(tRow, bExport, fExport);
+            Forge.DrawCard(tRow, _nCardWidth, _nCardHeight, bExport, fExport);
         end
 
     --end
@@ -157,7 +159,6 @@ local function BuildCellProc(nRow, nColumn, sColumn, tRow, sCellText, fGetFinalV
         local wUser = UserEnv.Get();
 
         -- injected context
-        --wUser.oForge        = _cForge;
         wUser.nRow              = nRow;
         wUser.nColumn           = nColumn;
         wUser.sColumn           = sColumn;
@@ -323,11 +324,21 @@ end
             <li>Provides <code>fGetFinalValue</code> to the processor to read processed values from prior columns.</li>
         </ul>
 !]]
-local function ProcessCell(nRow, nColumn)
+local function ProcessCell(nRow, nColumn) --TODO LEFT OFF HERE 1
     local cProc     = ProcSys.GetProc(nRow, _sBaseDataGrid);
     local sNewText  = Grid.GetCellText(_sBaseDataGrid, nRow, nColumn);
     local sProcText = sNewText;
     local tBaseRow  = Grid.GetRow(_sBaseDataGrid, nRow);
+
+    --TODO REDO THIS ENTIRE PROC SYSTEM WITH THE NEW ONE
+
+
+
+    --nRow, nColumn, sColumn, tRow, sText, fGetFinalValue
+
+    --TODO Also, be sure to add function to the env that indicates if a given column as been processed (basically if Column_A.index Column_< B.index)
+
+
 
     --try to call the row's custom cell processor
     if (cProc and class.haspublicmember(cProc, "ProcessCell")) then
@@ -338,6 +349,19 @@ local function ProcessCell(nRow, nColumn)
             return Grid.GetCellText(_sFinalDataGrid, nRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
         end
 
+        UserEnv.ProcSysUpdateRoot {
+            --Count     =  TODO
+            _fGetFinalValue = GetFinalValue,
+            _nCardWidth     = _nCardWidth,
+            _nCardHeight    = _nCardHeight,
+            _tRow           = tBaseRow,
+            _nRow           = nRow,
+            _nColumn        = nColumn,
+            _sColumn        = sColumn,
+            _sNewText       = sNewText,
+        };
+        
+        --TODO run cellproc here in safe env
         sProcText = cProc.ProcessCell(nRow, nColumn, sColumn, tBaseRow, sNewText, GetFinalValue) or sNewText;
     end
 
@@ -562,20 +586,9 @@ return class("ProcSys",
         --[[CreateImagePath = function(sName, sMime)
             return _pCards.."\\"..sName..'.'..sMime:gsub('%.', '');
         end,]]
-
-
-        --[[!
-            @fqxn CFS.Classes.ProcSys.Methods.GetForge
-            @desc Returns the active Forge instance.
-            @return Forge oForge The current Forge object.
-        !]]
         GetActiveCardSet = function()
             return _oActiveCardSet;
         end,
-        GetForge = function()
-            return _cForge;
-        end,
-
 --[[
         GetImagePath = function(nRow) --TODO ERROR WRONG...ambiguous,...what image? WHYA R ETHERE TWO OF THESE METHODS
             local sRet;
@@ -627,7 +640,7 @@ return class("ProcSys",
             return cRet;
         end,
 
-        GetCellProc = function()--TODO LEFT OFF HERE
+        GetCellProc = function()--TODO LEFT OFF HERE 2
             --get the chunk from the active card set
             local sDrawChunk = oCardSet.GetCallCode("CellProc");
 
@@ -639,7 +652,6 @@ return class("ProcSys",
             local wUser = UserEnv.Get();
 
             -- injected context
-            wUser.oForge        = this;
             wUser.tRow          = tRow;
             wUser.nCardWidth    = nWidth;
             wUser.nCardHeight   = nHeight;
@@ -699,34 +711,20 @@ return class("ProcSys",
             end
 
             --set defaults
-            _pActiveCSV = "";
-            _bAllowSave = false;
+            _pActiveCSV     = "";
+            _bAllowSave     = false;
             _oActiveCardSet = oCardSet;
+            _nCardWidth     = oCardSet.GetCardWidth();
+            _nCardHeight    = oCardSet.GetCardHeight();
 
+            --disable the save system
             MainMenu.SetEnabled("Set:>Save", false);
-            --local pSet;
-
-            --load csv
-            --if (type(pSet) == "string") then
-            --    pFile = ProcSys.SetIsValid(pSet) and pSet or nil;
-            --end
-
-            --if not (pSet) then
-                --local pSet = Dialog.FolderBrowse("Load Set:", _pSets);
-
-                --if (pSet:isempty() or pSet == "CANCEL") then
-                --    pSet = nil; --TODO ERROR HERE???/
-                --else
-                --    pSet = ProceSys.SetIsValid(pSet) and pSet or nil;
-            --    end
-
-        --    end
 
             local pData = oCardSet.GetDataPath();
 
             if (pData) then
                 --backup the file (if needed)
-                --TryBackupFile(pData);
+                --TryBackupFile(pData); --TODO FIX uncomment this when ready!!
 
                 --store the set name
                 _sSetName = oCardSet.GetName();--String.SplitPath(pData).Filename; --TODO remove/update
@@ -739,6 +737,8 @@ return class("ProcSys",
                 --MainMenu.SetEnabled("Set:>Save", true);
                 MainMenu.SetEnabled("Set:>Browse", true);
             end
+
+            Forge.SetActiveCardSet(oCardSet);
 
             Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
         end,
@@ -775,10 +775,11 @@ return class("ProcSys",
                     Grid.SetCellText(_sBaseDataGrid, nRow, nColumn, sOldText);
                     bProcess = false;
                 else
+
                     local tRow = Grid.GetRow(_sBaseDataGrid, nRow);
                     local cProc = ProcSys.GetProc(nRow);
 
-                    if (type(cProc) == "class" and class.haspublicmember(cProc, "ImagePath")) then
+                    if (type(cProc) == "class" and class.haspublicmember(cProc, "ImagePath")) then --TODO get the image path from somewhere else now...
                         local pOld = cProc.ImagePath.."\\"..sOldText..'.png';
                         local pNew = cProc.ImagePath.."\\"..sNewText..'.png';
 
@@ -793,7 +794,7 @@ return class("ProcSys",
                 end
 
             end
---TODO ADD CRC CHECK FRO ACTIVE DATA FILE and OFFER RELOAD ON DIFF
+            --TODO FINISH ADD CRC CHECK FRO ACTIVE DATA FILE and OFFER RELOAD ON DIFF
             if (bProcess) then
                 --process the cell change
                 PrepUpdateGrids();
@@ -807,7 +808,7 @@ return class("ProcSys",
                 --update the draw call
                 if (MainMenu.IsChecked("Options:>Draw:>Redraw On Cell Changed")) then
                     --TryDrawCard(cProc, nRow, tRow);
-                    TryDrawCard(tRow);
+                    TryDrawCard(tRow, _nCardWidth, _nCardHeight);
                 end
 
             end
@@ -1004,6 +1005,8 @@ return class("ProcSys",
         !]]
         OnSelectionChanged = function(sGrid, nRow, nColumn)
             --ELProfiler.start(period, stack_depth)
+            --update the card env subtable
+
 
             local cProc = ProcSys.GetProc(nRow);
 
@@ -1011,6 +1014,7 @@ return class("ProcSys",
             _nCurrentRow    = nRow;
             _nCurrentColumn = nColumn;
 
+            --TODO FINISH REMOVE THIS--this should not check if this column is a LuaEditor columns (in the Set ini file) and run the editor on it if so.
             if (cProc and class.haspublicmember(cProc, "OnSelectionChanged")) then
                 local tBaseRow      = Grid.GetRow(_sBaseDataGrid, nRow);
                 local sColumn       = Grid.GetCellText(_sBaseDataGrid, 0, nColumn);
@@ -1028,7 +1032,7 @@ return class("ProcSys",
             --try to draw the card
             if (_nLastRow ~= nRow) then
                 --TryDrawCard(cProc, nRow, tRow);
-                TryDrawCard(tRow);
+                TryDrawCard(tRow, _nCardWidth, _nCardHeight);
                 --local sProfile = ELProfiler.stop();
                 --TextFile.WriteFromString(_ExeFolder.."\\profile.txt", ELProfiler.format(sProfile))
                 _nLastRow = nRow;
@@ -1058,7 +1062,7 @@ return class("ProcSys",
             local cProc = ProcSys.GetProc(nRow);
             local tRow  = Grid.GetRow(_sFinalDataGrid, nRow);
             --TryDrawCard(cProc, nRow, tRow);
-            TryDrawCard(tRow);
+            TryDrawCard(tRow, _nCardWidth, _nCardHeight);
         end,
 
         --TODO put in examplke and show the args for the callback
@@ -1088,11 +1092,6 @@ return class("ProcSys",
                 _tExporters[_sGame][pFile] = nil;
             end
 
-        end,
-
-        RegisterProcResolver = function(fProcResolver)
-            type.assert["function"](fProcResolver, "ProcSys.RegisterProcResolver: argument 1 must be of type function. Got "..type(fProcResolver)..'.');
-            _tProcResolvers[_sGame] = fProcResolver;
         end,
 
         --[[!
@@ -1172,18 +1171,6 @@ return class("ProcSys",
             local pSetID = bFilesAreValid and Path.GetEndFolder(pFolder) or "NO_SET_FOUND";
             return bFilesAreValid, pSetID;
         end,
-
-        --[[!
-            @fqxn CFS.Classes.ProcSys.Methods.SetForge
-            @desc Sets the active Forge instance used by ProcSys.
-            @param Forge oForge Forge instance to bind.
-        !]]
-        SetForge = function(cForge)
-            --TODO assertions
-            _cForge     = cForge;
-            --_pStyles    = cForge;
-        end,
-
 
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.SetWindowVisible

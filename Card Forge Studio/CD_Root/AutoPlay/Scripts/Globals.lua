@@ -5,22 +5,20 @@ _NoExitScriptOnPageJump = true;
 CFG             = {}; --TODO lock/unlock table as needed TODO REMOVE THIS...IT WILL BE PUSHED IN DURING PREP OR THE LIKE
 
 require("Constants");   --load the constants
-FS              = require("Globals.FS");  --load the program's file/path management system
-Import          = require("Globals.Import");
-UserEnv         = require("Globals.UserEnv");
-ProcessDox      = require("Globals.ProcessDox");
-
-
 
 ELProfiler = require("Plugins.ELProfiler");
 ELProfiler.setClock(os.clock);
 
---🅻🅾🅰🅳 🅷🅴🅻🅿🅴🆁 🅲🅻🅰🆂🆂🅴🆂
+FS              = require("Globals.FS");  --load the program's file/path management system
+Import          = require("Globals.Import");
+ProcessDox      = require("Globals.ProcessDox");
+
 ProcSys     = require("ProcSys");
 Forge       = require("Forge");
 StyleEditor = require("StyleEditor");
 Game        = require("Game");
 Tutorial    = require("Tutorial");
+UserEnv     = require("Globals.UserEnv");
 
 --TODO Modify this entire system to be more universal?
 Description = require("Description");

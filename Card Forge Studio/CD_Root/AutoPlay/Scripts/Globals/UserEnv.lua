@@ -9,17 +9,9 @@
 █ █ █▀▄ █   ▄▀▄ ▄▀▄ █▀▄   ▀█▀ █▄█ ██▀   █ █ ▄▀▀ ██▀ █▀▄   ██▀ █▄ █ █ █   ▀█▀ ▄▀▄ ██▄ █   ██▀   █ █▄ █ ▀█▀ ▄▀▄   ▀█▀ █▄█ ██▀   █▀▄ ██▀ █▀▄ ▄▀▄
 ▀▄█ █▀  █▄▄ ▀▄▀ █▀█ █▄▀    █  █ █ █▄▄   ▀▄█ ▄██ █▄▄ █▀▄   █▄▄ █ ▀█ ▀▄▀    █  █▀█ █▄█ █▄▄ █▄▄   █ █ ▀█  █  ▀▄▀    █  █ █ █▄▄   █▀▄ █▄▄ █▀  ▀▄▀
 ]]
---envrepo.User = {
+
+
 local tEnv = { --TODO QUESTION do i need to protect this?
-   --math             = tMathDecoy,
-   --string           = tStringDecoy,
-   ---
-   --Color            = tColorDecoy,
-  --- Drawing          = tDrawingDecoy,
-   --VectorDrawing    = tVectorDrawingDecoy,
-   ---
-  -- RNG              = tRNGDecoy,
-   ---
    ipairs           = ipairs,
    pairs            = pairs,
    ---
@@ -35,8 +27,6 @@ local tEnv = { --TODO QUESTION do i need to protect this?
    --
    --Forge            = tForgeDecoy,
    --ProcSys          = tProcSysDecoy,
-   ---
-   --CFG              = tCFGDecoy,
    ---
    --User             = {}, --from InitForge
 };
@@ -72,6 +62,7 @@ local function InjectEnv(sName, tActual)
     tEnv[sName] = tDecoy;
 end
 
+
 --[[
 ██████╗  █████╗ ███████╗███████╗ ██████╗ ██╗  ██╗
 ██╔══██╗██╔══██╗██╔════╝██╔════╝██╔════╝ ██║  ██║
@@ -85,15 +76,6 @@ InjectEnv("base64", {
     enc = base64.enc,
 });
 
---[[
-██████╗███████╗ ██████╗
-██╔════╝██╔════╝██╔════╝
-██║     █████╗  ██║  ███╗
-██║     ██╔══╝  ██║   ██║
-╚██████╗██║     ╚██████╔╝
-╚═════╝╚═╝      ╚═════╝
-]]
-InjectEnv("CFG", {});
 
 --[[
 ██████╗ ██████╗ ██╗      ██████╗ ██████╗
@@ -125,6 +107,41 @@ InjectEnv("Color", {
     SetGreen           = Color.SetGreen,
     SetRed             = Color.SetRed,
 });
+
+
+--[[
+ ██████╗ █████╗ ██████╗ ██████╗
+██╔════╝██╔══██╗██╔══██╗██╔══██╗
+██║     ███████║██████╔╝██║  ██║
+██║     ██╔══██║██╔══██╗██║  ██║
+╚██████╗██║  ██║██║  ██║██████╔╝
+ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝
+]]
+local tCard = {};
+InjectEnv("Card", tCard);
+
+
+--[[
+██████╗███████╗ ██████╗
+██╔════╝██╔════╝██╔════╝
+██║     █████╗  ██║  ███╗
+██║     ██╔══╝  ██║   ██║
+╚██████╗██║     ╚██████╔╝
+╚═════╝╚═╝      ╚═════╝
+]]
+--user CFG table. It gets swapped on game load
+local _tCFG         = {};
+local _tCFGDecoy    = {};
+local _tCFGMeta     = {
+    __index = function(t, k)
+        return _tCFG[k];
+    end,
+    __newindex = function(t, k, v)
+        error("Attempt to write to read-only user Config table.");
+    end
+};
+setmetatable(_tCFGDecoy, _tCFGMeta);
+tEnv.CFG = _tCFGDecoy;
 
 
 --[[
@@ -180,10 +197,23 @@ InjectEnv("Drawing",{
 ██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
 ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 ]]
-InjectEnv("Forge", {});
+local tForge        = {};
+local tForgeKeys    = {};
+InjectEnv("Forge", {
+    DrawImage       = Forge.DrawImage,
+    DrawText        = Forge.DrawText,
+    DrawStyledText  = Forge.DrawStyledText,
+});
 
 
-
+--[[
+██████╗ ███████╗ ██████╗ ███╗   ███╗███████╗████████╗██████╗ ██╗   ██╗
+██╔════╝ ██╔════╝██╔═══██╗████╗ ████║██╔════╝╚══██╔══╝██╔══██╗╚██╗ ██╔╝
+██║  ███╗█████╗  ██║   ██║██╔████╔██║█████╗     ██║   ██████╔╝ ╚████╔╝
+██║   ██║██╔══╝  ██║   ██║██║╚██╔╝██║██╔══╝     ██║   ██╔══██╗  ╚██╔╝
+╚██████╔╝███████╗╚██████╔╝██║ ╚═╝ ██║███████╗   ██║   ██║  ██║   ██║
+╚═════╝ ╚══════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝
+]]
 InjectEnv("geometry", {
     fitrect             = math.geometry.fitrect,
     rectcontains        = math.geometry.rectcontains,
@@ -256,7 +286,9 @@ InjectEnv("Math", {
 ██║     ██║  ██║╚██████╔╝╚██████╗███████║   ██║   ███████║
 ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝   ╚═╝   ╚══════╝
 ]]
-InjectEnv("ProcSys", {});
+local tProcSys      = {};
+local tProcSysKeys  = {};
+InjectEnv("ProcSys", tProcSys);
 
 
 --[[
@@ -351,7 +383,9 @@ InjectEnv("table", {
 ╚██████╔╝███████║███████╗██║  ██║
  ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝
 ]]
-InjectEnv("User", {});
+local tUser     = {};
+local tUserKeys = {}; --tracks keys since user can inject into the base table.
+InjectEnv("Session", tUser);
 
 --[[
 ██╗   ██╗███████╗ ██████╗████████╗ ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗    ██╗██╗███╗   ██╗ ██████╗
@@ -370,12 +404,6 @@ InjectEnv("VectorDrawing", {
     StrokePath = VectorDrawing.StrokePath,
 });
 
---CFG              = {},--TODO REMOVE/REVISE -- MOST LIKELY MOVE TO PROCSYS
-
-
-
--- (tCFGDecoy is writable; include it only if you want to list CFG.* commands)
---tEnvBacking[tCFGDecoy]          = tCFG
 
 --[[
 ███████╗██╗   ██╗███╗   ██╗ ██████╗████████╗██╗ ██████╗ ███╗   ██╗███████╗
@@ -454,27 +482,14 @@ local tUserEnv = {
     end,
     --expects new CFG to have brought in through the user env
     UpdateCFG = function(tInput)
+        _tCFG = {};
 
         if (rawtype(tInput) == "table") then
-
-            --delete the existing keys
-            for sKey in pairs(tCFG) do
-                tCFG[sKey] = nil;
-            end
-
-            --import the new keys
-            for sIndex, vItem in pairs(tInput) do
-
-                if (rawtype(sIndex) == "string") then
-                    tCFG[sIndex] = vItem;
-                end
-
-            end
-
+            local _tCFG = table.shadowreadonly(tInput);
         end
 
     end,
-    UpdateForge = function(tInput)
+    --[[UpdateForge = function(tInput)
 
         if (rawtype(tInput) == "table") then
 
@@ -494,8 +509,31 @@ local tUserEnv = {
 
         end
 
+    end,]]
+    ForgeUpdateRoot = function(tInput)
+
+        if (rawtype(tInput) == "table") then
+
+            --delete the previous user keys from the env
+            for sKey in pairs(tForgeKeys) do
+                tEnv[sKey] = nil;
+            end
+
+            tForgeKeys = {}; --clear the keys
+
+            --import (and record) the new keys
+            for sIndex, vItem in pairs(tInput) do
+
+                if (rawtype(sIndex) == "string") then
+                    tForgeKeys[sIndex]    = true;
+                    tEnv[sIndex]          = vItem;
+                end
+
+            end
+
+        end
     end,
-    UpdateProcSys = function(tInput)
+    UpdateProcSysOLD = function(tInput)
 
         if (rawtype(tInput) == "table") then
 
@@ -516,26 +554,74 @@ local tUserEnv = {
         end
 
     end,
-    UpdateUser = function() --TODO BUG update this to use prot env when able : the user table will get input thourgh foge constructor, then run through the safe env filter, then iterated over and dumped into main env table (error on overwriteing ofc.)
-        local tInput = GetUserEnv();
+    ProcSysUpdateRoot = function(tInput)
 
         if (rawtype(tInput) == "table") then
 
-            --delete the existing keys
-            --for sKey in pairs(tEnv) do
-                --tUser[sKey] = nil;
-            --end
+            --delete the previous user keys from the env
+            for sKey in pairs(tProcSysKeys) do
+                tEnv[sKey] = nil;
+            end
 
-            --import the new keys
+            tProcSysKeys = {}; --clear the keys
+
+            --import (and record) the new keys
             for sIndex, vItem in pairs(tInput) do
 
                 if (rawtype(sIndex) == "string") then
-                    tEnv[sIndex] = vItem;
+                    tProcSysKeys[sIndex]    = true;
+                    tEnv[sIndex]            = vItem;
                 end
 
             end
 
         end
+    end,    
+    UserUpdateRoot = function(tInput) --TODO BUG update this to use protected env when able : the user table will get input thourgh forge constructor, then run through the safe env filter, then iterated over and dumped into main env table (error on overwriteing ofc.)
+        --local tInput = --GetUserEnv();
+
+        if (rawtype(tInput) == "table") then
+
+            --delete the previous user keys from the env
+            for sKey in pairs(tUserKeys) do
+                tEnv[sKey] = nil;
+            end
+
+            tUserKeys = {}; --clear the user keys
+
+            --import (and record) the new keys
+            for sIndex, vItem in pairs(tInput) do
+
+                if (rawtype(sIndex) == "string") then
+                    tUserKeys[sIndex]   = true;
+                    tEnv[sIndex]        = vItem;
+                end
+
+            end
+
+        end
+    end,
+    --UpdateGame
+    UpdateCardSet = function(tInput)
+
+        if (rawtype(tInput) == "table") then
+
+            --delete the existing keys
+            for sKey in pairs(tCard) do
+                tCard[sKey] = nil;
+            end
+
+            --import the new keys
+            for sIndex, vItem in pairs(tInput) do
+
+                if (rawtype(sIndex) == "string") then
+                    tCard[sIndex] = vItem;
+                end
+
+            end
+
+        end
+
     end,
 };
 local tUserEnvDecoy = {};
