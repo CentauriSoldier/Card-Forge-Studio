@@ -1997,7 +1997,7 @@ end</Script>
 <VisibleAtDesignTime>1</VisibleAtDesignTime>
 <VisibleAtRunTime>1</VisibleAtRunTime>
 <Locked>0</Locked>
-<Enabled>0</Enabled>
+<Enabled>1</Enabled>
 <ToolTip/>
 <Cursor>0</Cursor>
 <Group>0</Group>

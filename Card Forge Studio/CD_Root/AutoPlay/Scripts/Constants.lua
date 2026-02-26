@@ -21,7 +21,8 @@ constant("FORGE_REDRAW_SIZING_INTERVAL",    300);
 
 constant("PROCSYS_FILE_SYNC_TIMER_ID",        101);
 constant("PROCSYS_FILE_SYNC_TIMER_INTERVAL",  1500);
-
+constant("PROCSYS_TO_TABLE", 1);
+constant("PROCSYS_TO_NUMBER", 2);
 
 local function BuildFilerTable(sName, sExt)
     local tActual   = {

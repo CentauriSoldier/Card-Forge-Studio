@@ -35,7 +35,7 @@ local _nFileSyncTimerInterval   = PROCSYS_FILE_SYNC_TIMER_INTERVAL;
 --stored after loading a card set
 local _nCardWidth = 0;
 local _nCardHeight = 0;
-
+local _sCardSetName = "";
 --[[TODO USE TO SET UP PROC ENV LEFT OFF HERE
 
 --get the proc's draw method
@@ -93,7 +93,7 @@ end
         <li>DATA_VIEW – Final data viewer pane.</li>
     </ul>
 !]]
-enum("PANE", {"DATA_EDIT", "DATA_VIEW"});
+enum("PANE", {"MAIN", "DATA_EDIT", "DATA_VIEW"});
 
 --local _nCurrentRow          = 0;
 --local _nCurrentColumn       = 0;
@@ -123,7 +123,7 @@ constant("GRID_FINAL",  _sFinalDataGrid);
         </ul>
 !]]
 --local function TryDrawCard(cProc, nRow, tRow)
-local function TryDrawCard(tRow, _nCardWidth, _nCardHeight)
+local function TryDrawCard(tRow)
 
     --if (cProc and type(cProc.DrawCard) == "function" and nRow > 0) then
 
@@ -134,61 +134,19 @@ local function TryDrawCard(tRow, _nCardWidth, _nCardHeight)
             --local bExport = MainMenu.IsChecked("Options:>Draw:>Export Selected Card") and rawtype(fExport) == "function"; --TODO FINISH use new/custom exporter system BUT dnot here...do not draw for every export, simply export
 
             --tell Forge to draw (and possibly export) the card
-            Forge.DrawCard(tRow, _nCardWidth, _nCardHeight, bExport, fExport);
+            Forge.DrawCard(tRow, bExport, fExport);
         end
 
     --end
 
 end
 
-
-
-local function BuildCellProc(nRow, nColumn, sColumn, tRow, sCellText, fGetFinalValue)
-    --get the proc's draw method
-    local oCardSet = _oActiveCardSet;
-
-    if (type(oCardSet) == "CardSet") then
-        --get the chunk from the active card set
-        local sDrawChunk = oCardSet.GetCallCode("CellProc");
-
-        --the error message in case things go south
-        local sCardSetName  = oCardSet.GetName();
-        local sChunkName    = sCardSetName.." CellProc";
-
-        --get and modify the user env
-        local wUser = UserEnv.Get();
-
-        -- injected context
-        wUser.nRow              = nRow;
-        wUser.nColumn           = nColumn;
-        wUser.sColumn           = sColumn;
-        wUser.tRow              = tRow;
-        wUser.sCellText         = sCellText;
-        wUser.GetFinalValue     = fGetFinalValue;
-        wUser.pGame             = FS.Game; --TODO GENERALIZE GETTING THESE...??
-        wUser.pCardSet          = oCardSet.GetPath();
-        wUser.pSymbols          = FS.Symbols;
-        --wUser.pDocs         = FS.Docs;
-
-        --try to load the chuck
-        --p(type(sDrawChunk), type(sChunkName), type(wUser))
-        local fChunk, sError = load(sDrawChunk, sChunkName, "t", wUser);
-        if not (fChunk) then
-            error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
-        end
-
-        --try to call the chunk
-        local bOk, vReturnOrError = pcall(fChunk);
-
-        if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
-            p(vReturnOrError)
-            --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
-        end
-
-        fSetOnImageDraw = vReturnOrError--(this, tRow, nWidth, nHeight);
-    end
-
+--may be used by the proc's cell processor to get final values
+local _nFinalValueRow = -1; --TODO QUESTION is the ever used?
+local function GetFinalValue(sColumn)
+    return Grid.GetCellText(_sFinalDataGrid, _nFinalValueRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
 end
+
 
 
 
@@ -325,53 +283,59 @@ end
         </ul>
 !]]
 local function ProcessCell(nRow, nColumn) --TODO LEFT OFF HERE 1
-    local cProc     = ProcSys.GetProc(nRow, _sBaseDataGrid);
-    local sNewText  = Grid.GetCellText(_sBaseDataGrid, nRow, nColumn);
-    local sProcText = sNewText;
-    local tBaseRow  = Grid.GetRow(_sBaseDataGrid, nRow);
+    local sColumn       = Grid.GetCellText(_sBaseDataGrid, 0, nColumn);
+    local sText         = Grid.GetCellText(_sBaseDataGrid, nRow, nColumn);
+    local sProcChunk    = _oActiveCardSet.GetCallCode("CellProc");
 
-    --TODO REDO THIS ENTIRE PROC SYSTEM WITH THE NEW ONE
+    --the error message in case things go south
+    local sChunkName = _sCardSetName.." CellProc";
+
+    --try to load the chuck
+    local fChunk, sError = load(sProcChunk, sChunkName, "t", UserEnv.Get());
+    if not (fChunk) then
+        error("Error loading CellProc file for CardSet ".._sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
+    end
+
+    --try to call the chunk
+    local bOk, vReturnOrError = pcall(fChunk);
+
+    if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
+        p("ERror 538 - ProcSys: "..vReturnOrError)
+        --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
+    end
+
+    local function fGetFinalValue(sColumn, vCoerce)
+        local vRet = Grid.GetCellText(_sFinalDataGrid, nRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
+        local nCoerce = rawtype(vCoerce) == "number" and vCoerce or nil;
+
+        if (nCoerce == PROCSYS_TO_NUMBER) then
+            local vRetCollapsed = vRet:collapse();
+            vRet = tonumber(vRetCollapsed) or vRet; --TODO QUESTION SHOULD THIS FAIL with error msg INSTEAD???
+        --elseif (nCoerce == PROCSYS_TO_TABLE) then TODO
+
+        end
+
+        return vRet;
+    end
+
+    local fCellProc = vReturnOrError;
+    local vProcRet  = fCellProc(nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
 
 
-
-    --nRow, nColumn, sColumn, tRow, sText, fGetFinalValue
+    if (vProcRet) then
+        ---update the cell's text
+        Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, vProcRet);
+    else
+        Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, sText);
+    end
 
     --TODO Also, be sure to add function to the env that indicates if a given column as been processed (basically if Column_A.index Column_< B.index)
 
-
-
-    --try to call the row's custom cell processor
-    if (cProc and class.haspublicmember(cProc, "ProcessCell")) then
-        local sColumn = Grid.GetCellText(_sBaseDataGrid, 0, nColumn);
-
-        --may be used by the proc's cell processor to get final values
-        local function GetFinalValue(sColumn)
-            return Grid.GetCellText(_sFinalDataGrid, nRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
-        end
-
-        UserEnv.ProcSysUpdateRoot {
-            --Count     =  TODO
-            _fGetFinalValue = GetFinalValue,
-            _nCardWidth     = _nCardWidth,
-            _nCardHeight    = _nCardHeight,
-            _tRow           = tBaseRow,
-            _nRow           = nRow,
-            _nColumn        = nColumn,
-            _sColumn        = sColumn,
-            _sNewText       = sNewText,
-        };
-        
-        --TODO run cellproc here in safe env
-        sProcText = cProc.ProcessCell(nRow, nColumn, sColumn, tBaseRow, sNewText, GetFinalValue) or sNewText;
-    end
-
-    ---update the cell's text
-    Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, sProcText);
     --get the row after modifications
     local tFinalRow = Grid.GetRow(_sFinalDataGrid, nRow);
 
     --send back info for the card redraw attempt
-    return cProc, tFinalRow;
+    return tFinalRow;
 end
 
 
@@ -586,36 +550,10 @@ return class("ProcSys",
         --[[CreateImagePath = function(sName, sMime)
             return _pCards.."\\"..sName..'.'..sMime:gsub('%.', '');
         end,]]
-        GetActiveCardSet = function()
+        GetActiveCardSet = function() --TODO QUESTION IS THIS EVER USED???
             return _oActiveCardSet;
         end,
---[[
-        GetImagePath = function(nRow) --TODO ERROR WRONG...ambiguous,...what image? WHYA R ETHERE TWO OF THESE METHODS
-            local sRet;
-            local tRow = Grid.GetRow(_sFinalDataGrid, nRow, true);
 
-            if (#tRow > 0) then
-                local cProc = ResolveProc() or nil;
-
-                if (cProc) then
-                    sRet = cProc.ImagePath.."\\"..cProc.ImagePrefix..sCardName..".png";
-                end
-
-            end
-
-            return sRet;
-        end,
-        GetImagePath = function(nRow)
-            local vRet;
-            local tRow = Grid.GetRow(sGrid, nRow);
-
-            if (#tRow > 0 and tRow.Family and tRow.Class and tRow.Type and tRow.Name) then
-                vRet = ProcSys.CreateImagePath(tRow.Family, tRow.Class, tRow.Type, tRow.Name, "png"); --TODO FIX HARD-CODED MINES IN THIS MODULE
-            end
-
-            return vRet;
-        end,
-]]
 
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.GetProc
@@ -640,45 +578,6 @@ return class("ProcSys",
             return cRet;
         end,
 
-        GetCellProc = function()--TODO LEFT OFF HERE 2
-            --get the chunk from the active card set
-            local sDrawChunk = oCardSet.GetCallCode("CellProc");
-
-            --the error message in case things go south
-            local sCardSetName  = oCardSet.GetName();
-            local sChunkName    = sCardSetName.." Draw";
-
-            --get and modify the user env
-            local wUser = UserEnv.Get();
-
-            -- injected context
-            wUser.tRow          = tRow;
-            wUser.nCardWidth    = nWidth;
-            wUser.nCardHeight   = nHeight;
-            wUser.pGame         = FS.Game;
-            wUser.pSymbols      = FS.Symbols;
-            --wUser.pDocs         = FS.Docs;
-            wUser.pCardSet      = oCardSet.GetPath();
-            wUser.bDrawBorder   = MainMenu.IsChecked("Options:>Draw:>Border Enabled");
-            wUser.bDrawOverlay  = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled");
-
-            --try to load the chuck
-            --p(type(sDrawChunk), type(sChunkName), type(wUser))
-            local fChunk, sError = load(sDrawChunk, sChunkName, "t", wUser);
-            if not (fChunk) then
-                error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
-            end
-
-            --try to call the chunk
-            local bOk, vReturnOrError = pcall(fChunk);
-
-            if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
-                --p(vReturnOrError) --TODO this is trowning en error to do with an upvalue....
-                --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
-            end
-
-            fSetOnImageDraw = vReturnOrError--(this, tRow, nWidth, nHeight);
-        end,
 
         --[[! TODO FIX REDO
             @fqxn CFS.Classes.ProcSys.Methods.GetSetName
@@ -714,8 +613,15 @@ return class("ProcSys",
             _pActiveCSV     = "";
             _bAllowSave     = false;
             _oActiveCardSet = oCardSet;
+            _sCardSetName   = oCardSet.GetName();
             _nCardWidth     = oCardSet.GetCardWidth();
             _nCardHeight    = oCardSet.GetCardHeight();
+
+            UserEnv.ProcSysUpdateRoot {
+                --Count     =  TODO
+                _nCardWidth     = _nCardWidth,
+                _nCardHeight    = _nCardHeight,
+            };
 
             --disable the save system
             MainMenu.SetEnabled("Set:>Save", false);
@@ -779,7 +685,7 @@ return class("ProcSys",
                     local tRow = Grid.GetRow(_sBaseDataGrid, nRow);
                     local cProc = ProcSys.GetProc(nRow);
 
-                    if (type(cProc) == "class" and class.haspublicmember(cProc, "ImagePath")) then --TODO get the image path from somewhere else now...
+                    if (type(cProc) == "class" and class.haspublicmember(cProc, "ImagePath")) then --TODO BUG FIX get the image path from somewhere else now...
                         local pOld = cProc.ImagePath.."\\"..sOldText..'.png';
                         local pNew = cProc.ImagePath.."\\"..sNewText..'.png';
 
@@ -794,11 +700,16 @@ return class("ProcSys",
                 end
 
             end
-            --TODO FINISH ADD CRC CHECK FRO ACTIVE DATA FILE and OFFER RELOAD ON DIFF
+
             if (bProcess) then
                 --process the cell change
                 PrepUpdateGrids();
-                --local cProc, tRow = ProcessCell(nRow, nColumn);
+
+                local tRow = ProcessCell(nRow, nColumn);
+                UserEnv.ProcSysUpdateRoot {
+                    _tRow = tRow;
+                };
+
                 UpdateGrids();
 
                 --update saveability
@@ -807,8 +718,7 @@ return class("ProcSys",
 
                 --update the draw call
                 if (MainMenu.IsChecked("Options:>Draw:>Redraw On Cell Changed")) then
-                    --TryDrawCard(cProc, nRow, tRow);
-                    TryDrawCard(tRow, _nCardWidth, _nCardHeight);
+                    TryDrawCard(tRow);
                 end
 
             end
@@ -826,7 +736,7 @@ return class("ProcSys",
                     Application.Exit(0);
                 elseif (nYesNoCancel == IDYES) then
                     ProcSys.SaveCSVs();
-                    Application.Sleep(2000);
+                    Application.Sleep(1500);
                     Application.Exit(0);
                 end
 
@@ -966,6 +876,22 @@ return class("ProcSys",
                 RestoreWindow(tWindows[PANE.DATA_VIEW].WindowHandle);
 
                 bWindowsBuilt = true;
+
+                UserEnv.ProcSysUpdateRoot ({
+                    _TABLE          = PROCSYS_TO_TABLE,
+                    _NUMBER         = PROCSYS_TO_NUMBER,
+                    _bDrawBorder    = MainMenu.IsChecked("Options:>Draw:>Border Enabled"),
+                    _bDrawOverlay   = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled"),
+                }, true);
+            end
+
+            --load last card set if present
+            local sLastCardSetUUID  = INIFile.GetValue(FS.Info, "SESSION", "LastSet");
+            local oGame             = Game.GetActive();
+            local oLastCardSet      = oGame.GetCardSet(sLastCardSetUUID);
+
+            if (type(oLastCardSet) == "CardSet") then
+                ProcSys.LoadCardSet(oLastCardSet);
             end
 
         end,
@@ -1008,12 +934,13 @@ return class("ProcSys",
             --update the card env subtable
 
 
-            local cProc = ProcSys.GetProc(nRow);
+            --local cProc = ProcSys.GetProc(nRow);
 
             --update the current selection
             _nCurrentRow    = nRow;
             _nCurrentColumn = nColumn;
 
+            --THIS IS the special column proc section
             --TODO FINISH REMOVE THIS--this should not check if this column is a LuaEditor columns (in the Set ini file) and run the editor on it if so.
             if (cProc and class.haspublicmember(cProc, "OnSelectionChanged")) then
                 local tBaseRow      = Grid.GetRow(_sBaseDataGrid, nRow);
@@ -1032,10 +959,12 @@ return class("ProcSys",
             --try to draw the card
             if (_nLastRow ~= nRow) then
                 --TryDrawCard(cProc, nRow, tRow);
-                TryDrawCard(tRow, _nCardWidth, _nCardHeight);
+
                 --local sProfile = ELProfiler.stop();
                 --TextFile.WriteFromString(_ExeFolder.."\\profile.txt", ELProfiler.format(sProfile))
                 _nLastRow = nRow;
+                UserEnv.ProcSysUpdateRoot {_tRow = tRow};
+                TryDrawCard(tRow);
             end
             --ELProfiler.format()
         end,
@@ -1059,10 +988,10 @@ return class("ProcSys",
             end
 
             --redraw the card
-            local cProc = ProcSys.GetProc(nRow);
+            --local cProc = ProcSys.GetProc(nRow);
             local tRow  = Grid.GetRow(_sFinalDataGrid, nRow);
             --TryDrawCard(cProc, nRow, tRow);
-            TryDrawCard(tRow, _nCardWidth, _nCardHeight);
+            TryDrawCard(tRow);
         end,
 
         --TODO put in examplke and show the args for the callback
@@ -1078,7 +1007,7 @@ return class("ProcSys",
                     <li>Exporter function contract is user-defined.</li>
                 </ul>
         !]]
-        RegisterExporter = function(pFile, fExport)
+        --[[RegisterExporter = function(pFile, fExport)
 
             if not (File.DoesExist(pFile)) then
                 error("BAD THINGS HERE", 2);--TODO THROW ERROR
@@ -1093,7 +1022,7 @@ return class("ProcSys",
             end
 
         end,
-
+]]
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.SaveCSVs
             @desc Saves the active CSV when saving is allowed.
@@ -1114,7 +1043,7 @@ return class("ProcSys",
         end,
 
 
-        SaveDraft = function(sID, sCode)--TODO FIX and FINISH
+        --[[SaveDraft = function(sID, sCode)--TODO FIX and FINISH
             local wEnv = setmetatable({
                 sID     = sID,
                 string  = string,
@@ -1140,21 +1069,21 @@ return class("ProcSys",
                 TextFile.WriteFromString(_pDrafts, serialize(tDrafts), false);
             end
 
-        end,
+        end,]]
 
 
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.PrepActiveGame
             @desc Ensures the exporter and processor registries exist for the active game.
         !]]
-        PrepActiveGame = function()
+        --[[PrepActiveGame = function()
             --ensure the processor and exporter tables exist for the current game and clear them
             _tExporters[_sGame]         = {};
              _tProcResolvers[_sGame]    = nil;
-        end,
+        end,]]
 
 
-        SetIsValid = function(pFolder)
+        --[[SetIsValid = function(pFolder)
             local function CheckFile(sFile)
                 return File.DoesExist((pFolder.."\\"..sFile):gsub("\\\\", "\\"));
             end
@@ -1170,7 +1099,7 @@ return class("ProcSys",
 
             local pSetID = bFilesAreValid and Path.GetEndFolder(pFolder) or "NO_SET_FOUND";
             return bFilesAreValid, pSetID;
-        end,
+        end,]]
 
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.SetWindowVisible

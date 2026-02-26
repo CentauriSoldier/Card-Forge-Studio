@@ -81,7 +81,7 @@ function Grid.GetRow(sGrid, nRow)
 
             return sRet;
         end,
-        __newindex = function() error("Cannot write to read-only row table for grid \""..sGrid.."\" at row "..nRow..".") end,
+        __newindex = function() error("Cannot write to read-only row table for grid \""..sGrid.."\" at row index "..nRow..".") end,
         __pairs = function(t)
             local nIndex = 0;
             local nMax   = #tByColumnID;

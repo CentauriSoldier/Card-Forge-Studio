@@ -1,9 +1,11 @@
 local sImportError = "Error importing file: ";
 
 -- Sanitizes a relative import path and resolves it to a Windows path.
-function SanitizePath(sRelPath)
+function SanitizePath(sRelPath, vMessage)
+    local sMessage = rawtype(vMessage) == "string" and vMessage or "";
+
     if type(sRelPath) ~= "string" or sRelPath == "" then
-        error(sImportError.."Import path must be a non-empty string.", 2);
+        error(sImportError.."Import path must be a non-empty string.\r\n"..sMessage, 2);
     end
 
     -- Normalize user input to forward slashes first;
@@ -12,53 +14,61 @@ function SanitizePath(sRelPath)
 
     -- Disallow absolute paths (/, \\ -> /, and C:\ -> C:/);
     if (sPath:match("^/") or sPath:match("^%a:/")) then
-        error(sImportError.."Absolute paths are not allowed.", 2);
+        error(sImportError.."Absolute paths are not allowed.\r\n"..sMessage, 2);
     end
 
     -- Disallow traversal;
     if (sPath:match("(^|/)%.%.(/|$)")) then
-        error(sImportError.."Path traversal is not allowed.", 2);
+        error(sImportError.."Path traversal is not allowed.\r\n"..sMessage, 2);
     end
 
     -- Disallow dot segments (./);
     if (sPath:match("(^|/)%.(/|$)")) then
-        error(sImportError.."Dot path segments are not allowed.", 2);
-    end
-
-    -- Disallow control chars;
-    if (sPath:match("[%z\r\n]")) then
-        error(sImportError.."Invalid characters in path.", 2);
+        error(sImportError.."Dot path segments are not allowed.\r\n"..sMessage, 2);
     end
 
     -- Disallow empty / directory paths;
     if (sPath == "" or sPath:match("/$")) then
-        error(sImportError.."Import path must point to a file.", 2);
+        error(sImportError.."Import path must point to a file.\r\n"..sMessage, 2);
     end
 
-    -- Disallow unsupported characters (tighten as needed);
-    -- Allows: letters/numbers/_ . - / and spaces;
-    if (sPath:match("[^%w%._%-%/ ]")) then
-        error(sImportError.."Import path contains unsupported characters.", 2);
+    -- Disallow Windows-invalid filename characters;
+    if (sPath:match('[<>:"|%?%*%c]')) then
+        error(sImportError.."Import path contains invalid filename characters.\r\n"..sMessage, 2);
     end
 
-    -- Disallow Windows reserved device names in the leaf filename;
-    local sLeaf = sPath:match("([^/]+)$")   or "";
-    local sDev  = sLeaf:match("^([^%.]+)")  or "";
-    sDev        = sDev:upper();
+    -- Validate leaf filename (Windows rules)
+    local sLeaf = sPath:match("([^/]+)$") or ""
 
-    if (sDev:match("^(CON|PRN|AUX|NUL)$") or sDev:match("^COM[1-9]$") or sDev:match("^LPT[1-9]$")) then
-        error(sImportError.."Reserved device names are not allowed in import paths.", 2);
+    -- Disallow trailing dot or space (Windows quirk)
+    if (sLeaf:match("[ %.]+$")) then
+        error(sImportError.."Import filename cannot end with a space or dot.\r\n"..sMessage, 2);
+    end
+
+    -- Disallow Windows reserved device names (leaf, before extension)
+    local sDev = (sLeaf:match("^([^%.]+)") or ""):upper();
+
+    if (
+        sDev == "CON" or
+        sDev == "PRN" or
+        sDev == "AUX" or
+        sDev == "NUL" or
+        sDev:match("^COM%d+$") or
+        sDev:match("^LPT%d+$")
+    ) then
+        error(sImportError.."Reserved device names are not allowed in import paths.\r\n"..sMessage, 2);
     end
 
     return sPath:gsub("/", "\\");   -- convert to Windows;
 end
 
-local function Import(sPathRaw)
-    local sPath = SanitizePath(sPathRaw);
+local function Import(sPathRaw, vMessage)
+    local sMessage = rawtype(vMessage) == "string" and vMessage or "";
+    local sPath = SanitizePath(sPathRaw, sMessage);
     local pFile = (FS.Game.."\\"..sPath):gsub("\\+", "\\");
 
     if not (File.DoesExist(pFile)) then
-        error(sImportError.."File does not exist at \""..sPath..'."', 2);
+        error(sImportError.."File does not exist at \""..sPath.."\".\r\n"..sMessage, 2);
     end
 
     local sCode = TextFile.ReadToString(pFile);

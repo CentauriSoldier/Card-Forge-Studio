@@ -21,6 +21,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
    type             = rawtype,
    --
    p                = p,
+   print            = p,
    ---
    serialize        = serialize,
    deserialize      = deserialize,
@@ -46,20 +47,24 @@ local function InjectEnv(sName, tActual)
 
     local tDecoy = {};
 
-    -- 1) Map decoy -> actual (for command listing)
+    -- map decoy -> actual (for command listing)
     tEnvBacking[tDecoy] = tActual;
 
-    -- 2) Apply read-only decoy metatable
-    setmetatable(tDecoy, {
+    -- create meta
+    local tMeta = {
         __index = tActual,
         __newindex = function()
             error("Attempt to write to read-only '" .. sName .. "'.", 2);
         end,
-        __metatable = false,
-    })
+        --__metatable = false,
+    }
+
+    -- apply read-only decoy metatable
+    setmetatable(tDecoy, tMeta);
 
     -- 3) Inject into env
     tEnv[sName] = tDecoy;
+    return tDecoy, tMeta;
 end
 
 
@@ -118,7 +123,7 @@ InjectEnv("Color", {
  ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝
 ]]
 local tCard = {};
-InjectEnv("Card", tCard);
+InjectEnv("Card", tCard); ---QUESTION DID PROCSYS REPLACE THIS?
 
 
 --[[
@@ -130,8 +135,9 @@ InjectEnv("Card", tCard);
 ╚═════╝╚═╝      ╚═════╝
 ]]
 --user CFG table. It gets swapped on game load
-local _tCFG         = {};
-local _tCFGDecoy    = {};
+local _tCFG = {};
+local _tCFGDecoy, _tCFGMeta = InjectEnv("CFG", _tCFG);
+--[[local _tCFGDecoy    = {};
 local _tCFGMeta     = {
     __index = function(t, k)
         return _tCFG[k];
@@ -141,7 +147,7 @@ local _tCFGMeta     = {
     end
 };
 setmetatable(_tCFGDecoy, _tCFGMeta);
-tEnv.CFG = _tCFGDecoy;
+tEnv.CFG = _tCFGDecoy;]]
 
 
 --[[
@@ -477,7 +483,7 @@ local tUserEnv = {
         end
 
         Walk(tRoot, nil)
-        table.sort(tOut)
+        table.sort(tOut, function(a, b) return a:lower() < b:lower() end)
         return tOut
     end,
     --expects new CFG to have brought in through the user env
@@ -485,8 +491,10 @@ local tUserEnv = {
         _tCFG = {};
 
         if (rawtype(tInput) == "table") then
-            local _tCFG = table.shadowreadonly(tInput);
+            _tCFG = tInput--table.shadowreadonly(tInput);
         end
+
+        _tCFGMeta.__index = _tCFG;
 
     end,
     --[[UpdateForge = function(tInput)
@@ -510,7 +518,7 @@ local tUserEnv = {
         end
 
     end,]]
-    ForgeUpdateRoot = function(tInput)
+    --[[ForgeUpdateRoot = function(tInput)
 
         if (rawtype(tInput) == "table") then
 
@@ -553,17 +561,19 @@ local tUserEnv = {
 
         end
 
-    end,
-    ProcSysUpdateRoot = function(tInput)
+    end,]]
+    ProcSysUpdateRoot = function(tInput, bPurge) --permits additions/replacement to/of existing keys or a full purge, then new items added
 
         if (rawtype(tInput) == "table") then
 
-            --delete the previous user keys from the env
-            for sKey in pairs(tProcSysKeys) do
-                tEnv[sKey] = nil;
-            end
+            if (bPurge) then
+                --delete the previous user keys from the env
+                for sKey in pairs(tProcSysKeys) do
+                    tEnv[sKey] = nil;
+                end
 
-            tProcSysKeys = {}; --clear the keys
+                tProcSysKeys = {}; --clear the keys
+            end
 
             --import (and record) the new keys
             for sIndex, vItem in pairs(tInput) do
@@ -576,7 +586,7 @@ local tUserEnv = {
             end
 
         end
-    end,    
+    end,
     UserUpdateRoot = function(tInput) --TODO BUG update this to use protected env when able : the user table will get input thourgh forge constructor, then run through the safe env filter, then iterated over and dumped into main env table (error on overwriteing ofc.)
         --local tInput = --GetUserEnv();
 
@@ -602,7 +612,7 @@ local tUserEnv = {
         end
     end,
     --UpdateGame
-    UpdateCardSet = function(tInput)
+    --[[UpdateCardSet = function(tInput)
 
         if (rawtype(tInput) == "table") then
 
@@ -622,7 +632,7 @@ local tUserEnv = {
 
         end
 
-    end,
+    end,]]
 };
 local tUserEnvDecoy = {};
 local tUserEnvMeta  = {

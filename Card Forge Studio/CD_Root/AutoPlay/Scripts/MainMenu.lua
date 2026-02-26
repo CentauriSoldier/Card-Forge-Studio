@@ -106,7 +106,8 @@ local sOE  = "Overlay Enabled";
 local sBE  = "Border Enabled";
 local sESC = "Export Selected Card";
 local sRCC = "Redraw On Cell Changed";
-
+--; UserEnv.ProcSysUpdateRoot {_bDrawOverlay = -tItem.IsChecked};
+--; UserEnv.ProcSysUpdateRoot {_bDrawOverlay = -tItem.IsChecked};
 TheMenu.Add(sOD,                 _nIconID,       _bEnabled,    -_bChecked,                      -_bCheckable,    _tNoCallbacks).
         Add(sOD.._sSub..sHRE,    _nIconID,       _bEnabled,     LoadB(sHRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHRE:collapse(), -tItem.IsChecked) end}).
         Add(sOD.._sSub..sVRE,    _nIconID,       _bEnabled,     LoadB(sVRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVRE:collapse(), -tItem.IsChecked) end}).
@@ -251,10 +252,8 @@ tSupport = {
             TheMenu.SetEnabled(sWindow.."Style Editor",     true);
             TheMenu.SetEnabled(sWindow.."Mechanics Viewer", true);
 
-
             tSupport.RereshSetsList();
             --TheMenu.Refresh();
-
         end
 
     end,

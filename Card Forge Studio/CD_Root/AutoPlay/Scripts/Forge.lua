@@ -1,5 +1,5 @@
 
---[[tUserEnv.S = {}; --TODO MOVE THIS TO FORGE!!!!
+--[[tUserEnv.S = {}; --TODO INTEGRATE THIS INTO A FUNCTION!
 --local tStyles = INIFile.GetSectionNames(FS.Styles); --_TODO load this from forge, not from INI...too slow
 
 --if (tStyles) then
@@ -19,7 +19,7 @@
     end
 
 --end]]
-
+-------------------------------------------------------------------
 local class             = class;
 local math              = math;
 local rawtype           = rawtype;
@@ -42,29 +42,20 @@ local Drawing       = Drawing;
 local DrawingFont   = DrawingFont;
 local INIFile       = INIFile;
 
+local FontStyle   = require("Forge.FontStyle");
+-------------------------------------------------------------------
+
 local _nX                   = 0;
 local _nY                   = 0;
-local oWhite                = Color.RGBA(255, 255, 255, 255); --TODO Fix names!!! _
+local _oWhite               = Color.RGBA(255, 255, 255, 255); --TODO Fix names!!! _
 local _oBlack               = Color.RGBA(0, 0, 0, 255);
 local _oClear               = Color.RGBA(0, 0, 0, 0)
 local _nRulerColor          = Color.RGBA(240, 100, 100, 255); --TODO change these values from INI file
 local _nRulerBGColor        = Color.RGBA(255, 255, 255, 0)
-local _bForgeAutoSizing     = false;
-local _nPageWidth           = -1;
-local _nPageHeight          = -1;
 
-local _hWndCardVer;  --TODO FIX REMOVE THIS
 
-local _sCanvas = FORGE_CANVAS_NAME;
 
---redraw and file sync fields
-local _tLastRow;
-local _bRedrawRequested         = false;
-local _bIsResizing              = false;
-local _nTimeDelta               = 0;
-local _nSizingDelta             = FORGE_REDRAW_SIZING_INTERVAL;
-local _nRedrawTimerID           = FORGE_REDRAW_TIMER_ID;
-local _nRedrawTimerInterval     = FORGE_REDRAW_TIMER_INTERVAL;
+
 
 local _tHorRuler            = {--TODO static functions and variables io change these values
     Y           = 0,
@@ -88,54 +79,54 @@ local _tCenterLines = {
     Color       = Color.RGBA(50, 50, 255, 255),
 };
 
-local function sink() end
-
---[[
-local function IsCardVertical(tRow)
-    local sIsVertical = tRow.IsVertical;
-    local nIsVertical = sIsVertical and tonumber(sIsVertical) or 0;
-    nIsVertical       = (nIsVertical == 0 or nIsVertical == 1) and nIsVertical or 0;
-    return #nIsVertical;
-end]]
-
---TODO FIX FINISH  make images for each card type as needed! modify code to reflect this change
-
---TODO remove magic numbers...put in gobals as original size of card and MOVE TO FORGE.lua
-
-local FontStyle   = require("Forge.FontStyle");
 
 
-
+-------------------------------------------------------------------
+local _nPageWidth           = -1;
+local _nPageHeight          = -1;
+-------------------------------------------------------------------
 --set during Draw, used in DrawText, etc.
 local _Object       = null;
 local _D            = null;
 local _InternalDC   = null;
------------------------------------------------
-local _tStyle          = {};
+-------------------------------------------------------------------
+local _tStyles          = {};
 local _bAutoUpdateStyle = false;
------------------------------------------------
+-------------------------------------------------------------------
+local _sCanvas          = FORGE_CANVAS_NAME;
 local _bCanvasCreated   = false;
 local _nCanvasWidth     = 100;
 local _nCanvasHeight    = 100;
------------------------------------------------
+-------------------------------------------------------------------
 local _hImage           = null;
 local _nImageID         = null;
 local _hImageExport     = null;
 local _nImageExportID   = null;
 local _hImageUtil       = null;
 local _nImageUtilID     = null;
------------------------------------------------
+-------------------------------------------------------------------
 local _tImageCache      = {};
 local _tUserImageCache  = {};
------------------------------------------------
-_oActiveCardSet = false;
-_nCardWidth     = 100;
-_nCardHeight    = 100;
-_sCardSetName   = "";
+-------------------------------------------------------------------
+local _oActiveCardSet = false;
+local _nCardWidth     = 100;
+local _nCardHeight    = 100;
+local _sCardSetName   = "";
+-------------------------------------------------------------------
+--redraw and file sync fields
+local _tLastRow;
+local _bRedrawRequested         = false;
+local _bIsResizing              = false;
+local _bForgeAutoSizing     = false;
+local _nTimeDelta               = 0;
+local _nSizingDelta             = FORGE_REDRAW_SIZING_INTERVAL;
+local _nRedrawTimerID           = FORGE_REDRAW_TIMER_ID;
+local _nRedrawTimerInterval     = FORGE_REDRAW_TIMER_INTERVAL;
+-------------------------------------------------------------------
 
 --local Styles           = ""; --TODO FINISH STYLE NAMES MUST BE VARIABLE COMPLIANT
 
-
+local function sink() end
 
 
 local function ImageLoadError(sPath, sName, sMsg)
@@ -177,17 +168,17 @@ end
 
 
 local function CenterCardDisplay()
-    local tPos  = Window.GetPos(HWND_APP);
-    local tSize = Window.GetSize(HWND_APP);
+    --local tPos  = Window.GetPos(HWND_APP);
+    --local tSize = Window.GetSize(HWND_APP);
 
     --get the size of the canvas
     local tSize = Input.GetSize(_sCanvas);
     Input.SetPos(_sCanvas, (_nPageWidth - tSize.Width) / 2, (_nPageHeight - tSize.Height) / 2);
 end
 
-local function ClearToTransparent(nW, nH, D)
+local function ClearToTransparent(D)
     D.SetFilteringMode(DRAW_BLEND_ALLCHANNELS);
-    D.DrawRectangle(0, 0, nW, nH, Color.RGBA(0, 0, 0, 0));
+    D.DrawRectangle(0, 0, _nCardWidth, _nCardHeight, Color.RGBA(0, 0, 0, 0));
     D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
 end
 
@@ -202,12 +193,12 @@ local function CreateImage(hImage, nImageID)
         --create, check, and store the image handle
         hRet        = DrawingImage.New(_nCardWidth, _nCardHeight, BIT_DEPTH_32, DRAW_IMAGE_TRANSPARENT);
         sMessage    = sBaseError.." create image for canvas object, \"${canvas}\".";
-        assert(hImage, sMessage % {game = sName, canvas = _sCanvas}); --TODO REMOVE THE NAME OR GET THE NAME FROM GAME
+        assert(hRet, sMessage % {canvas = _sCanvas});
 
         --get, check, and store the image ID
-        nRet        = DrawingImage.GetID(hImage);
-        sMessage    = sBaseError.." get image ID for canvas object, \"${canvas}\".";
-        assert(nImageID, sMessage % {game = sName, canvas = _sCanvas});
+        nRet        = DrawingImage.GetID(hRet);
+        sMessage    = sBaseError.." get image ID for canvas object, \"${canvas}\" having image handle, ${handle}.";
+        assert(nRet, sMessage % {canvas = _sCanvas, handle = tostring(hRet) or "nil"});
     end
 
     return hRet, nRet;
@@ -247,7 +238,7 @@ local function DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC)
         if (nX > 0) then
             local sX = tostring(nX);
             local nTextWidth = D.GetTextWidth(sX);
-            _tStyle.RULER.Draw(sObject, D, hInternalDC, floor(this.CenterOnX(nX, nTextWidth)), floor(nTextY), sX);
+            _tStyles.RULER.Draw(sObject, D, hInternalDC, floor(Forge.CenterOnX(nX, nTextWidth)), floor(nTextY), sX);
         end
     end
 
@@ -265,7 +256,7 @@ DrawRulerVer = function(bDrawRulerHor, sObject, D, hInternalDC)
     local nYMax = _nCardHeight - 1;
 
     D.DrawLineEx(nX, 0, nX, nYMax, oColor);
-    D.SetDrawingFont(_tStyle.RULER.GetFont());--TODO FIX This must be gotten from the Forge
+    D.SetDrawingFont(_tStyles.RULER.GetFont());--TODO FIX This must be gotten from the Forge
 
     for nY = 0, nYMax, nMinorStep do
         local nWidth        = (nY % nMajorStep == 0) and nMajorWidth or nMinorWidth;
@@ -278,7 +269,7 @@ DrawRulerVer = function(bDrawRulerHor, sObject, D, hInternalDC)
         if (nY > 0) then
             local sY = tostring(nY);
             local nTextHeight = D.GetTextHeight(sY);
-            _tStyle.RULER.Draw(sObject, D, hInternalDC, floor(nTextX), floor(this.CenterOnY(nY, nTextHeight)), sY);
+            _tStyles.RULER.Draw(sObject, D, hInternalDC, floor(nTextX), floor(Forge.CenterOnY(nY, nTextHeight)), sY);
         end
 
     end
@@ -286,7 +277,7 @@ DrawRulerVer = function(bDrawRulerHor, sObject, D, hInternalDC)
 end
 
 DrawUtilObjects = function(sObject, D, hInternalDC)
-    ClearToTransparent(_nCardWidth, _nCardHeight, D);
+    ClearToTransparent(D);
 
     --draw utility objects
     local bDrawRulerHor = MainMenu.IsChecked("Options:>Draw:>Horizontal Ruler Enabled");
@@ -313,7 +304,14 @@ DrawUtilObjects = function(sObject, D, hInternalDC)
 end
 
 
+local function FitAndCenterCanvas()
+    local tOuter    = {x = 0, y = 0, width = _nPageWidth, height = _nPageHeight};
+    local tInner    = {x = 0, y = 0, width = _nCardWidth, height = _nCardHeight};
 
+    local tRect     = math.geometry.fitrect(tOuter, tInner, true);
+    Input.SetSize(_sCanvas, tRect.width, tRect.height);
+    Input.SetPos(_sCanvas, tRect.x, tRect.y);
+end
 
 
 
@@ -323,21 +321,38 @@ return class("Forge",
     },
     {--STATIC PUBLIC
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
-        --Forge = function(this, sAuthCode) end, --static constructor (runs after class object creation)
+        --Forge = function(cForge, sAuthCode) end, --static constructor (runs after class object creation)
         LoadImage = LoadImage,
-        STYLE = _tStyle,
+        STYLE__RO = _tStyleDecoy,
+        CenterOnX = function(nVal, nTextWidth) --TODO BUG FIX FINISH These functions NOT working properly on angled text
+            local nRet = nVal or 0;
+            nRet = nVal - nTextWidth / 2;
+            return nRet;
+        end,
+        CenterOnY = function(nVal, nTextHeight)
+            local nRet = nVal or 0;
+            nRet = nVal - nTextHeight / 2;
+            return nRet;
+        end,
+        CenterOn = function(nX, nY)
 
-        DrawCard = function(tRow, nWidth, nHeight)--, bExport, fExport) --TODO move this out to private static to be used here and in new export function
+        end,
+        DrawCard = function(tRow)--, bExport, fExport) --TODO move this out to private static to be used here and in new export function
             --in case a resize happens
             _tLastRow  = tRow;
 
             --draw the card
             local function ProcDraw(sObject, D, hInternalDC)
-                ClearToTransparent(nWidth, nHeight, D);
+                ClearToTransparent(D);
+
                 --get the proc's draw method
-                --local fProcDraw         = cProc.DrawCard(this, cProc, tRow, nWidth, nHeight);
                 local fSetOnImageDraw   = sink;
-                local oCardSet          = ProcSys.GetActiveCardSet();
+                local oCardSet          = _oActiveCardSet;
+
+                --update private vars for use in DrawText and other functions
+                _Object      = sObject;
+                _D           = D;
+                _InternalDC  = hInternalDC;
 
                 if (type(oCardSet) == "CardSet") then --TODO MOVE THIS OUT TO ITS OWN PRIVATE FUNCTION
                     --get the chunk from the active card set
@@ -347,26 +362,7 @@ return class("Forge",
                     local sCardSetName  = oCardSet.GetName();
                     local sChunkName    = sCardSetName.." Draw";
 
-                    --update the Forge index in the user env
-                    UserEnv.ForgeUpdateRoot {
-                        _tRow            = tRow,
-                        _bDrawBorder     = MainMenu.IsChecked("Options:>Draw:>Border Enabled"),
-                        _bDrawOverlay    = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled"),
-                    };
-                    local st=""
-                    for k, v in pairs(UserEnv.GetCommandList()) do
-                        st = st.."|"..v;
-                    end
-
-                    --p(st)
-
-                    --wUser.pGame         = FS.Game;
-                    --wUser.pCardSet      = oCardSet.GetPath();
-                    --wUser.pSymbols      = FS.Symbols;
-                    --wUser.pDocs         = FS.Docs;
-
                     --try to load the chuck
-                    --p(type(sDrawChunk), type(sChunkName), type(wUser))
                     local fChunk, sError = load(sDrawChunk, sChunkName, "t", UserEnv.Get());
                     if not (fChunk) then
                         error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
@@ -385,14 +381,8 @@ return class("Forge",
                 --check it
                 --assert(rawtype(fProcDraw) == "function", "Error Drawing Card, \""..tRow.Name.."\".\r\nMissing static DrawCard function in "..tostring(cProc).." class or function not correctly implemented."); --TODO FINISH
 
-                --update private vars for use in DrawText and other functions
-                _Object      = sObject;
-                _D           = D;
-                _InternalDC  = hInternalDC;
-
                 --execute the proc's draw method
                 fSetOnImageDraw(sObject, D, hInternalDC);
-                --fProcDraw(sObject, D, hInternalDC)
             end
 
             --reset the image size to its original size
@@ -405,7 +395,7 @@ return class("Forge",
             _hImage:Draw(ProcDraw);
 
             --draw on the util image
-            _hUtilImage:Draw(DrawUtilObjects);
+            _hImageUtil:Draw(DrawUtilObjects);
 
             --resize the image to the canvas size
             --local tSize = Input.GetSize(_sCanvas);
@@ -432,16 +422,16 @@ return class("Forge",
                 DrawingImage.Free(hNew);
             end]]
         end,
-        DrawImage = function(this, cdat, pImage, nX, nY, nWidth, nHeight, sName)
+        DrawImage = function(pImage, nX, nY, nWidth, nHeight, sName)
             --TODO assertions
-            local hImage, nImage = LoadImage(FS.Game.."\\"..SanitizePath(pImage), sName);
-            D.SetFilteringMode(DRAW_BLEND_ALPHABLEND);
-            D.DrawImage(nImage, nX, nY, nWidth, nHeight);
+            local hImage, nImage = LoadImage(FS.Game.."\\"..SanitizePath(pImage, pImage), sName);
+            _D.SetFilteringMode(DRAW_BLEND_ALPHABLEND);
+            _D.DrawImage(nImage, nX, nY, nWidth, nHeight);
         end,
         --may be called ONLY in the proc's draw
-        DrawText = function(this, cdat, sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)
+        DrawText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)
             --TODO assertions
-            local eStyle        = _tStyle;
+            local eStyle        = _tStyles;
 
             local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
             local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
@@ -454,7 +444,7 @@ return class("Forge",
                 oStyle.Update();
             end
 
-            local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(D, sText);
+            local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sText);
 
             if (fWrap) then
                 tLines, nStartOffsetX, nStartOffsetY = fWrap(nTotalW, nTotalH, sText, vAngle, {...});
@@ -474,7 +464,7 @@ return class("Forge",
                 nLineYAdjuster = nHalfHeight * (nLine - 1);
                 bFirstLine = nLine == 1;
 
-                nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(D, sLine, true);
+                nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sLine, true);
                 nBaseX = bCenterX and (nRawX - (nTotalW / 2) - nMinX) or nRawX;
                 nBaseY = bCenterY and (nRawY - (nTotalH / 2) - nMinY) or nRawY;
 
@@ -487,14 +477,14 @@ return class("Forge",
                 nLastHeight = nTotalH;
 
                 --draw the text
-                --oStyle.Draw(sObject, D, hInternalDC, floor(nTrueX), floor(nTrueY), sLine, vAngle);
+                --oStyle.Draw(_sObject, _D, _InternalDC, floor(nTrueX), floor(nTrueY), sLine, vAngle);
                 oStyle.Draw(_Object, _D, _InternalDC, floor(nTrueX), floor(nTrueY), sLine, vAngle);
             end
 
             return nLastX, nLastY, nLastWidth, nLastHeight;
         end,
-        DrawStyledText = function(this, cdat, sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)--TODO BUG FIX USe HTML parser, not this
-            local eStyle        = _tStyle;
+        DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)--TODO BUG FIX USe HTML parser, not this
+            local eStyle        = _tStyles;
 
             local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
             local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
@@ -746,32 +736,34 @@ return class("Forge",
 
             return nBaseX, nBaseY, nBlockW, nBlockH;
         end,
-        Init = function()
+        RefreshStyles = function() --called when a game is loaded
+            --purge the styles
+            setmetatable(_tStyles, {});
+
+            for k, v in pairs(_tStyles) do
+                _tStyles[k] = nil;
+            end
+
             --import the styles
             local pStyles = FS.Styles;
-            --StylesINI = pStyles;
 
             --TODO check for file and other things...do error checsk later --THROW ERROR if not
             local tSections     = INIFile.GetSectionNames(pStyles);
-            --local tNames        = {};
             local tStyles       = {};
 
             table.sort(tSections);
 
             for nIndex, sStyleRaw in ipairs(tSections) do
                 local sStyle = sStyleRaw:upper();
-                --store the style name
-                --tNames[nIndex]  = sStyle:upper();
-                --create the style
-                --tStyles[nIndex] = FontStyle.FromINI(pStyles, sStyle);
                 tStyles[sStyle] = FontStyle.FromINI(pStyles, sStyle);
                 --run the initial update --TODO BUG fix the FontStyle so it does this upon and creation so it doesn't need done here
-                tStyles[sStyle]:Update();
+                tStyles[sStyle]:Update();--TODO QUESTION WHY : and not . ?
             end
 
             --create and store the STYLE table
             local sErrorPrefix = "Error assigning new FontStyle in Forge.STYLE: ";
-            _tStyle = setmetatable({}, {
+
+            local tStylesMeta = {
                 __index = function(t, k)
 
                     if rawtype(k) == "string" then
@@ -818,22 +810,17 @@ return class("Forge",
                     end
 
                 end,
-            });
+            };
+
+            setmetatable(_tStyles, tStylesMeta);
         end,
         OnShow = function()
-            local fImage    = CreateImage
-            --TODO FINISH streamline/condense this section
 
             --create the canvas
             if not (_bCanvasCreated) then
                 local bCanvasCreated = Canvas.Create(_sCanvas);
                 assert(bCanvasCreated, "Error in Forge, \"${game}\": Could not create canvas for object, \"${canvas}\"." % {game = "TODO GET GAME NAME", canvas = _sCanvas});
             end
-
-            --create the Forge images
-            _hImage,        _nImageID       = fImage(_hImage,         _nImageID);
-            _hImageExport,  _nImageExportID = fImage(_hImageExport,   _nImageExportID);
-            _hImageUtil,    _nImageUtilID   = fImage(_hImageUtil,     _nImageUtilID);
 
             --mouse event callback functions
             local function MouseUpdate(eEvent)
@@ -843,7 +830,7 @@ return class("Forge",
                     _nY = eEvent.Mouse.y;
 
                     if not (_hWndCardVer) then
-                        _hWndCardVer = ProcSys.GetWindowHandle(PANE.CARD_VER); --TODO ERROR NO LONGER USING THIS PANE NAME
+                        _hWndCardVer = ProcSys.GetWindowHandle(PANE.MAIN);
                     end
 
                     Window.SetText(_hWndCardVer, floor(_nX)..", "..floor(_nY))
@@ -875,21 +862,12 @@ return class("Forge",
 
             _bForgeAutoSizing = false;
 
-            --center the images
-            CenterCardDisplay();
-
-            --load last set if present  --TODO MOVE THIS TO PROCSYS...IT HAS NO BUSINESS HERE
-            local sLastCardSetUUID  = INIFile.GetValue(FS.Info, "SESSION", "LastSet");
-            local oGame             = Game.GetActive();
-            local oLastCardSet      = oGame.GetCardSet(sLastCardSetUUID);
-
-            if (type(oLastCardSet) == "CardSet") then
-                ProcSys.LoadCardSet(oLastCardSet);
-            end
-
             Page.StartTimer(_nRedrawTimerInterval,      _nRedrawTimerID);
         end,
         OnSize = function(nWindowWidth, nWindowHeight, nPageWidth, nPageHeight, nType)
+            _nPageWidth     = nPageWidth;
+            _nPageHeight    = nPageHeight;
+
             local tPos      = Window.GetPos(HWND_APP);
             local sSection  = "ForgeWindow";
 
@@ -900,24 +878,14 @@ return class("Forge",
                 INIFile.SetValue(_pAppCFG, sSection, "Y", tostring(tPos.Y));
             end
 
-            _nPageWidth     = nPageWidth;
-            _nPageHeight    = nPageHeight;
+            FitAndCenterCanvas();
 
-            --TODO FINISH adjust canvas size using math.rect functions TODO use set data in the module (for width and height)
-            local tOuter    = {x = 0, y = 0, width = nPageWidth, height = nPageHeight};
-            local tInner    = {x = 0, y = 0, width = _nCardWidth, height = _nCardHeight};
-
-            local tRect     = math.geometry.fitrect(tOuter, tInner, true);
-            Input.SetSize(_sCanvas, tRect.width, tRect.height);
-            Input.SetPos(_sCanvas, tRect.x, tRect.y);
-
-            --store the canvas size info
+            --store (and lcoally update) the canvas size info
             local tSize     = Input.GetSize(_sCanvas);
             _nCanvasWidth   = tSize.Width;
             _nCanvasHeight  = tSize.Height;
 
-            --center the images
-            CenterCardDisplay();
+            --Input.SetPos(_sCanvas, (_nPageWidth - _nCanvasWidth) / 2, (_nPageHeight - _nCanvasHeight) / 2);
 
             if (_tLastRow) then
                 _bRedrawRequested   = true;
@@ -961,10 +929,27 @@ return class("Forge",
             _nCardWidth     = oCardSet.GetCardWidth();
             _nCardHeight    = oCardSet.GetCardHeight();
             _sCardSetName   = oCardSet.GetName();
-        end,
-        UpdateStyles = function(this, cdat)
 
-            for oStyle in pairs(_tStyle) do
+            --(re)create the Forge images
+            if (_hImage ~= null) then
+                _hImage:Free();
+            end
+
+            if (_hImageExport ~= null) then
+                _hImageExport:Free();
+            end
+
+            if (_hImageUtil ~= null) then
+                _hImageUtil:Free();
+            end
+
+            _hImage,        _nImageID       = CreateImage(_hImage,         _nImageID);
+            _hImageExport,  _nImageExportID = CreateImage(_hImageExport,   _nImageExportID);
+            _hImageUtil,    _nImageUtilID   = CreateImage(_hImageUtil,     _nImageUtilID);
+        end,
+        UpdateStyles = function()
+
+            for oStyle in pairs(_tStyles) do
                 oStyle.Update();
             end
 

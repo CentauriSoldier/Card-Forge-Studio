@@ -338,23 +338,27 @@ return class("Game",
 
             --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
             --Load any config and user environment that may exist TODO BUG FIX - FINISH - USE PROTECTED environment for loading this
-            local tCFG, tEnv = require("InitForge");
+            local tForge = require("InitForge");
 
-            if (type(tCFG) == "table") then
-                UserEnv.UpdateCFG(tCFG);
+            if (rawtype(tForge) == "table") then
+                local tCFG = tForge.CFG or nil; --TODO put these index names in constants
+                local tEnv = tForge.ENV or nil;
+
+                if (type(tCFG) == "table") then
+                    UserEnv.UpdateCFG(tCFG);
+                end
+
+                if (type(tEnv) == "table") then
+                    UserEnv.UserUpdateRoot(tEnv);
+                end
+
             end
-
-            if (type(tEnv) == "table") then
-                UserEnv.UserUpdateRoot(tEnv);
-            end
-
-
 
             --reset the BuildMechanics var (it gets reloaded in InitForge.lua if present)
             BuildMechanics = nil;
 
             --init and set the game's forge
-            ProcSys.PrepActiveGame();
+            --ProcSys.PrepActiveGame();
 
             --build the user's mechanics html if it exists QUESTION qhat is this? Is it used?
             if type(BuildMechanics) == "function" then
@@ -367,6 +371,8 @@ return class("Game",
             end
 
             ProcessDox(pGame);--TODO get this boolean from INI file before running Dox
+
+            Forge.RefreshStyles();
         end,
         --rebuilds all game objects and refreshes the private static info
         Refresh = function()
