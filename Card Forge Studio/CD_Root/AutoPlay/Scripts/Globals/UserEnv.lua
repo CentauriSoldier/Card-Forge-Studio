@@ -26,10 +26,12 @@ local tEnv = { --TODO QUESTION do i need to protect this?
    serialize        = serialize,
    deserialize      = deserialize,
    --
+   select           = select,
    --Forge            = tForgeDecoy,
    --ProcSys          = tProcSysDecoy,
+   Import           = Import,
    ---
-   --User             = {}, --from InitForge
+   --User             = {}, --from Init
 };
 
 -- decoy -> real backing table map (weak keys so nothing is kept alive)
@@ -235,7 +237,7 @@ InjectEnv("geometry", {
 ██║ ╚═╝ ██║██║  ██║   ██║   ██║  ██║
 ╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
 ]]
-InjectEnv("Math", {
+InjectEnv("math", {
     abs                 = math.abs,
     acos                = math.acos,
     asin                = math.asin,
@@ -294,7 +296,7 @@ InjectEnv("Math", {
 ]]
 local tProcSys      = {};
 local tProcSysKeys  = {};
-InjectEnv("ProcSys", tProcSys);
+InjectEnv("ProcSys", tProcSys); --TODO QUESTION, why is this being injected still?
 
 
 --[[
@@ -485,6 +487,9 @@ local tUserEnv = {
         Walk(tRoot, nil)
         table.sort(tOut, function(a, b) return a:lower() < b:lower() end)
         return tOut
+    end,
+    Refresh = function()
+        --TODO FINISH CLEAN THIS OUT!!! On game  load, it should be clean
     end,
     --expects new CFG to have brought in through the user env
     UpdateCFG = function(tInput)

@@ -82,9 +82,9 @@
       change during runtime.
     </p>
 
-    <h4>InitForge.lua (required entry point)</h4>
+    <h4>Init.lua (required entry point)</h4>
     <p>
-      All game code must be bootstrapped from a file named <strong>InitForge.lua</strong>. This is the entry point where
+      All game code must be bootstrapped from a file named <strong>Init.lua</strong>. This is the entry point where
       your project initializes its scripts, tables, mappings, and systems.
     </p>
 
@@ -109,7 +109,7 @@
     ├─ CSV Source
     ├─ Docs
     ├─ Scripts
-    │  └─ InitForge.lua
+    │  └─ Init.lua
     ├─ Symbols
     ├─ CardSets.ini
     ├─ Info.ini
@@ -118,7 +118,7 @@
 
     <p>
       The <strong>Scripts</strong> directory is automatically added to the package path when the game is loaded.
-      All of your scripts go there, including <strong>InitForge.lua</strong> at the Scripts root.
+      All of your scripts go there, including <strong>Init.lua</strong> at the Scripts root.
     </p><h3>Dox Documentation (Optional)</h3>
 
     <p>

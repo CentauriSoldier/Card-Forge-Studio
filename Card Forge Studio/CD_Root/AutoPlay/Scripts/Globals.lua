@@ -9,9 +9,15 @@ require("Constants");   --load the constants
 ELProfiler = require("Plugins.ELProfiler");
 ELProfiler.setClock(os.clock);
 
-FS              = require("Globals.FS");  --load the program's file/path management system
-Import          = require("Globals.Import");
-ProcessDox      = require("Globals.ProcessDox");
+FS                  = require("Globals.FS");  --load the program's file/path management system
+Log                 = require("Log");
+
+CustomRuntimeErrorHandler = Log.Error;
+
+local tImportSystem = require("Globals.ImportSystem");
+Import              = tImportSystem.Import;
+SanitizePath        = tImportSystem.SanitizePath;
+ProcessDox          = require("Globals.ProcessDox");
 
 ProcSys     = require("ProcSys");
 Forge       = require("Forge");
@@ -22,6 +28,8 @@ UserEnv     = require("Globals.UserEnv");
 
 --TODO Modify this entire system to be more universal?
 Description = require("Description");
+
+
 
 --TODO QUESTION DELETE?
 --Editor      = require("Editor");
@@ -110,7 +118,9 @@ function OnStartUp()--TODO move to its own module if it gets too big
 
     local bIsCompiled = Application.IsCompiled();
     _DisableRuntimeErrorDialog = true;--bIsCompiled;
-    Debug.ShowWindow(true);
+    --Debug.ShowWindow(true);
+
+    Log.ClearFile();
 
     --TODO make all basic files as needed here
     if not (File.DoesExist(FS.AppCFG)) then

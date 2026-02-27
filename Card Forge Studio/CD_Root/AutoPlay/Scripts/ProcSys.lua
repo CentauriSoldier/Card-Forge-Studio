@@ -36,6 +36,19 @@ local _nFileSyncTimerInterval   = PROCSYS_FILE_SYNC_TIMER_INTERVAL;
 local _nCardWidth = 0;
 local _nCardHeight = 0;
 local _sCardSetName = "";
+
+
+
+
+-------------------------------------------------------------------------
+local _tRowCRC          = {};
+local _nDrawCRC         = -1;
+local _nCellProcCRC     = -1;
+local _bDrawUpdated     = false;
+local _bCellProcUpdated = false;
+
+
+
 --[[TODO USE TO SET UP PROC ENV LEFT OFF HERE
 
 --get the proc's draw method
@@ -646,6 +659,21 @@ return class("ProcSys",
 
             Forge.SetActiveCardSet(oCardSet);
 
+            --track the call CRCs for each row
+            _tRowCRC = {
+                CellProc    = {},
+                Draw        = {},
+            };
+
+            local nRows     = Grid.GetRowCount(_sBaseDataGrid);
+            _nCellProcCRC   = oCardSet.GetCallCRC("CellProc");
+            _nDrawCRC       = oCardSet.GetCallCRC("Draw");
+
+            for nRow = 0, nRows - 1 do
+                _tRowCRC.CellProc[nRow] = _nCellProcCRC;
+                _tRowCRC.Draw[nRow]     = _nDrawCRC;
+            end
+
             Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
         end,
 
@@ -806,7 +834,7 @@ return class("ProcSys",
                     local nY            = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Y"))           or 0;
                     local nWidth        = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Width"))       or 800;
                     local nHeight       = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Height"))      or 1000; --TODO MAGIC NUMBERS use defaults?
-                    local bMaximized    = INIFile.GetValueBoolean(_pAppCFG, sSection,   "Maximized")  or false;
+                    local bMaximized    = INIFile.GetValueBoolean(  _pAppCFG, sSection, "Maximized")    or false;
 
                     Window.SetSize(hWnd, nWidth, nHeight);
                     tWindows[ePane].Object.FillWindow();
@@ -909,18 +937,7 @@ return class("ProcSys",
                 </ul>
         !]]
 
-        OnTimer = function(nID)
 
-            if (nID == _nFileSyncTimerID) then
-
-                if (_oActiveCardSet) then
-                    _oActiveCardSet.UpdateCallCode("Draw");
-                    _oActiveCardSet.UpdateCallCode("CellProc");
-                end
-
-            end
-
-        end,
 
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.OnSelectionChanged
@@ -954,21 +971,72 @@ return class("ProcSys",
 
             end
 
-            --get the card's row
-            local tRow  = Grid.GetRow(_sFinalDataGrid, nRow);
-            --try to draw the card
-            if (_nLastRow ~= nRow) then
-                --TryDrawCard(cProc, nRow, tRow);
+            --check if the user has updated any relevant files
+            local bCellProcCRCMismatch  = _tRowCRC.CellProc[nRow]   ~= _nCellProcCRC;
+            local bDrawCRCMismatch      = _tRowCRC.Draw[nRow]       ~= _nDrawCRC;
+            local bProcessed            = false;
 
-                --local sProfile = ELProfiler.stop();
-                --TextFile.WriteFromString(_ExeFolder.."\\profile.txt", ELProfiler.format(sProfile))
-                _nLastRow = nRow;
-                UserEnv.ProcSysUpdateRoot {_tRow = tRow};
-                TryDrawCard(tRow);
+            if (bCellProcCRCMismatch) then
+                ProcSys.ProcessActiveRow();
+                _tRowCRC.CellProc[nRow] = _nCellProcCRC;
+                bProcessed = true;
+            end
+
+            --try to draw the card
+            if (_nLastRow ~= nRow or bCellProcCRCMismatch or bDrawCRCMismatch) then
+
+                if not (bProcessed) then
+                    _nLastRow = nRow;
+                    --get the card's row
+                    local tRow  = Grid.GetRow(_sFinalDataGrid, nRow);
+                    UserEnv.ProcSysUpdateRoot {_tRow = tRow};
+                    TryDrawCard(tRow);
+                end
+
+                if (bDrawCRCMismatch) then
+                    _tRowCRC.Draw[nRow] = _nDrawCRC;
+                end
+
             end
             --ELProfiler.format()
         end,
 
+        OnTimer = function(nID)
+
+            if (nID == _nFileSyncTimerID) then
+
+                if (_oActiveCardSet) then
+                    local nCellProcCRC  = _oActiveCardSet.UpdateCallCode("CellProc");
+                    local nDrawCRC      = _oActiveCardSet.UpdateCallCode("Draw");
+                    local bProcessed    = false;
+
+                    if (nCellProcCRC) then
+                        _nCellProcCRC = nCellProcCRC;
+
+                        if (_nCurrentRow ~= -1) then
+                            ProcSys.ProcessActiveRow();
+                            _tRowCRC.CellProc[_nCurrentRow] = _nCellProcCRC;
+                            _tRowCRC.Draw[_nCurrentRow]     = nDrawCRC;
+                            bProcessed = true;
+                        end
+
+                    end
+
+                    if (nDrawCRC) then
+                        _nDrawCRC = nDrawCRC;
+
+                        if (not bProcessed and _nCurrentRow ~= -1) then
+                            _tRowCRC.Draw[_nCurrentRow] = _nDrawCRC;
+                            TryDrawCard(Grid.GetRow(_sFinalDataGrid, _nCurrentRow));
+                        end
+
+                    end
+
+                end
+
+            end
+
+        end,
 
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.ProcessActiveRow
@@ -980,24 +1048,26 @@ return class("ProcSys",
                     <li>Intended for user-initiated manual reprocessing of the selected row from the GUI.</li>
                 </ul>
         !]]
-        ProcessActiveRow = function()
+        ProcessActiveRow = function(bSkipRedraw)
             local nRow = _nCurrentRow;
 
+            --reprocess the row
             for nColumn = 1, Grid.GetColumnCount(_sBaseDataGrid) - 1 do
                 ProcessCell(nRow, nColumn);
             end
 
-            --redraw the card
-            --local cProc = ProcSys.GetProc(nRow);
+            --get the final row
             local tRow  = Grid.GetRow(_sFinalDataGrid, nRow);
-            --TryDrawCard(cProc, nRow, tRow);
+            --update the final row in the UserEnv
+            UserEnv.ProcSysUpdateRoot {_tRow = tRow};
+            --redraw the card
             TryDrawCard(tRow);
         end,
 
         --TODO put in examplke and show the args for the callback
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.RegisterExporter
-            @desc Registers or removes an exporter function for a specific export file.<br>Generally defined within the InitForge.lua file for the game.
+            @desc Registers or removes an exporter function for a specific export file.<br>Generally defined within the Init.lua file for the game.
             @param string pFile Path to the export target file.
             @param function fExport Exporter function; passing a non-function unregisters it.
             @note

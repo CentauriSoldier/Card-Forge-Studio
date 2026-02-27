@@ -102,7 +102,7 @@ local tFunctions = {
         tPaths.Info          = pGame.."\\Info.ini";             CheckFile(tPaths.Info,                          BuildInfoFile(_sGame));
         tPaths.Scratch       = tPaths.Temp.."\\Scratch.lua";    CheckFile(tPaths.Scratch,                       "");
         tPaths.Styles        = pGame.."\\Styles.ini";           CheckFile(tPaths.Styles,                        pTemplates.."\\Styles.ini");
-                                                                CheckFile(tPaths.Scripts.."\\InitForge.lua",    pTemplates.."\\InitForge.lua");
+                                                                CheckFile(tPaths.Scripts.."\\Init.lua",         pTemplates.."\\Init.lua");
                                                                 CheckFile(tPaths.Scripts.."\\Config.lua",       pTemplates.."\\Config.lua");
 
         --add game's scripts folder to the package path

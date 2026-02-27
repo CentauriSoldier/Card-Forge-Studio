@@ -1,7 +1,7 @@
 local sImportError = "Error importing file: ";
 
 -- Sanitizes a relative import path and resolves it to a Windows path.
-function SanitizePath(sRelPath, vMessage)
+local function SanitizePath(sRelPath, vMessage)
     local sMessage = rawtype(vMessage) == "string" and vMessage or "";
 
     if type(sRelPath) ~= "string" or sRelPath == "" then
@@ -72,11 +72,15 @@ local function Import(sPathRaw, vMessage)
     end
 
     local sCode = TextFile.ReadToString(pFile);
-    local fChunk, sError = load(sCode, sPath, "t", envrepo.User);
+    local fChunk, sError = load(sCode, sPath, "t", UserEnv.Get());
 
-    if not (fChunk) then
-        return nil, sError;
+    local tRet = { pcall(fChunk) };
+
+    if not (tRet[1]) then
+        return nil, tRet[2];
     end
 
-    return fChunk;
+    return table.unpack(tRet, 2);
 end
+
+return {Import = Import, SanitizePath = SanitizePath};

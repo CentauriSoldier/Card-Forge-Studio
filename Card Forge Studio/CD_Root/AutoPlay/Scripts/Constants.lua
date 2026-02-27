@@ -24,6 +24,10 @@ constant("PROCSYS_FILE_SYNC_TIMER_INTERVAL",  1500);
 constant("PROCSYS_TO_TABLE", 1);
 constant("PROCSYS_TO_NUMBER", 2);
 
+constant("LIVECODE_TIMER_ID", 400); --TODO REMOVE AFTER LIVECODE IS COMPLETE
+
+constant("LOG_OBJECT", "inp log");
+
 local function BuildFilerTable(sName, sExt)
     local tActual   = {
         Name        = sName,

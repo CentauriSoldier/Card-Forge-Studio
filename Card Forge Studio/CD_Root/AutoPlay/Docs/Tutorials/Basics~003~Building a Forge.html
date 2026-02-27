@@ -57,17 +57,17 @@
 
                 <div class="alert alert-warning">
                     <strong>Required file:</strong>
-                    Your game must provide a file named <strong>InitForge.lua</strong> in the Scripts directory.
-					<br>By default, an InitForge.lua file is created for you when you build a new project but you'll need to modify it to suit your game.
+                    Your game must provide a file named <strong>Init.lua</strong> in the Scripts directory.
+					<br>By default, an Init.lua file is created for you when you build a new project but you'll need to modify it to suit your game.
                 </div>
 
-                <h3 class="mt-4">InitForge.lua requirements</h3>
+                <h3 class="mt-4">Init.lua requirements</h3>
                 <p class="mb-3">
                     The file <strong>must</strong>:
                 </p>
 
                 <ul>
-                    <li>Be named exactly: <strong>InitForge.lua</strong></li>
+                    <li>Be named exactly: <strong>Init.lua</strong></li>
                     <li>Be located in the game’s <strong>Scripts</strong> directory</li>
                     <li><strong>Return a Forge</strong> object when loaded</li>
                 </ul>
@@ -76,7 +76,7 @@
                     <div class="card-body">
                         <h4 class="h5 mb-3">What “return a Forge” means</h4>
                         <p class="mb-0">
-                            Card Forge Studio loads a project's <strong>InitForge.lua</strong> when that project is loaded and expects it to return a Forge object.
+                            Card Forge Studio loads a project's <strong>Init.lua</strong> when that project is loaded and expects it to return a Forge object.
                             That returned Forge is what the editor uses for card rendering and exporting.
 							<br>
 							<br>
@@ -105,7 +105,7 @@
 						Copy
 					</button>
 					<pre class="mb-4"><code class="language-lua">--============================================================
---  InitForge.lua (example)
+--  Init.lua (example)
 --  Fantasy example: Card -> Creature -> Dragon
 --                  Card -> Spell    -> Damage
 --============================================================

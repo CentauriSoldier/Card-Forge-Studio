@@ -55,6 +55,7 @@ return class("WinAMS",
 
             local OnReady = function(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
             	WindowWizard.EmbedWindow(hObject, hWnd);
+                Page.SetObjectZOrder(sObject, ZORDER_BACK, "");
                 tObject.SetProperties(sObject, {X = 0, Y = 0, Width = nCWidth, Height = nCHeight});
 
                 if (type(fOnReady) == "function") then

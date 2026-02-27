@@ -46,9 +46,9 @@
 
     <pre><code class="language-lua">constant("CFG", require("Config"));</code></pre>
 
-    <h4>5) Code InitForge.lua</h4>
+    <h4>5) Code Init.lua</h4>
     <p>
-      All of your game bootstrapping code lives in <strong>InitForge.lua</strong>. This file is responsible for:
+      All of your game bootstrapping code lives in <strong>Init.lua</strong>. This file is responsible for:
     </p>
     <ul>
       <li>Loading your Card base class and any derived Family/Class/Type classes.</li>

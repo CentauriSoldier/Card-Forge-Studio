@@ -192,7 +192,7 @@
     );</code></pre>
 
       <pre><code class="language-lua">--\[\[!
-    \@fqxn My Game.InitForge.TypeMapExample
+    \@fqxn My Game.Init.TypeMapExample
     \@desc &lt;p&gt;Example mapping: register the Type string to the Type class (read-only pattern optional).&lt;/p&gt;
     !\]\]
 

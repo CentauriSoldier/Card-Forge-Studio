@@ -7,12 +7,17 @@ local io            = io;
 --TODO with New methods, checkf or existing item first...do not overwrite
 
 --[[
-██╗      ██████╗  ██████╗ █████╗ ██╗         ███████╗██╗   ██╗███╗   ██╗ ██████╗████████╗██╗ ██████╗ ███╗   ██╗███████╗
-██║     ██╔═══██╗██╔════╝██╔══██╗██║         ██╔════╝██║   ██║████╗  ██║██╔════╝╚══██╔══╝██║██╔═══██╗████╗  ██║██╔════╝
-██║     ██║   ██║██║     ███████║██║         █████╗  ██║   ██║██╔██╗ ██║██║        ██║   ██║██║   ██║██╔██╗ ██║███████╗
-██║     ██║   ██║██║     ██╔══██║██║         ██╔══╝  ██║   ██║██║╚██╗██║██║        ██║   ██║██║   ██║██║╚██╗██║╚════██║
-███████╗╚██████╔╝╚██████╗██║  ██║███████╗    ██║     ╚██████╔╝██║ ╚████║╚██████╗   ██║   ██║╚██████╔╝██║ ╚████║███████║
-╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝    ╚═╝      ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝]]
+█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
+╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
+                                                ██╗      ██████╗  ██████╗ █████╗ ██╗
+                                                ██║     ██╔═══██╗██╔════╝██╔══██╗██║
+                                                ██║     ██║   ██║██║     ███████║██║
+                                                ██║     ██║   ██║██║     ██╔══██║██║
+                                                ███████╗╚██████╔╝╚██████╗██║  ██║███████╗
+                                                ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝
+█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
+╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
+]]
 
 
 --[[
@@ -105,7 +110,13 @@ local function SortByName(oItemA, oItemB)
 end
 
 local function UpdateCardSetCallCode(sCall, tCall)
-    local bRet = false;
+    local bRet      = false;
+    local pCallCode = tCall.Path;
+
+    if not (File.DoesExist(pCallCode)) then
+        --TODO FINISH ERROR
+        error("NO FILE, OMG! AHHHHH!!!!"..sCall);
+    end
 
     --get the new CRC
     local nCRC = GetCRC(tCall.Path);
@@ -118,15 +129,8 @@ local function UpdateCardSetCallCode(sCall, tCall)
     if (nCRC ~= tCall.CRC) then
         --set the newest CRC for this call
         tCall.CRC = nCRC;
-        local pCallCode = tCall.Path;
-
-        if not (File.DoesExist(pCallCode)) then
-            --TODO FINISH ERROR
-            error("NO FILE, OMG! AHHHHH!!!!")
-        end
-
-        local sCallCode = ReadToString(pCallCode);
-        tCall.Code = sCallCode;
+        tCall.Code = ReadToString(pCallCode); --TODO THROW ERROR on file read error
+        p(sCall)
     end
 
     return bRet;
@@ -134,12 +138,17 @@ end
 
 
 --[[
-██████╗ █████╗ ██████╗ ██████╗ ███████╗███████╗████████╗     ██████╗██╗      █████╗ ███████╗███████╗
-██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝╚══██╔══╝    ██╔════╝██║     ██╔══██╗██╔════╝██╔════╝
-██║     ███████║██████╔╝██║  ██║███████╗█████╗     ██║       ██║     ██║     ███████║███████╗███████╗
-██║     ██╔══██║██╔══██╗██║  ██║╚════██║██╔══╝     ██║       ██║     ██║     ██╔══██║╚════██║╚════██║
-╚██████╗██║  ██║██║  ██║██████╔╝███████║███████╗   ██║       ╚██████╗███████╗██║  ██║███████║███████║
-╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝   ╚═╝        ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝]]
+█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
+╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
+                                         ██████╗ █████╗ ██████╗ ██████╗ ███████╗███████╗████████╗
+                                        ██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝╚══██╔══╝
+                                        ██║     ███████║██████╔╝██║  ██║███████╗█████╗     ██║
+                                        ██║     ██╔══██║██╔══██╗██║  ██║╚════██║██╔══╝     ██║
+                                        ╚██████╗██║  ██║██║  ██║██████╔╝███████║███████╗   ██║
+                                         ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝   ╚═╝
+█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
+╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
+]]
 CardSet = class("CardSet",
     {--METAMETHODS
 
@@ -226,6 +235,16 @@ CardSet = class("CardSet",
             };
 
         end,
+        GetCallCRC = function(this, cdat, sCall)
+            local pri = cdat.pri;
+            local tCalls = pri.Calls;
+            --p(sCall, type(tCalls[sCall].Code))
+            if (tCalls[sCall] == nil) then
+                error("TODO ERROR CAN'T GET CALL - NO CARDSET CALL BY THAT NAME")
+            end
+
+            return tCalls[sCall].CRC;
+        end,
         GetCallCode = function(this, cdat, sCall)
             local pri = cdat.pri;
             local tCalls = pri.Calls;
@@ -242,14 +261,38 @@ CardSet = class("CardSet",
         end,
         --updates proc, draw, etc.
         UpdateCallCode = function(this, cdat, sCall)
-            local pri = cdat.pri;
-            local tCalls = pri.Calls;
+            local pri       = cdat.pri;
+            local tCalls    = pri.Calls;
+            local nRet;
 
             if (tCalls[sCall] == nil) then
-                error("TODO ERROR CAN'T UPDATE CALL - NO CARDSET CALL BY THAT NAME")
+                error("TODO ERROR CAN'T UPDATE CALL - NO CARDSET CALL BY THAT NAME");
             end
 
-            return UpdateCardSetCallCode(sCall, tCalls[sCall]);
+            local tCall = tCalls[sCall];
+            local pCallCode = tCall.Path;
+
+            if not (File.DoesExist(pCallCode)) then
+                --TODO FINISH ERROR
+                error("NO FILE, OMG! AHHHHH!!!!"..sCall);
+            end
+
+            --get the new CRC
+            local nCRC = GetCRC(tCall.Path);
+
+            if (nCRC == -1) then --an error occurred if it does == -1
+                --TODO ERROR HERE
+            end
+
+            --compare it the existing one
+            if (nCRC ~= tCall.CRC) then
+                --set the newest CRC for this call
+                tCall.CRC = nCRC;
+                tCall.Code = ReadToString(pCallCode); --TODO THROW ERROR on file read error
+                nRet = nCRC;
+            end
+
+            return nRet;
         end
     },
     nil,   --extending class
@@ -260,12 +303,19 @@ CardSet = class("CardSet",
 
 
 --[[
-██████╗  █████╗ ███╗   ███╗███████╗     ██████╗██╗      █████╗ ███████╗███████╗
-██╔════╝ ██╔══██╗████╗ ████║██╔════╝    ██╔════╝██║     ██╔══██╗██╔════╝██╔════╝
-██║  ███╗███████║██╔████╔██║█████╗      ██║     ██║     ███████║███████╗███████╗
-██║   ██║██╔══██║██║╚██╔╝██║██╔══╝      ██║     ██║     ██╔══██║╚════██║╚════██║
-╚██████╔╝██║  ██║██║ ╚═╝ ██║███████╗    ╚██████╗███████╗██║  ██║███████║███████║
-╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝     ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝]]
+
+
+█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
+╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
+                                                 ██████╗  █████╗ ███╗   ███╗███████╗
+                                                ██╔════╝ ██╔══██╗████╗ ████║██╔════╝
+                                                ██║  ███╗███████║██╔████╔██║█████╗
+                                                ██║   ██║██╔══██║██║╚██╔╝██║██╔══╝
+                                                ╚██████╔╝██║  ██║██║ ╚═╝ ██║███████╗
+                                                 ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝
+█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
+╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
+]]
 return class("Game",
     {--METAMETHODS
 
@@ -338,23 +388,40 @@ return class("Game",
 
             --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
             --Load any config and user environment that may exist TODO BUG FIX - FINISH - USE PROTECTED environment for loading this
-            local tForge = require("InitForge");
+            --local sInitChunk    = _oActiveCardSet.GetCallCode("CellProc");
+            --TODO MOVE THIS OUT SO IT CAN BE USED IN THING SLIKE oGame.RefreshCFG() and oGame.RefreshEnv() or just oGame.ReInit()
+            local sInitChunk = TextFile.ReadToString(FS.Scripts.."\\Init.lua");
+            --TODO CHECK AND ERROR on bad file
+            --TODO Clear/Refresh UserEnv
 
-            if (rawtype(tForge) == "table") then
-                local tCFG = tForge.CFG or nil; --TODO put these index names in constants
-                local tEnv = tForge.ENV or nil;
+            --the error message in case things go south
+            local sChunkName = sGame.." Init";
 
-                if (type(tCFG) == "table") then
-                    UserEnv.UpdateCFG(tCFG);
-                end
-
-                if (type(tEnv) == "table") then
-                    UserEnv.UserUpdateRoot(tEnv);
-                end
-
+            --try to load the chuck
+            local fChunk, sError = load(sInitChunk, sChunkName, "t", UserEnv.Get());
+            if not (fChunk) then
+                error("Error running Init file for Game "..sGame..".\r\n"..sError, 2); --TODO LOG/display
             end
 
-            --reset the BuildMechanics var (it gets reloaded in InitForge.lua if present)
+            --try to call the chunk
+            local tInit = {pcall(fChunk)};
+
+            if not (tInit[1]) then
+                error("Error running Init file for Game "..sGame..".\r\n"..tInit[2], 2);
+            end
+
+            local tCFG, tEnv = table.unpack(tInit, 2);
+
+            if (type(tCFG) == "table") then
+                UserEnv.UpdateCFG(tCFG);
+            end
+
+            if (type(tEnv) == "table") then
+                UserEnv.UserUpdateRoot(tEnv);
+            end
+
+
+            --reset the BuildMechanics var (it gets reloaded in Init.lua if present)
             BuildMechanics = nil;
 
             --init and set the game's forge
