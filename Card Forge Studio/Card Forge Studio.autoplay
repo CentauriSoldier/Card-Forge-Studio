@@ -91,6 +91,7 @@ _bLoaded = false;</Script>
 <Plugin>ColorPicker\ColorPicker.lmd</Plugin>
 <Plugin>Draw\Draw.lmd</Plugin>
 <Plugin>GlobalPaths\GlobalPaths.lmd</Plugin>
+<Plugin>GlobalTimer\GlobalTimer.lmd</Plugin>
 <Plugin>ScalerX\ScalerX.lmd</Plugin>
 <Plugin>WindowWizard\WindowWizard.lmd</Plugin>
 </ActionPlugins>
@@ -284,15 +285,14 @@ WinSys.OnShutdown();</Script>
 <Args/>
 <Script>Paragraph.SetText("par version", 'v'..APP_VERSION.." (Alpha)");
 ScalerX.OnPreload(this);
-MainMenu.OnPreload(this);
-</Script>
+MainMenu.OnPreload(this);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>3</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeLine>2</DesignCodeLine>
+<DesignCodeCol>25</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -309,7 +309,7 @@ CheckBox.SetEnabled("chk process html", bAllowHTMLProcessing);</Script>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeCol>17</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>

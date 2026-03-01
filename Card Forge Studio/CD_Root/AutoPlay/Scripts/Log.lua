@@ -14,7 +14,7 @@ local _nLastY       = 0;
 local _bLogVisible  = true;
 
 local function UpdateMessage(vMessage)
-    local sMessage = rawtype(vMessage) == "string" and vMessage or "";
+    local sMessage = rawtype(vMessage) == "string" and tostring(vMessage) or "";
 
     if not (sMessage:isempty()) then
         sMessage = "["..DateTime().." ".._sLevel.."]\r\n"..sMessage;

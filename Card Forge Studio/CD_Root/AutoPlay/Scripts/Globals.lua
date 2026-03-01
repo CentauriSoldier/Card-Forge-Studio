@@ -138,7 +138,12 @@ function OnStartUp()--TODO move to its own module if it gets too big
     constant("HWND_APP", Application.GetWndHandle());
 
     --load all games
-    Game.Refresh();
+    local bOK, sError = pcall(Game.Refresh);
+
+    if not (bOK) then
+        --TODO LOG
+        Dialog.Message("Game.Refresh Error", sError);
+    end
 
     --load the menu
     MainMenu = require("MainMenu");

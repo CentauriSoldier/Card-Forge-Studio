@@ -41,41 +41,61 @@ local _sCardSetName = "";
 
 
 -------------------------------------------------------------------------
---local _tRowCRC          = {};
---local _nDrawCRC         = -1;
---local _nCellProcCRC     = -1;
---local _bDrawUpdated     = false;
---local _bCellProcUpdated = false;
-
-local _bReady           = false; --prevents timer code from running until a selection has been made
+local _tRowCRC          = {};
+local _nDrawCRC         = -1;
+local _nCellProcCRC     = -1;
+local _bDrawUpdated     = false;
+local _bCellProcUpdated = false;
 
 local _oCodeRepo        = null;
---local _tRedrawRows      = {};  --tracks which rows need reprocessed/redrawn
-local _tReprocRows      = {};
-local _bDataChanged     = false;
-local _bCFGEnvChanged   = false;
-local _bAnyProcChanged  = false;
-local _bDrawChanged     = false;
 
-local function SetReprocRows(vFlag)
+--[[TODO USE TO SET UP PROC ENV LEFT OFF HERE
 
-    local nRows = Grid.GetRowCount(_sBaseDataGrid);
-    local bFlag = rawtype(vFlag) == "boolean" and vFlag or false;
+--get the proc's draw method
+local fProcDraw         = cProc.DrawCard(this, cProc, tRow, nWidth, nHeight);
+local fSetOnImageDraw   = sink;
+local oCardSet          = ProcSys.GetActiveCardSet();
 
-    for nRow = 0, nRows - 1 do
-        _tReprocRows[nRow] = bFlag;
+if (type(oCardSet) == "CardSet") then
+    --get the chunk from the active card set
+    local sDrawChunk = oCardSet.GetCallCode("Draw");
+
+    --the error message in case things go south
+    local sCardSetName  = oCardSet.GetName();
+    local sChunkName    = sCardSetName.." Draw";
+
+    --get and modify the user env
+    local wUser = GetUserEnv();
+
+    -- injected context
+    wUser.tRow          = tRow;
+    wUser.nCardWidth    = nWidth;
+    wUser.nCardHeight   = nHeight;
+    wUser.pGame         = FS.Game;
+    wUser.pSymbols      = FS.Symbols;
+    --wUser.pDocs         = FS.Docs;
+    wUser.pCardSet      = oCardSet.GetPath();
+    wUser.bDrawBorder   = MainMenu.IsChecked("Options:>Draw:>Border Enabled");
+    wUser.bDrawOverlay  = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled");
+
+    --try to load the chuck
+    --p(type(sDrawChunk), type(sChunkName), type(wUser))
+    local fChunk, sError = load(sDrawChunk, sChunkName, "t", wUser);
+    if not (fChunk) then
+        error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
     end
 
+    --try to call the chunk
+    local bOk, vReturnOrError = pcall(fChunk);
+
+    if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
+        p(vReturnOrError)
+        --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
+    end
+
+    fSetOnImageDraw = vReturnOrError--(this, tRow, nWidth, nHeight);
 end
-
---[[--when changes occur
-Data            - Reload Set +
-CFG/UserEnv     - Reinit game +
-Cell/ColumnProc - Reproc All Rows (on demand ofc)
-Draw            - Redraw Current Row
 ]]
-
-
 
 
 --[[!
@@ -278,8 +298,7 @@ end
 local function ProcessCell(nRow, nColumn) --TODO LEFT OFF HERE 1
     local sColumn       = Grid.GetCellText(_sBaseDataGrid, 0, nColumn);
     local sText         = Grid.GetCellText(_sBaseDataGrid, nRow, nColumn);
-    local tLiveFile     = _oActiveCardSet.GetLiveFile("CellProc");
-    local sProcChunk    = tLiveFile.Text;
+    local sProcChunk    = _oActiveCardSet.GetCallCode("CellProc");
 
     --the error message in case things go south
     local sChunkName = _sCardSetName.." CellProc";
@@ -388,6 +407,61 @@ local function LoadFileToGrid(pFile)
 end
 
 
+--[[!
+    @fqxn CFS.Classes.ProcSys.StaticPrivate.Methods.TryBackupSetData
+    @desc Creates a timestamped backup of a CSV file when backup rules allow.
+    @param string pFile Path to the source CSV file.
+    @return boolean bWritten True if a new backup file was created.
+    @note
+        <ul>
+            <li>Backups are stored per CSV in a dedicated folder.</li>
+            <li>Backup creation is gated by minimum time interval and max file count.</li>
+            <li>Oldest backups are deleted when retention limits are exceeded.</li>
+        </ul>
+!]]
+local function TryBackupSetData(pSet)
+    --local pFile = tFiles[1];
+    local tParts = String.SplitPath(pFile);
+
+    --create this csv's backup folder (if it doesn't exist)
+    local sFilename = tParts.Filename;
+    local pFolder = _pCSVBackup.."\\"..sFilename;
+
+    if not (Folder.DoesExist(pFolder)) then
+        Folder.Create(pFolder);
+    end
+
+    --find all the csv files in this folder
+    local tFiles        = File.Find(pFolder.."\\", "*.csv", false, false, nil, nil);--FoundCallback);
+    local bWriteFile    = true;
+    local bDeleteFile   = false;
+
+    --get the current timestamp (removing the seconds)
+    local nCurrentTimestamp     = isotominutes(System.GetDate(DATE_FMT_ISO)..System.GetTime(TIME_FMT_MIL));
+
+    if (tFiles and #tFiles > 0) then
+        --sort the dates
+        table.sort(tFiles);
+
+        local nFiles = #tFiles;
+        --get the current timestamp of the latest file (removing the seconds), using safety here in case of nil
+        local nLatestFileTimestamp  = tonumber(String.SplitPath(tFiles[nFiles]).Filename) or nCurrentTimestamp;
+        bWriteFile            = math.abs(nCurrentTimestamp - nLatestFileTimestamp) > BACKUP_MINIMUM_INTERVAL;
+        bDeleteFile           = bWriteFile and (nFiles >= BACKUP_MAX_FILE_COUNT) or false;
+    end
+
+    --delete the oldest backup if needed
+    if (bDeleteFile) then
+        File.Delete(tFiles[1], false, false, true, nil);
+    end
+
+    --write the backup if needed
+    if (bWriteFile) then
+        File.Copy(pFile, pFolder.."\\"..nCurrentTimestamp..".csv", true, true, false, true, nil);
+    end
+
+    return bWriteFile;
+end
 local function TryBackupFile(pFile)--tFiles)
     --local pFile = tFiles[1];
     local tParts = String.SplitPath(pFile);
@@ -548,11 +622,6 @@ return class("ProcSys",
 
             end
 
-            --update
-            if (type(_oActiveCardSet) == "CardSet") then
-                _oActiveCardSet.SetActive(false);
-            end
-
             --set defaults
             _pActiveCSV     = "";
             _bAllowSave     = false;
@@ -590,40 +659,22 @@ return class("ProcSys",
 
             Forge.SetActiveCardSet(oCardSet);
 
-            --reset the update status for each row
-            SetReprocRows(_tReprocRows, false);
+            --track the call CRCs for each row
+            _tRowCRC = {
+                CellProc    = {},
+                Draw        = {},
+            };
 
-            local function LiveFileUpdateCallback(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+            local nRows     = Grid.GetRowCount(_sBaseDataGrid);
+            _nCellProcCRC   = oCardSet.GetCallCRC("CellProc");
+            _nDrawCRC       = oCardSet.GetCallCRC("Draw");
 
-                if (tLiveFile.IsActive) then
-                    local nRows = Grid.GetRowCount(_sBaseDataGrid);
-                    _tRowUpdate[tLiveFile.ID] = {};
-                    local tUpdate =_tRowUpdate[tLiveFile.ID];
-
-                    for nRow = 0, nRows - 1 do
-                        tUpdate[nRow] = true;--tLiveFile.HasChanged;
-                    end
-
-                end
-
+            for nRow = 0, nRows - 1 do
+                _tRowCRC.CellProc[nRow] = _nCellProcCRC;
+                _tRowCRC.Draw[nRow]     = _nDrawCRC;
             end
 
-            --params for callbacks (if needed) -> tLiveFile, sOldText, sNewText, nOldCRC, nCRC
-            LiveFile.SetCallback("CellProc",    function() _bAnyProcChanged = true; end);
-            LiveFile.SetCallback("Draw",        function() _bDrawChanged    = true; end);
-
-            --tLiveFile, sOldText, sNewText, nOldCRC, nCRC
-
-
-
-            --[[local nRows     = Grid.GetRowCount(_sBaseDataGrid);
-            for nRow = 0, nRows - 1 do
-                _tRowUpdate.CellProc[nRow] = lCellProc.HasChanged;
-                _tRowUpdate.Draw[nRow]     = lDraw.HasChanged;
-            end]]
-
-            --Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
-            oCardSet.SetActive(true);
+            Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
         end,
 
         --[[!
@@ -736,6 +787,8 @@ return class("ProcSys",
                </ul>
         !]]
         OnShow = function(sPage)
+
+
 
             --create the game's windows table
             if not (bWindowsBuilt) then
@@ -871,7 +924,6 @@ return class("ProcSys",
                 ProcSys.LoadCardSet(oLastCardSet);
             end
 
-            Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
         end,
 
 
@@ -906,22 +958,6 @@ return class("ProcSys",
             --update the current selection
             _nCurrentRow    = nRow;
             _nCurrentColumn = nColumn;
-            --local bRedrawn = false;
-
-            if (_nLastRow ~= nRow or _tReprocRows[_nCurrentRow]) then
-                local tRow = Grid.GetRow(_sFinalDataGrid, nRow);
-                UserEnv.ProcSysUpdateRoot {_tRow = tRow};
-                ProcSys.ProcessActiveRow();
-                _nLastRow = nRow;
-                _tReprocRows[_nCurrentRow] = false;
-                _bReady = true;
-            end
-
-            --TryDrawCard(tRow);
-
-
---[[
-
 
             --THIS IS the special column proc section
             --TODO FINISH REMOVE THIS--this should not check if this column is a LuaEditor columns (in the Set ini file) and run the editor on it if so.
@@ -938,13 +974,13 @@ return class("ProcSys",
             end
 
             --check if the user has updated any relevant files
-            local bCellProcCRCMismatch  = _tRowUpdate.CellProc[nRow];
-            local bDrawCRCMismatch      = _tRowUpdate.Draw[nRow];
+            local bCellProcCRCMismatch  = _tRowCRC.CellProc[nRow]   ~= _nCellProcCRC;
+            local bDrawCRCMismatch      = _tRowCRC.Draw[nRow]       ~= _nDrawCRC;
             local bProcessed            = false;
 
             if (bCellProcCRCMismatch) then
                 ProcSys.ProcessActiveRow();
-                _tRowUpdate.CellProc[nRow] = false;
+                _tRowCRC.CellProc[nRow] = _nCellProcCRC;
                 bProcessed = true;
             end
 
@@ -960,68 +996,35 @@ return class("ProcSys",
                 end
 
                 if (bDrawCRCMismatch) then
-                    _tRowUpdate.Draw[nRow] = false;
+                    _tRowCRC.Draw[nRow] = _nDrawCRC;
                 end
 
-            end]]
+            end
             --ELProfiler.format()
         end,
 
         OnTimer = function(nID)
+--[[
+            if (nID == _nFileSyncTimerID) then
 
-            if (nID == _nFileSyncTimerID and _bReady) then
-                local bResetRows    = _bDataChanged or _bCFGEnvChanged or _bAnyProcChanged;
-                local bRedraw       = bResetRows or _bDrawChanged;
-                --Log.Note(_bDrawChanged)
-                --local bRefreshInit
-
-                if (_bDataChanged) then
-                    MainMenu.SetEnabled("Set:>Save", false);
-                    LoadFileToGrid(pData);
-                    --TODO Reselect row
-                    _bDataChanged = false;
-                end
-
-                if (_bCFGEnvChanged) then
-                    _oActiveGame.RefreshInit();
-                    _bCFGEnvChanged = false;
-                end
-
-                if (_bAnyProcChanged) then
-                    _bAnyProcChanged = false;
-                end
-
-                if (bResetRows) then
-                    SetReprocRows(true);
-                    ProcSys.ProcessActiveRow();
-                    _tReprocRows[_nCurrentRow] = false;
-                end
-
-                if (bRedraw) then
-                    TryDrawCard(Grid.GetRow(_sFinalDataGrid, _nCurrentRow));
-                    _bDrawChanged = false;
-                end
-
-                --[[
                 if (_oActiveCardSet) then
-                    local nCellProcCRC  = _oActiveCardSet.GetLiveFile("CellProc").CRC;
-                    local nDrawCRC      = _oActiveCardSet.GetLiveFile("Draw").CRC;
+                    local nCellProcCRC  = _oActiveCardSet.UpdateCallCode("CellProc");
+                    local nDrawCRC      = _oActiveCardSet.UpdateCallCode("Draw");
                     local bProcessed    = false;
 
-                    if (nCellProcCRC ~= _nCellProcCRC) then
+                    if (nCellProcCRC) then
                         _nCellProcCRC = nCellProcCRC;
 
                         if (_nCurrentRow ~= -1) then
                             ProcSys.ProcessActiveRow();
                             _tRowCRC.CellProc[_nCurrentRow] = _nCellProcCRC;
-                            --_tRowCRC.CellProc[_nCurrentRow] = false;
                             _tRowCRC.Draw[_nCurrentRow]     = nDrawCRC;
                             bProcessed = true;
                         end
 
                     end
 
-                    if (nDrawCRC ~= _nDrawCRC) then
+                    if (nDrawCRC) then
                         _nDrawCRC = nDrawCRC;
 
                         if (not bProcessed and _nCurrentRow ~= -1) then
@@ -1031,9 +1034,9 @@ return class("ProcSys",
 
                     end
 
-                end]]
+                end
 
-            end
+            end]]
 
         end,
 

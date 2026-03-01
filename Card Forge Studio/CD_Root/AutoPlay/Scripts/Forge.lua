@@ -137,7 +137,7 @@ local function LoadImage(sPath, sName)
     --TODO assertions
     if not (File.DoesExist(sPath)) then
         local sLastError = _tblErrorMessages[Application.GetLastError()];
-        local sError = sLastError ~= "Success." and sLastError or "Image could not be found."
+        local sError = sLastError ~= "Success." and sLastError or "Image could not be found."..sLastError --TODO QUESTION is this correct?
         ImageLoadError(sPath, sName or "UNKNOWN", sError);
     end
 
@@ -356,7 +356,7 @@ return class("Forge",
 
                 if (type(oCardSet) == "CardSet") then --TODO MOVE THIS OUT TO ITS OWN PRIVATE FUNCTION
                     --get the chunk from the active card set
-                    local sDrawChunk = oCardSet.GetCallCode("Draw");
+                    local sDrawChunk = oCardSet.GetLiveFile("Draw").Text;
 
                     --the error message in case things go south
                     local sCardSetName  = oCardSet.GetName();
@@ -374,9 +374,11 @@ return class("Forge",
                     if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
                         p("ERror 539 - Forge: "..vReturnOrError)
                         --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
+                    else
+                        fSetOnImageDraw = vReturnOrError;--(this, tRow, nWidth, nHeight);
                     end
 
-                    fSetOnImageDraw = vReturnOrError;--(this, tRow, nWidth, nHeight);
+
                 end
                 --check it
                 --assert(rawtype(fProcDraw) == "function", "Error Drawing Card, \""..tRow.Name.."\".\r\nMissing static DrawCard function in "..tostring(cProc).." class or function not correctly implemented."); --TODO FINISH
