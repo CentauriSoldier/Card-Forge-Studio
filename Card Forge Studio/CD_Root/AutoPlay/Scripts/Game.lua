@@ -455,7 +455,7 @@ return class("Game",
 
             ProcessDox(pGame);--TODO get this boolean from INI file before running Dox
 
-            Forge.RefreshStyles();
+            Forge.LoadStyles();
         end,
         --rebuilds all game objects and refreshes the private static info
         Refresh = function()

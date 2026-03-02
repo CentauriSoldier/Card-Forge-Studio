@@ -3,13 +3,7 @@ local _sDescription     = "";
 local _pTempFile        = "";
 local _hLiteXT          = -1;
 
---[[!
-    @fqxn Card Forge.Classes.Description
-    @desc
-        Manages the <strong>Description</strong> DialogEx flow and keeps the dialog in sync with the editor’s data.
-        <br>It stores the current description text in a module-level variable, loads it into the UI when the dialog opens, updates the preview fields when an Ability/Event is selected, and saves changes back on close (Base64-encoded) so the description can be persisted through your grid save/load pipeline.
-        </p>
-!]]
+
 return class("Description",
     {--METAMETHODS
 

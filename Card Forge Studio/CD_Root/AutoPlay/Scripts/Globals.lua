@@ -117,8 +117,6 @@ function OnStartUp()--TODO move to its own module if it gets too big
     math.random();
 
     local bIsCompiled = Application.IsCompiled();
-    _DisableRuntimeErrorDialog = true;--bIsCompiled;
-    --Debug.ShowWindow(true);
 
     Log.ClearFile();
 
@@ -162,5 +160,6 @@ function OnStartUp()--TODO move to its own module if it gets too big
         Tutorial.Init();
     end
 
+    _DisableRuntimeErrorDialog = true;--bIsCompiled;
     --ScalerX.OnStartup(1400, 1200);
 end

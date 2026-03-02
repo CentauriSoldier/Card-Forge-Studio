@@ -1,3 +1,5 @@
+constant("APP_NAME", "Card Forge Studio");
+
 --csv parameters
 constant("BACKUP_MINIMUM_INTERVAL", 6); --in minutes
 constant("BACKUP_MAX_FILE_COUNT", 10);
@@ -18,17 +20,20 @@ constant("FORGE_CANVAS_NAME",               "cvs card");
 constant("FORGE_REDRAW_TIMER_ID",           100);
 constant("FORGE_REDRAW_TIMER_INTERVAL",     50);
 constant("FORGE_REDRAW_SIZING_INTERVAL",    300);
+constant("FORGE_STATUS_NAME",               "par status");
+constant("FORGE_STATUS_MOUSE_NAME",         "par status mouse");
+constant("FORGE_STATUS_MOUSE_NEG_NAME",     "par status mouse neg");
 
 constant("PROCSYS_FILE_SYNC_TIMER_ID",        101);
 constant("PROCSYS_FILE_SYNC_TIMER_INTERVAL",  400);
-constant("PROCSYS_TO_TABLE", 1);
-constant("PROCSYS_TO_NUMBER", 2);
+constant("PROCSYS_TO_TABLE",    1);
+constant("PROCSYS_TO_NUMBER",   2);
 
-
+constant("DOX_EXPORT_FILENAME",     "API Documentation");
 
 constant("LOG_OBJECT", "inp log");
 
-local function BuildFilerTable(sName, sExt)
+local function BuildFileSpecTable(sName, sExt)
     local tActual   = {
         Name        = sName,
         Filename    = sName,
@@ -41,7 +46,8 @@ local function BuildFilerTable(sName, sExt)
         __index = function(t, k)
             return tActual[k];
         end,
-        __newindex = function(t, k, v) error("Attempt to write to read-only Filer constant.", 2) end
+        __newindex = function(t, k, v) error("Attempt to write to read-only FileSpec table.", 2) end,
+        __type = "FileSpec",
     };
 
     setmetatable(tDecoy, tMeta);
@@ -50,7 +56,7 @@ local function BuildFilerTable(sName, sExt)
 end
 
 --filenames/extensions
-constant("FILER_CARDSET_DATA",      BuildFilerTable("Data",     "csv"));
-constant("FILER_CARDSET_DRAW",      BuildFilerTable("Draw",     "lua"));
-constant("FILER_CARDSET_INFO",      BuildFilerTable("Info",     "ini"));
-constant("FILER_CARDSET_CELLPROC",  BuildFilerTable("CellProc", "lua"));
+constant("FILER_CARDSET_DATA",      BuildFileSpecTable("Data",     "csv"));
+constant("FILER_CARDSET_DRAW",      BuildFileSpecTable("Draw",     "lua"));
+constant("FILER_CARDSET_INFO",      BuildFileSpecTable("Info",     "ini"));
+constant("FILER_CARDSET_CELLPROC",  BuildFileSpecTable("CellProc", "lua"));

@@ -573,8 +573,7 @@ return class("ProcSys",
             @desc Returns the processor class for a given row and grid.
             @param number nRow Row index.
             @param string|nil vGrid Grid identifier (base or final); defaults to base when nil or invalid.
-            @return class cProc The processor class for the row or nil if none exists.
-            @Deprecated
+            @return class cProc The processor class for the row or nil if none exists.            
         !]]
         GetProc = function(nRow, vGrid)
             local cRet;

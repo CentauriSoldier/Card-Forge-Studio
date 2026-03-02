@@ -102,21 +102,22 @@ local sHRE = "Horizontal Ruler Enabled";
 local sVRE = "Vertical Ruler Enabled";
 local sHCE = "Horizontal Centerline Enabled";
 local sVCE = "Vertical Centerline Enabled";
-local sOE  = "Overlay Enabled";
-local sBE  = "Border Enabled";
+--local sOE  = "Overlay Enabled";
+--local sBE  = "Border Enabled";
 local sESC = "Export Selected Card";
 local sRCC = "Redraw On Cell Changed";
 --; UserEnv.ProcSysUpdateRoot {_bDrawOverlay = -tItem.IsChecked};
 --; UserEnv.ProcSysUpdateRoot {_bDrawOverlay = -tItem.IsChecked};
 TheMenu.Add(sOD,                 _nIconID,       _bEnabled,    -_bChecked,                      -_bCheckable,    _tNoCallbacks).
-        Add(sOD.._sSub..sHRE,    _nIconID,       _bEnabled,     LoadB(sHRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHRE:collapse(), -tItem.IsChecked) end}).
-        Add(sOD.._sSub..sVRE,    _nIconID,       _bEnabled,     LoadB(sVRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVRE:collapse(), -tItem.IsChecked) end}).
-        Add(sOD.._sSub..sHCE,    _nIconID,       _bEnabled,     LoadB(sHCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHCE:collapse(), -tItem.IsChecked) end}).
-        Add(sOD.._sSub..sVCE,    _nIconID,       _bEnabled,     LoadB(sVCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVCE:collapse(), -tItem.IsChecked) end}).
-        Add(sOD.._sSub..sOE,     _nIconID,       _bEnabled,     LoadB(sOE:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sOE:collapse(),  -tItem.IsChecked) end}).
-        Add(sOD.._sSub..sBE,     _nIconID,       _bEnabled,     LoadB(sBE:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sBE:collapse(),  -tItem.IsChecked) end}).
-        Add(sOD.._sSub..sESC,    _nIconID,       _bEnabled,     LoadB(sESC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sESC:collapse(), -tItem.IsChecked) end}).
-        Add(sOD.._sSub..sRCC,    _nIconID,       _bEnabled,     LoadB(sRCC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sRCC:collapse(), -tItem.IsChecked) end});
+        Add(sOD.._sSub..sHRE,    _nIconID,       _bEnabled,     LoadB(sHRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHRE:collapse(), tItem.IsChecked); ProcSys.ForceRedraw(); end}).
+        Add(sOD.._sSub..sVRE,    _nIconID,       _bEnabled,     LoadB(sVRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVRE:collapse(), tItem.IsChecked); ProcSys.ForceRedraw(); end}).
+        Add(sOD.._sSub..sHCE,    _nIconID,       _bEnabled,     LoadB(sHCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHCE:collapse(), tItem.IsChecked); ProcSys.ForceRedraw(); end}).
+        Add(sOD.._sSub..sVCE,    _nIconID,       _bEnabled,     LoadB(sVCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVCE:collapse(), tItem.IsChecked); ProcSys.ForceRedraw(); end}).
+        --Add(sOD.._sSub..sOE,     _nIconID,       _bEnabled,     LoadB(sOE:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sOE:collapse(),  tItem.IsChecked); UserEnv.ProcSysUpdateRoot ({_bDrawOverlay   = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled")}); ProcSys.ForceRedraw(); end}).
+        --Add(sOD.._sSub..sBE,     _nIconID,       _bEnabled,     LoadB(sBE:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sBE:collapse(),  tItem.IsChecked); UserEnv.ProcSysUpdateRoot ({_bDrawBorder = MainMenu.IsChecked("Options:>Draw:>Border Enabled")}); ProcSys.ForceRedraw(); end}).
+        Add(sOD.._sSub..sESC,    _nIconID,       _bEnabled,     LoadB(sESC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sESC:collapse(), tItem.IsChecked) end}).
+        Add(sOD.._sSub..sRCC,    _nIconID,       _bEnabled,     LoadB(sRCC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sRCC:collapse(), tItem.IsChecked) end});
+        --TODO add disable UTIL canvas here and move export somewhere else
 
 
 TheMenu.Add("Window",                   _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
@@ -148,9 +149,11 @@ TheMenu.Add("Window",                   _nIconID,       _bEnabled,      -_bCheck
 ██║  ██║███████╗███████╗██║
 ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ]]
 TheMenu.Add("Help",                     _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
-        Add("Help:>Documentation",      _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(FS.Game.."\\Docs\\"..Game.GetActive().GetName().." API.html", "", SW_SHOWNORMAL); end}).
+        Add("Help:>Documentation",      _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(FS.Game.."\\Docs\\"..DOX_EXPORT_FILENAME..".html", "", SW_SHOWNORMAL); end}).
         Add("Help:>Tutorials",          _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(FS.AppDir.."\\index.html", "", SW_SHOWNORMAL); end}).
         Add("Help:>Visit Website",      _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.OpenURL("https://www.cardforge.studio/", SW_SHOWNORMAL); end}).
+        Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
+        Add("Help:>Rebuild Dox",        _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) Log.ClearWindow(); ProcessDox(Game.GetActive().GetName()) end}).
         Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Help:>License",            _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("License", true, nil, nil); end}).
         --Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
@@ -212,8 +215,8 @@ tSupport = {
             TheMenu.SetEnabled(sOD.._sSub..sVRE,            false);
             TheMenu.SetEnabled(sOD.._sSub..sHCE,            false);
             TheMenu.SetEnabled(sOD.._sSub..sVCE,            false);
-            TheMenu.SetEnabled(sOD.._sSub..sOE,             false);
-            TheMenu.SetEnabled(sOD.._sSub..sBE,             false);
+            --TheMenu.SetEnabled(sOD.._sSub..sOE,             false);
+            --TheMenu.SetEnabled(sOD.._sSub..sBE,             false);
             TheMenu.SetEnabled(sOD.._sSub..sESC,            false);
             TheMenu.SetEnabled(sOD.._sSub..sRCC,            false);
             --project items
@@ -223,6 +226,7 @@ tSupport = {
             TheMenu.SetEnabled("Set:>Load",                 false);
             --TheMenu.SetEnabled("Set:>Save",               false);
             TheMenu.SetEnabled("Help:>Documentation",       false);
+            TheMenu.SetEnabled("Help:>Rebuild Dox",         false);
             --window items
             TheMenu.SetEnabled(sWindow.."Base Data",        false);
             TheMenu.SetEnabled(sWindow.."Final Data",       false);
@@ -236,8 +240,8 @@ tSupport = {
             TheMenu.SetEnabled(sOD.._sSub..sVRE,            true);
             TheMenu.SetEnabled(sOD.._sSub..sHCE,            true);
             TheMenu.SetEnabled(sOD.._sSub..sVCE,            true);
-            TheMenu.SetEnabled(sOD.._sSub..sOE,             true);
-            TheMenu.SetEnabled(sOD.._sSub..sBE,             true);
+            --TheMenu.SetEnabled(sOD.._sSub..sOE,             true);
+            --TheMenu.SetEnabled(sOD.._sSub..sBE,             true);
             TheMenu.SetEnabled(sOD.._sSub..sESC,            true);
             TheMenu.SetEnabled(sOD.._sSub..sRCC,            true);
             --project items
@@ -248,6 +252,7 @@ tSupport = {
             TheMenu.SetEnabled("Set:>New",                  true);
             TheMenu.SetEnabled("Set:>Load",                 true);
             TheMenu.SetEnabled("Help:>Documentation",       true);
+            TheMenu.SetEnabled("Help:>Rebuild Dox",         true);
             --window items
             TheMenu.SetEnabled(sWindow.."Base Data",        true);
             TheMenu.SetEnabled(sWindow.."Final Data",       true);

@@ -23,7 +23,7 @@ local _sSetName             = "";
 local _nLastRow             = -1;
 
 local _tWindows             = {}; --stores windows
-local bWindowsBuilt         = false;
+local _bWindowsBuilt        = false;
 
 local _pAppCFG              = FS.AppCFG;
 
@@ -102,6 +102,136 @@ enum("PANE", {"MAIN", "DATA_EDIT", "DATA_VIEW"});
 constant("GRID_BASE",   _sBaseDataGrid);
 constant("GRID_FINAL",  _sFinalDataGrid);
 
+local function BuildWindows()
+
+    if not (_bWindowsBuilt) then
+        local tWindows = _tWindows;
+
+        local function OnReadyGrids(hWnd, sObject)
+            Grid.SetVisible(sObject, true);
+        end
+
+        --store the card/main window (mainly for the forge)
+        tWindows[PANE.MAIN] = {
+            WindowHandle = HWND_APP,
+        };
+
+        --create the data editor first
+        local oDataEdit = WinAMS(OBJECT_GRID, "Base Data Editor", 0, 0, 800, 1000, "grd base data", nil, OnReadyGrids)--TODO get values from INI, CHANGE NAME
+        tWindows[PANE.DATA_EDIT] = {
+            Object = oDataEdit,
+            WindowHandle = oDataEdit.GetWindowHandle(),
+            Callback        = {
+                OnClose         = oDataEdit.GetCallback(WinSys.EVENT.OnClose),
+                OnMaximize      = oDataEdit.GetCallback(WinSys.EVENT.OnMaximize),
+                OnResizeStop    = oDataEdit.GetCallback(WinSys.EVENT.OnResizeStop),
+                OnRestore       = oDataEdit.GetCallback(WinSys.EVENT.OnRestore),
+            },
+        };
+
+        --then the data viewer
+        local oDataView = WinAMS(OBJECT_GRID, "Final Data Viewer", 1400, 0, 800, 1000, "grd final data", nil, OnReadyGrids)--TODO get values from INI
+        tWindows[PANE.DATA_VIEW] = {
+            Object          = oDataView,
+            WindowHandle    = oDataView.GetWindowHandle(),
+            Callback        = {
+                OnClose         = oDataView.GetCallback(WinSys.EVENT.OnClose),
+                OnMaximize      = oDataView.GetCallback(WinSys.EVENT.OnMaximize),
+                OnResizeStop    = oDataView.GetCallback(WinSys.EVENT.OnResizeStop),
+                OnRestore       = oDataView.GetCallback(WinSys.EVENT.OnRestore),
+            },
+        };
+
+        local tPaneByHandle = {
+            [tWindows[PANE.DATA_EDIT].WindowHandle] = PANE.DATA_EDIT,
+            [tWindows[PANE.DATA_VIEW].WindowHandle] = PANE.DATA_VIEW,
+        };
+
+        local function RestoreWindow(hWnd)
+            local ePane         = tPaneByHandle[hWnd];
+            local sSection      = tostring(ePane);
+            local nX            = tonumber(INIFile.GetValue(_pAppCFG, sSection, "X"))           or 0;
+            local nY            = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Y"))           or 0;
+            local nWidth        = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Width"))       or 800;
+            local nHeight       = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Height"))      or 1000; --TODO MAGIC NUMBERS use defaults?
+            local bMaximized    = INIFile.GetValueBoolean(  _pAppCFG, sSection, "Maximized")    or false;
+
+            Window.SetSize(hWnd, nWidth, nHeight);
+            tWindows[ePane].Object.FillWindow();
+            Window.SetPos(hWnd, nX, nY);
+
+            if (bMaximized) then
+                Window.Maximize(hWnd);
+            end
+
+            if not (INIFile.GetValueBoolean(_pAppCFG, tostring(ePane), "Visible")) then
+                Window.Hide(hWnd);
+            end
+
+        end
+
+        local function OnClose(hWnd)
+            local ePane = tPaneByHandle[hWnd];
+
+            --fire the original callback
+            tWindows[ePane].Callback.OnClose(hWnd, nWidth, nHeight);
+
+            INIFile.SetValue(_pAppCFG, tostring(ePane), "Visible", "false");
+            fCurrentOnClose(hWnd);
+        end
+
+        local function FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, sCallback)
+            local ePane = tPaneByHandle[hWnd];
+            --fire the original callback
+            tWindows[ePane].Callback[sCallback](hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight);
+
+            --save the window's dimensions
+            local sSection = tostring(ePane);
+            INIFile.SetValue(_pAppCFG, sSection, "Width", tostring(nWidth));
+            INIFile.SetValue(_pAppCFG, sSection, "Height", tostring(nHeight));
+
+            INIFile.SetValue(_pAppCFG, sSection, "X", tostring(nX));
+            INIFile.SetValue(_pAppCFG, sSection, "Y", tostring(nY));
+
+            --update whether the window is maximized
+            INIFile.SetValue(_pAppCFG, sSection, "Maximized", tostring(sCallback == "OnMaximize"));
+        end
+
+        local function OnMaximize(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
+            FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, "OnMaximize");
+        end
+
+        local function OnResizeStop(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
+            FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, "OnResizeStop");
+        end
+
+        local function OnRestore(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
+            FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, "OnRestore");
+        end
+
+        --update the callbacks
+        oDataEdit.SetCallback(WinSys.EVENT.OnClose,         OnClose);
+        oDataEdit.SetCallback(WinSys.EVENT.OnMaximize,      OnMaximize);
+        oDataEdit.SetCallback(WinSys.EVENT.OnResizeStop,    OnResizeStop);
+        oDataEdit.SetCallback(WinSys.EVENT.OnRestore,       OnRestore);
+        oDataView.SetCallback(WinSys.EVENT.OnClose,         OnClose);
+        oDataView.SetCallback(WinSys.EVENT.OnMaximize,      OnMaximize);
+        oDataView.SetCallback(WinSys.EVENT.OnResizeStop,    OnResizeStop);
+        oDataView.SetCallback(WinSys.EVENT.OnRestore,       OnRestore);
+
+
+        RestoreWindow(tWindows[PANE.DATA_EDIT].WindowHandle);
+        RestoreWindow(tWindows[PANE.DATA_VIEW].WindowHandle);
+
+        _bWindowsBuilt = true;
+
+        UserEnv.ProcSysUpdateRoot ({
+            _TABLE          = PROCSYS_TO_TABLE,
+            _NUMBER         = PROCSYS_TO_NUMBER,
+        }, true);
+    end
+
+end
 
 --[[!
     @fqxn CFS.Classes.ProcSys.StaticPrivate.Methods.TryDrawCard
@@ -432,6 +562,16 @@ local function TryBackupFile(pFile)--tFiles)
     return bWriteFile;
 end
 
+local function TryDrawActiveCard()
+
+    if (_bReady) then
+        local tRow = Grid.GetRow(_sFinalDataGrid, _nCurrentRow);
+        TryDrawCard(tRow);
+    end
+
+end
+
+
 --[[!
     @fqxn CFS.Classes.ProcSys
     @desc <h2>ProcSys</h2>
@@ -480,6 +620,9 @@ return class("ProcSys",
     {--STATIC PUBLIC
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
         --ProcSys = function(this, sAuthCode) end, --static constructor (runs after class object creation)
+        ForceRedraw = function()
+            TryDrawActiveCard();
+        end,
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.CreateImagePath
             @desc Builds a deterministic card image path using the card set's folder structure.
@@ -491,30 +634,6 @@ return class("ProcSys",
         end,]]
         GetActiveCardSet = function() --TODO QUESTION IS THIS EVER USED???
             return _oActiveCardSet;
-        end,
-
-
-        --[[!
-            @fqxn CFS.Classes.ProcSys.Methods.GetProc
-            @desc Returns the processor class for a given row and grid.
-            @param number nRow Row index.
-            @param string|nil vGrid Grid identifier (base or final); defaults to base when nil or invalid.
-            @return class cProc The processor class for the row or nil if none exists.
-            @Deprecated
-        !]]
-        GetProc = function(nRow, vGrid)
-            local cRet;
-            local bInputValid = (rawtype(vGrid) == "string" and (vGrid == _sBaseDataGrid or vGrid == _sFinalDataGrid));
-            local sGrid = bInputValid and vGrid or _sBaseDataGrid;
-            local tRow = Grid.GetRow(sGrid, nRow);
-
-            --check if this game has a proc resolver
-            if (type(_tProcResolvers[_sGame]) == "function") then
-                cRet = _tProcResolvers[_sGame](_sSetName, tRow);
-                cRet = type(cRet) == "class" and cRet or nil;
-            end
-
-            return cRet;
         end,
 
 
@@ -650,7 +769,7 @@ return class("ProcSys",
                 return;
             end
 
-            if (nColumn == 1) then--Grid.GetColumnIDByName("Name")) then --TODO cache this value
+            if (nColumn == 1 and 5 == 8) then--Grid.GetColumnIDByName("Name")) then --TODO cache this value
 
                 --handle the name
                 if (sNewText:isempty() or not sNewText:isfilesafe()) then
@@ -738,129 +857,7 @@ return class("ProcSys",
         OnShow = function(sPage)
 
             --create the game's windows table
-            if not (bWindowsBuilt) then
-                local tWindows = _tWindows;
-
-                local function OnReadyGrids(hWnd, sObject)
-            	    Grid.SetVisible(sObject, true);
-                end
-
-                --create the data editor first
-                local oDataEdit = WinAMS(OBJECT_GRID, "Base Data Editor", 0, 0, 800, 1000, "grd base data", nil, OnReadyGrids)--TODO get values from INI, CHANGE NAME
-                tWindows[PANE.DATA_EDIT] = {
-                    Object = oDataEdit,
-                    WindowHandle = oDataEdit.GetWindowHandle(),
-                    Callback        = {
-                        OnClose         = oDataEdit.GetCallback(WinSys.EVENT.OnClose),
-                        OnMaximize      = oDataEdit.GetCallback(WinSys.EVENT.OnMaximize),
-                        OnResizeStop    = oDataEdit.GetCallback(WinSys.EVENT.OnResizeStop),
-                        OnRestore       = oDataEdit.GetCallback(WinSys.EVENT.OnRestore),
-                    },
-                };
-
-                --then the data viewer
-                local oDataView = WinAMS(OBJECT_GRID, "Final Data Viewer", 1400, 0, 800, 1000, "grd final data", nil, OnReadyGrids)--TODO get values from INI
-                tWindows[PANE.DATA_VIEW] = {
-                    Object          = oDataView,
-                    WindowHandle    = oDataView.GetWindowHandle(),
-                    Callback        = {
-                        OnClose         = oDataView.GetCallback(WinSys.EVENT.OnClose),
-                        OnMaximize      = oDataView.GetCallback(WinSys.EVENT.OnMaximize),
-                        OnResizeStop    = oDataView.GetCallback(WinSys.EVENT.OnResizeStop),
-                        OnRestore       = oDataView.GetCallback(WinSys.EVENT.OnRestore),
-                    },
-                };
-
-                local tPaneByHandle = {
-                    [tWindows[PANE.DATA_EDIT].WindowHandle] = PANE.DATA_EDIT,
-                    [tWindows[PANE.DATA_VIEW].WindowHandle] = PANE.DATA_VIEW,
-                };
-
-                local function RestoreWindow(hWnd)
-                    local ePane         = tPaneByHandle[hWnd];
-                    local sSection      = tostring(ePane);
-                    local nX            = tonumber(INIFile.GetValue(_pAppCFG, sSection, "X"))           or 0;
-                    local nY            = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Y"))           or 0;
-                    local nWidth        = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Width"))       or 800;
-                    local nHeight       = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Height"))      or 1000; --TODO MAGIC NUMBERS use defaults?
-                    local bMaximized    = INIFile.GetValueBoolean(  _pAppCFG, sSection, "Maximized")    or false;
-
-                    Window.SetSize(hWnd, nWidth, nHeight);
-                    tWindows[ePane].Object.FillWindow();
-                    Window.SetPos(hWnd, nX, nY);
-
-                    if (bMaximized) then
-                        Window.Maximize(hWnd);
-                    end
-
-                    if not (INIFile.GetValueBoolean(_pAppCFG, tostring(ePane), "Visible")) then
-                        Window.Hide(hWnd);
-                    end
-
-                end
-
-                local function OnClose(hWnd)
-                    local ePane = tPaneByHandle[hWnd];
-
-                    --fire the original callback
-                    tWindows[ePane].Callback.OnClose(hWnd, nWidth, nHeight);
-
-                    INIFile.SetValue(_pAppCFG, tostring(ePane), "Visible", "false");
-                    fCurrentOnClose(hWnd);
-                end
-
-                local function FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, sCallback)
-                    local ePane = tPaneByHandle[hWnd];
-                    --fire the original callback
-                    tWindows[ePane].Callback[sCallback](hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight);
-
-                    --save the window's dimensions
-                    local sSection = tostring(ePane);
-                    INIFile.SetValue(_pAppCFG, sSection, "Width", tostring(nWidth));
-                    INIFile.SetValue(_pAppCFG, sSection, "Height", tostring(nHeight));
-
-                    INIFile.SetValue(_pAppCFG, sSection, "X", tostring(nX));
-                    INIFile.SetValue(_pAppCFG, sSection, "Y", tostring(nY));
-
-                    --update whether the window is maximized
-                    INIFile.SetValue(_pAppCFG, sSection, "Maximized", tostring(sCallback == "OnMaximize"));
-                end
-
-                local function OnMaximize(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
-                    FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, "OnMaximize");
-                end
-
-                local function OnResizeStop(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
-                    FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, "OnResizeStop");
-                end
-
-                local function OnRestore(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight)
-                    FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, "OnRestore");
-                end
-
-                --update the callbacks
-                oDataEdit.SetCallback(WinSys.EVENT.OnClose,         OnClose);
-                oDataEdit.SetCallback(WinSys.EVENT.OnMaximize,      OnMaximize);
-                oDataEdit.SetCallback(WinSys.EVENT.OnResizeStop,    OnResizeStop);
-                oDataEdit.SetCallback(WinSys.EVENT.OnRestore,       OnRestore);
-                oDataView.SetCallback(WinSys.EVENT.OnClose,         OnClose);
-                oDataView.SetCallback(WinSys.EVENT.OnMaximize,      OnMaximize);
-                oDataView.SetCallback(WinSys.EVENT.OnResizeStop,    OnResizeStop);
-                oDataView.SetCallback(WinSys.EVENT.OnRestore,       OnRestore);
-
-
-                RestoreWindow(tWindows[PANE.DATA_EDIT].WindowHandle);
-                RestoreWindow(tWindows[PANE.DATA_VIEW].WindowHandle);
-
-                bWindowsBuilt = true;
-
-                UserEnv.ProcSysUpdateRoot ({
-                    _TABLE          = PROCSYS_TO_TABLE,
-                    _NUMBER         = PROCSYS_TO_NUMBER,
-                    _bDrawBorder    = MainMenu.IsChecked("Options:>Draw:>Border Enabled"),
-                    _bDrawOverlay   = MainMenu.IsChecked("Options:>Draw:>Overlay Enabled"),
-                }, true);
-            end
+            BuildWindows();
 
             --load last card set if present
             local sLastCardSetUUID  = INIFile.GetValue(FS.Info, "SESSION", "LastSet");
@@ -897,12 +894,6 @@ return class("ProcSys",
             @param number nColumn The column index of the cell selected.
         !]]
         OnSelectionChanged = function(sGrid, nRow, nColumn)
-            --ELProfiler.start(period, stack_depth)
-            --update the card env subtable
-
-
-            --local cProc = ProcSys.GetProc(nRow);
-
             --update the current selection
             _nCurrentRow    = nRow;
             _nCurrentColumn = nColumn;
@@ -911,7 +902,7 @@ return class("ProcSys",
             if (_nLastRow ~= nRow or _tReprocRows[_nCurrentRow]) then
                 local tRow = Grid.GetRow(_sFinalDataGrid, nRow);
                 UserEnv.ProcSysUpdateRoot {_tRow = tRow};
-                ProcSys.ProcessActiveRow();
+                ProcSys.ProcessActiveRow(not _bReady);
                 _nLastRow = nRow;
                 _tReprocRows[_nCurrentRow] = false;
                 _bReady = true;
@@ -970,10 +961,9 @@ return class("ProcSys",
         OnTimer = function(nID)
 
             if (nID == _nFileSyncTimerID and _bReady) then
+                --_bAnyProcChanged    =
                 local bResetRows    = _bDataChanged or _bCFGEnvChanged or _bAnyProcChanged;
                 local bRedraw       = bResetRows or _bDrawChanged;
-                --Log.Note(_bDrawChanged)
-                --local bRefreshInit
 
                 if (_bDataChanged) then
                     MainMenu.SetEnabled("Set:>Save", false);
@@ -993,7 +983,7 @@ return class("ProcSys",
 
                 if (bResetRows) then
                     SetReprocRows(true);
-                    ProcSys.ProcessActiveRow();
+                    ProcSys.ProcessActiveRow(true);
                     _tReprocRows[_nCurrentRow] = false;
                 end
 
@@ -1060,7 +1050,7 @@ return class("ProcSys",
             --update the final row in the UserEnv
             UserEnv.ProcSysUpdateRoot {_tRow = tRow};
             --redraw the card
-            TryDrawCard(tRow);
+            TryDrawCard(tRow);--TODO QUESTION...should this be drawing here? Seems like it's doing more than the name suggests.
         end,
 
         --TODO put in examplke and show the args for the callback

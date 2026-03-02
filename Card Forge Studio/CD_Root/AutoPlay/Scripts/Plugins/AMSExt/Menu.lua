@@ -239,7 +239,6 @@ return class("Menu",
             if not tItem then return end
 
             if (tItem.IsEnabled) then
-                tItem.Callbacks[eMenuEvent.OnSelected](clone(tItem));
 
                 if (tItem.IsCheckable) then
                     local bChecked  = tItem.IsChecked;
@@ -249,6 +248,7 @@ return class("Menu",
                     tItem.Callbacks[eEvent](clone(tItem));
                 end
 
+                tItem.Callbacks[eMenuEvent.OnSelected](clone(tItem));
             end
 
         end,

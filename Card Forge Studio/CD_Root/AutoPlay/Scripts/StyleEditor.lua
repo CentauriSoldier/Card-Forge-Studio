@@ -43,18 +43,17 @@ local _oBlack           = Color.RGBA(0, 0, 0, 255);
 local _oWhite           = Color.RGBA(255, 255, 255, 255);
 local _oCanvasColor     = Color.RGBA(102, 93, 75, 255);
 local _tDrawSystem      = {}; --used to store canvases, handles and numbers
-local _oForge;
 local _nUpdateTimerID    = 1;
 local _nUpdateTimerInt   = 300;
 
 local function GetValue(sValue, bChain)
-    return INIFile.GetValue(_pStyles, _sActiveStyle, sValue, bChain);
+    return INIFile.GetValue(FS.Styles, _sActiveStyle, sValue, bChain);
 end
 
 local function SaveValue(sValue, sData, bChain)
 
     if not (_sActiveStyle:isempty()) then
-        INIFile.SetValue(_pStyles, _sActiveStyle, sValue, sData, bChain);
+        INIFile.SetValue(FS.Styles, _sActiveStyle, sValue, sData, bChain);
     end
 
 end
@@ -92,15 +91,15 @@ end
 
 
 local function SetCheckBox(sValue)
-    local sData, tChain = INIFile.GetValue(_pStyles, _sActiveStyle, sValue);
+    local sData, tChain = INIFile.GetValue(FS.Styles, _sActiveStyle, sValue);
     local bChecked 	= toboolean(sValue);
     bChecked		= type(bChecked) == "boolean" and bChecked or tCheckBoxes[sValue];
     CheckBox.SetChecked("chk "..sValue, bChecked);
 end
 
 local function SetInput(sValue)
-    local sData         = INIFile.GetValue(_pStyles, _sActiveStyle, sValue);
-    local sChainData    = INIFile.GetValue(_pStyles, _sActiveStyle, sValue, true);
+    local sData         = INIFile.GetValue(FS.Styles, _sActiveStyle, sValue);
+    local sChainData    = INIFile.GetValue(FS.Styles, _sActiveStyle, sValue, true);
     Input.SetText("inp "..sValue, sData);
     Input.SetText("inp "..sValue.. " chain", sChainData);
 end
@@ -215,7 +214,7 @@ end
 
 local _sDisplayText = "The quick brown fox jumped over the lazy dog.";
 local function UpdateDisplayText(...)
-    local oFontStyle  = _oForge.STYLE[_sActiveStyle];
+    local oFontStyle  = Forge.STYLE[_sActiveStyle];
     oFontStyle:Update();
 
     for nIndex, tDrawSystem in pairs(_tDrawSystem) do
@@ -305,7 +304,7 @@ return class("StyleEditor",
         InputOnKey = function(sObject, nKey, tModifiers)
             local sValue = GetValueNameFromObject(sObject);
             SaveValue(sValue, Input.GetText(sObject));
-            _oForge.STYLE[_sActiveStyle].Update();
+            Forge.STYLE[_sActiveStyle].Update();
         end,
         OnLeave = function(sObject)
             Paragraph.SetText(_sChainDisplay, "");
@@ -317,7 +316,7 @@ return class("StyleEditor",
             	local nSelected 	= tSelected[1];
             	local sStyle 		= ListBox.GetItemText(sObject, nSelected);
                 _sActiveStyle       = sStyle;
-            	local tValueNames 	= INIFile.GetValueNames(_pStyles, sStyle)
+            	local tValueNames 	= INIFile.GetValueNames(FS.Styles, sStyle)
 
             	if (tValueNames and #tValueNames > 0) then
 
@@ -352,7 +351,6 @@ return class("StyleEditor",
             Paragraph.SetText("par mouse", "X: ".._nMouseX.." Y:".._nMouseY);
         end,
         OnShow = function()
-            _oForge      = ProcSys.GetForge();
             _tDrawSystem = {};
 
             for x = 1, 2 do
@@ -412,7 +410,7 @@ return class("StyleEditor",
 
         end,
         UpdateStyles = function()
-            local tStyles = INIFile.GetSectionNames(_pStyles);
+            local tStyles = INIFile.GetSectionNames(FS.Styles);
 
             if (tStyles and #tStyles > 0) then
             	ListBox.DeleteItem(_sListStyles, LB_ALLITEMS);
