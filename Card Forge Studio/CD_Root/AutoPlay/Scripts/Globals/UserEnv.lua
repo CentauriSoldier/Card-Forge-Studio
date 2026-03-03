@@ -192,6 +192,24 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     Import           = Import,
     ---
     --User             = {}, --from Init
+    --[[!
+    @fqxn CFS.UserEnv.Uptime
+    @desc
+    <p>Returns the number of seconds elapsed since the UserEnv (sandbox) was created.
+    <br><br>
+    This value is **relative**, not wall-clock time. It does not expose system time,
+    timezone, or date information, and is safe for use inside restricted or sandboxed
+    environments. The uptime origin cannot be reset or modified by sandboxed code.
+    Although the various random functions in the environment have already been seeded with
+    pseudo-random values, this value can be used for additional random seeding if desired.
+    </p>
+    @ret number nSeconds Elapsed time in seconds since the UserEnv was initialized.
+    @example
+    local nUptime = Uptime();
+!]]
+    Uptime           = function()
+        return os.time() - SANDBOX_TIME_START;
+    end,
 };
 
 -- decoy -> real backing table map (weak keys so nothing is kept alive)
@@ -1492,6 +1510,7 @@ local tUserEnv = {
     end,
     UserUpdateRoot = function(tInput) --TODO BUG update this to use protected env when able : the user table will get input thourgh forge constructor, then run through the safe env filter, then iterated over and dumped into main env table (error on overwriteing ofc.)
         --local tInput = --GetUserEnv();
+        --TODO ALSO DO NOT LEt user indices overwrite exiting onces...keep track of list afte rinjhection and allow new injectio to overwrite only user indices
 
         if (rawtype(tInput) == "table") then
 

@@ -46,14 +46,16 @@ local _tDrawSystem      = {}; --used to store canvases, handles and numbers
 local _nUpdateTimerID    = 1;
 local _nUpdateTimerInt   = 300;
 
+local _tStyles; --updated OnShow
+
 local function GetValue(sValue, bChain)
-    return INIFile.GetValue(FS.Styles, _sActiveStyle, sValue, bChain);
+    return INIFile.GetValue(_tStyles, _sActiveStyle, sValue, bChain);
 end
 
 local function SaveValue(sValue, sData, bChain)
 
     if not (_sActiveStyle:isempty()) then
-        INIFile.SetValue(FS.Styles, _sActiveStyle, sValue, sData, bChain);
+        INIFile.SetValue(_tStyles, _sActiveStyle, sValue, sData, bChain);
     end
 
 end
@@ -91,15 +93,15 @@ end
 
 
 local function SetCheckBox(sValue)
-    local sData, tChain = INIFile.GetValue(FS.Styles, _sActiveStyle, sValue);
+    local sData, tChain = INIFile.GetValue(_tStyles, _sActiveStyle, sValue);
     local bChecked 	= toboolean(sValue);
     bChecked		= type(bChecked) == "boolean" and bChecked or tCheckBoxes[sValue];
     CheckBox.SetChecked("chk "..sValue, bChecked);
 end
 
 local function SetInput(sValue)
-    local sData         = INIFile.GetValue(FS.Styles, _sActiveStyle, sValue);
-    local sChainData    = INIFile.GetValue(FS.Styles, _sActiveStyle, sValue, true);
+    local sData         = INIFile.GetValue(_tStyles, _sActiveStyle, sValue);
+    local sChainData    = INIFile.GetValue(_tStyles, _sActiveStyle, sValue, true);
     Input.SetText("inp "..sValue, sData);
     Input.SetText("inp "..sValue.. " chain", sChainData);
 end
@@ -316,7 +318,7 @@ return class("StyleEditor",
             	local nSelected 	= tSelected[1];
             	local sStyle 		= ListBox.GetItemText(sObject, nSelected);
                 _sActiveStyle       = sStyle;
-            	local tValueNames 	= INIFile.GetValueNames(FS.Styles, sStyle)
+            	local tValueNames 	= INIFile.GetValueNames(_tStyles, sStyle)
 
             	if (tValueNames and #tValueNames > 0) then
 
@@ -352,6 +354,7 @@ return class("StyleEditor",
         end,
         OnShow = function()
             _tDrawSystem = {};
+            _tStyles = _tStyles;
 
             for x = 1, 2 do
                 _tDrawSystem[x] = {};
@@ -410,7 +413,7 @@ return class("StyleEditor",
 
         end,
         UpdateStyles = function()
-            local tStyles = INIFile.GetSectionNames(FS.Styles);
+            local tStyles = INIFile.GetSectionNames(_tStyles);
 
             if (tStyles and #tStyles > 0) then
             	ListBox.DeleteItem(_sListStyles, LB_ALLITEMS);

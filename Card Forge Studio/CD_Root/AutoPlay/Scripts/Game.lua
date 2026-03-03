@@ -2,58 +2,11 @@ local _tGames       = {}; --keys are uuids, values are {Game = GameObject, Name 
 local _oActiveGame  = false;
 local GetCRC        = File.GetCRC
 local ReadToString  = TextFile.ReadToString;
-local CardSet;
 local io            = io;
 --TODO with New methods, checkf or existing item first...do not overwrite
 
---[[
-█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
-╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
-                                                ██╗      ██████╗  ██████╗ █████╗ ██╗
-                                                ██║     ██╔═══██╗██╔════╝██╔══██╗██║
-                                                ██║     ██║   ██║██║     ███████║██║
-                                                ██║     ██║   ██║██║     ██╔══██║██║
-                                                ███████╗╚██████╔╝╚██████╗██║  ██║███████╗
-                                                ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝
-█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
-╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
-]]
-
-
---[[
-    @fqxn   CFS.ValidateName
-    @desc   Reads and validates the display name for a folder-backed object (Game/CardSet/etc.).
-            Looks up "Name" under [SETTINGS] in "<Folder>\Info.ini".
-            Throws if the value is missing/empty.
-    @param  pFolder (string) Absolute path to the object folder.
-    @param  sType   (string) Human-readable type label used in error messages (e.g. "Game", "CardSet").
-    @return (string) The validated name string from the INI.
-    @error  Raised when the INI value is missing or empty.
-]]
-local function ValidateName(pFolder, sType)
-
-    local sName = INIFile.GetValue(pFolder.."\\Info.ini", "SETTINGS", "Name");
-
-    if (sName:isempty()) then
-        error("Invalid ${type}: Malformed ${type} INI file at ${path}. Missing \"Name\" value." % {path = pFolder, type = sType}, nErrorLevel);
-    end
-
-    return sName;
-end
-
-
-local function ValidateFolder(pFolder, sType)
-    local nErrorLevel = 4;
-
-    --get and validate the game's uuid
-    local sUUID = io.getenddir(pFolder);
-
-    if not (sUUID:isuuid()) then
-        error("Invalid ${type}: ${type} directory must be named a valid uuid string. Got \"${folder}\" at path\r\n\"${path}.\"" % {folder = sUUID, path = pFolder, type = sType}, nErrorLevel);
-    end
-
-    return sUUID;
-end
+local CardSet   = require("Game.CardSet");
+local GameUtil  = require("Game.GameUtil");
 
 
 local function ValidateAndUpdateGame(this, cdat)
@@ -63,10 +16,10 @@ local function ValidateAndUpdateGame(this, cdat)
     local sType         = "Game";
 
     --get and validate the game's uuid
-    local sUUID = ValidateFolder(pFolder, sType);
+    local sUUID = GameUtil.ValidateObjectFolder(pFolder, sType);
 
     --validate the game's name
-    local sName = ValidateName(pFolder, sType);
+    local sName = GameUtil.ValidateObjectName(pFolder, sType);
 
     pri.UUID = sUUID;
     pri.Name = sName;
@@ -103,235 +56,16 @@ local function ValidateAndUpdateGame(this, cdat)
 
     end
 
+    --update the game's LiveFileRepo
+    --TODO LEFT OFF HERE
+    
 end
 
 local function SortByName(oItemA, oItemB)
     return oItemA.GetName() < oItemB.GetName();
 end
 
-local function UpdateCardSetCallCode(sCall, tCall)
-    local bRet      = false;
-    local pCallCode = tCall.Path;
 
-    if not (File.DoesExist(pCallCode)) then
-        --TODO FINISH ERROR
-        error("NO FILE, OMG! AHHHHH!!!!"..sCall);
-    end
-
-    --get the new CRC
-    local nCRC = GetCRC(tCall.Path);
-
-    if (nCRC == -1) then --an error occurred if it does == -1
-        --TODO ERROR HERE
-    end
-
-    --compare it the existing one
-    if (nCRC ~= tCall.CRC) then
-        --set the newest CRC for this call
-        tCall.CRC = nCRC;
-        tCall.Code = ReadToString(pCallCode); --TODO THROW ERROR on file read error
-        p(sCall)
-    end
-
-    return bRet;
-end
-
-
---[[
-█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
-╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
-                                         ██████╗ █████╗ ██████╗ ██████╗ ███████╗███████╗████████╗
-                                        ██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝╚══██╔══╝
-                                        ██║     ███████║██████╔╝██║  ██║███████╗█████╗     ██║
-                                        ██║     ██╔══██║██╔══██╗██║  ██║╚════██║██╔══╝     ██║
-                                        ╚██████╗██║  ██║██║  ██║██████╔╝███████║███████╗   ██║
-                                         ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝   ╚═╝
-█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
-╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
-]]
-CardSet = class("CardSet",
-    {--METAMETHODS
-
-    },
-    {--STATIC PUBLIC
-        --__INIT = function(stapub) end, --static initializer (runs before class object creation)
-        --CardSet = function(this, sAuthCode) end, --static constructor (runs after class object creation)
-        --CardSetExists = function(sCardSet) end
-        --rebuilds all game objects and refreshes the private static info
-    },
-    {--PRIVATE
-        --Calls               = {}, --holds things like Draw, Proc, etc.
-        CallRepo            = null,
-        CardWidth__AUTOR_   = null,
-        CardHeight__AUTOR_  = null,
-        DataPath__AUTOR_    = null,
-        InfoPath__AUTOR_    = null,
-        IsActive__AUTOA_    = false,
-        Name__AUTOA_        = '',
-        Path__AUTOR_        = null,
-        UUID__AUTOR_        = null,
-    },
-    {--PROTECTED
-
-    },
-    {--PUBLIC
-        CardSet = function(this, cdat, pFolder)
-            local pri = cdat.pri;
-
-            --validate the input string and ensure it leads to a valid directory
-            if not (rawtype(pFolder) == "string" and Folder.DoesExist(pFolder)) then
-                error("Invalid CardSet: CardSet path must lead to an existing directory.", 3);
-            end
-
-            local pData     = pFolder.."\\"..FILER_CARDSET_DATA.Full;
-            local pInfo     = pFolder.."\\"..FILER_CARDSET_INFO.Full;
-
-            --call files
-            local pDrawPath     = pFolder.."\\"..FILER_CARDSET_DRAW.Full;
-            local pCellProcPath = pFolder.."\\"..FILER_CARDSET_CELLPROC.Full;
-
-            local tCheckFiles = {pData, pInfo, pDrawPath, pCellProcPath};
-
-            for _, pFile in pairs(tCheckFiles) do
-
-                if not (File.DoesExist(pFile)) then
-                    error("Invalid CardSet: missing expected file at \""..pFile..".\"");
-                end
-
-            end
-
-            --TODO SPECIAL COLUMNS!!!
-            local sUUID         = ValidateFolder(pFolder, "CardSet");
-            local sName         = ValidateName(pFolder, "CardSet");
-            local nCardWidth    = tonumber(INIFile.GetValue(pFolder.."\\Info.ini", "SETTINGS", "CardWidth"));
-            local nCardHeight   = tonumber(INIFile.GetValue(pFolder.."\\Info.ini", "SETTINGS", "CardHeight"));
-
-            if (not nCardWidth) then
-                error("Invalid ${type}: Malformed ${type} INI file at ${path}. Missing \"CardWidth\" value or non-numeric value given." % {path = pFolder, type = sType}, 2);
-            end
-
-            if (not nCardHeight) then
-                error("Invalid ${type}: Malformed ${type} INI file at ${path}. Missing \"CardHeight\" value or non-numeric value given." % {path = pFolder, type = sType}, 2);
-            end
-
-            --set the game's info
-            pri.DataPath    = pData;
-            pri.InfoPath    = pInfo;
-            pri.Name        = sName;
-            pri.Path        = pFolder;
-            pri.UUID        = sUUID;
-            pri.CardWidth   = math.abs(nCardWidth);
-            pri.CardHeight  = math.abs(nCardHeight);
-
-            --create the LiveFileRepo and register the LiveFiles for each call.
-            local oCallRepo = LiveFile.CreateRepo();
-            pri.CallRepo    = oCallRepo;
-            LiveFile.Register(oCallRepo, "CellProc",    pCellProcPath,  PROCSYS_FILE_SYNC_TIMER_INTERVAL);
-            LiveFile.Register(oCallRepo, "Draw",        pDrawPath,      PROCSYS_FILE_SYNC_TIMER_INTERVAL);--TODO SPECIAL COLUMNS!!!
-        end,
-        GetLiveFile = function(this, cdat, sCall)
-            local pri = cdat.pri;
-            return pri.CallRepo[sCall];
-            --local tCalls = pri.Calls;
-            --p(sCall, type(tCalls[sCall].Code))
-            --if (tCalls[sCall] == nil) then
-            --    error("TODO ERROR CAN'T GET CALL - NO CARDSET CALL BY THAT NAME")
-            --end
-
-            --return tCalls[sCall].Code;
-        end,
-        --[[GetLiveFileRepo = function(this, cdat)
-            return cdat.pri.CallRepo;
-            --local tCalls = pri.Calls;
-            --p(sCall, type(tCalls[sCall].Code))
-            --if (tCalls[sCall] == nil) then
-            --    error("TODO ERROR CAN'T GET CALL - NO CARDSET CALL BY THAT NAME")
-            --end
-
-            --return tCalls[sCall].Code;
-        end,]]
-        --[[GetCallPath = function(this, cdat, sCall)
-            local pri = cdat.pri;
-            local tCalls = pri.Calls;
-            --p(sCall, type(tCalls[sCall].Code))
-            if (tCalls[sCall] == nil) then
-                error("TODO ERROR CAN'T GET CALL - NO CARDSET CALL BY THAT NAME")
-            end
-
-            return tCalls[sCall].Path;
-        end,]]
-        GetCardSize = function(this, cdat)
-            local pri = cdat.pri;
-            return {Width = pri.CardWidth, Height = pri.CardHeight};
-        end,
-        SetActive = function(this, cdat, vFlag)
-            local pri       = cdat.pri;
-            local bActive   = rawtype(vFlag) == "boolean" and vFlag or false;
-
-            if (bActive) then
-                LiveFile.StartAll(pri.CallRepo);
-            else
-                LiveFile.StopAll(pri.CallRepo);
-            end
-
-        end,
-        --updates proc, draw, etc.
-        --[[UpdateCallCode = function(this, cdat, sCall)
-            local pri       = cdat.pri;
-            local tCalls    = pri.Calls;
-            local nRet;
-
-            if (tCalls[sCall] == nil) then
-                error("TODO ERROR CAN'T UPDATE CALL - NO CARDSET CALL BY THAT NAME");
-            end
-
-            local tCall = tCalls[sCall];
-            local pCallCode = tCall.Path;
-
-            if not (File.DoesExist(pCallCode)) then
-                --TODO FINISH ERROR
-                error("NO FILE, OMG! AHHHHH!!!!"..sCall);
-            end
-
-            --get the new CRC
-            local nCRC = GetCRC(tCall.Path);
-
-            if (nCRC == -1) then --an error occurred if it does == -1
-                --TODO ERROR HERE
-            end
-
-            --compare it the existing one
-            if (nCRC ~= tCall.CRC) then
-                --set the newest CRC for this call
-                tCall.CRC = nCRC;
-                tCall.Code = ReadToString(pCallCode); --TODO THROW ERROR on file read error
-                nRet = nCRC;
-            end
-
-            return nRet;
-        end]]
-    },
-    nil,   --extending class
-    true,  --if the class is final
-    nil    --interface(s) (either nil, or interface(s))
-);
-
-
-
---[[
-
-
-█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
-╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
-                                                 ██████╗  █████╗ ███╗   ███╗███████╗
-                                                ██╔════╝ ██╔══██╗████╗ ████║██╔════╝
-                                                ██║  ███╗███████║██╔████╔██║█████╗
-                                                ██║   ██║██╔══██║██║╚██╔╝██║██╔══╝
-                                                ╚██████╔╝██║  ██║██║ ╚═╝ ██║███████╗
-                                                 ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝
-█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗█████╗
-╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝╚════╝
-]]
 return class("Game",
     {--METAMETHODS
 
@@ -517,6 +251,7 @@ return class("Game",
         CFG__AUTOR_             = null,
         CardSets                = {},
         IncludePlugins__AUTOA_  = false,
+        LiveFileRepo__AUTOA_    = null,
         Name__AUTOA_            = '',
         Path__AUTOR_            = null,
         UUID__AUTOR_            = null,
@@ -604,7 +339,7 @@ return class("Game",
         NewCardSet = function(this, cdat)
 
         end,
-        --dates game and all game's card sets
+        --updates game, all game's card sets, and all LIfeFiles
         Update = ValidateAndUpdateGame,
     },
     nil,   --extending class

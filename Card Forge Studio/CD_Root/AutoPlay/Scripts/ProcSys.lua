@@ -513,7 +513,7 @@ local function LoadFileToGrid(pFile)
 
     --set loading to finished
     _bAllowSave = false;
-    MainMenu.SetEnabled("Set:>Save", false);
+    MainMenu.SetEnabled("Card Set:>Save", false);
     _bIsLoading = false;
 end
 
@@ -620,9 +620,7 @@ return class("ProcSys",
     {--STATIC PUBLIC
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
         --ProcSys = function(this, sAuthCode) end, --static constructor (runs after class object creation)
-        ForceRedraw = function()
-            TryDrawActiveCard();
-        end,
+        ForceRedraw = TryDrawActiveCard,
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.CreateImagePath
             @desc Builds a deterministic card image path using the card set's folder structure.
@@ -687,7 +685,7 @@ return class("ProcSys",
             };
 
             --disable the save system
-            MainMenu.SetEnabled("Set:>Save", false);
+            MainMenu.SetEnabled("Card Set:>Save", false);
 
             local pData = oCardSet.GetDataPath();
 
@@ -704,14 +702,14 @@ return class("ProcSys",
                 _pActiveCSV = pData;
 
                 --MainMenu.SetEnabled("Set:>Save", true);
-                MainMenu.SetEnabled("Set:>Browse", true);
+                MainMenu.SetEnabled("Card Set:>Browse", true);
             end
 
             Forge.SetActiveCardSet(oCardSet);
 
             --reset the update status for each row
             SetReprocRows(_tReprocRows, false);
-
+--[[
             local function LiveFileUpdateCallback(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
 
                 if (tLiveFile.IsActive) then
@@ -726,11 +724,12 @@ return class("ProcSys",
                 end
 
             end
-
+]]
             --params for callbacks (if needed) -> tLiveFile, sOldText, sNewText, nOldCRC, nCRC
             LiveFile.SetCallback("CellProc",    function() _bAnyProcChanged = true; end);
             LiveFile.SetCallback("Draw",        function() _bDrawChanged    = true; end);
 
+            --LiveFile.SetCallback(); TODO LEFT OFF HERE ADDING OTHER WATCH ITEMS
             --tLiveFile, sOldText, sNewText, nOldCRC, nCRC
 
 
@@ -860,7 +859,7 @@ return class("ProcSys",
             BuildWindows();
 
             --load last card set if present
-            local sLastCardSetUUID  = INIFile.GetValue(FS.Info, "SESSION", "LastSet");
+            local sLastCardSetUUID  = INIFile.GetValue(FS.Info, "SESSION", "LastCardSet");
             local oGame             = Game.GetActive();
             local oLastCardSet      = oGame.GetCardSet(sLastCardSetUUID);
 

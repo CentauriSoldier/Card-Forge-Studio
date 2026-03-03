@@ -1,5 +1,7 @@
 constant("APP_NAME", "Card Forge Studio");
 
+constant("SANDBOX_TIME_START", os.time());
+
 --csv parameters
 constant("BACKUP_MINIMUM_INTERVAL", 6); --in minutes
 constant("BACKUP_MAX_FILE_COUNT", 10);
