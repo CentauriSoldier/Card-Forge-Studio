@@ -8,6 +8,89 @@ local io            = io;
 local CardSet   = require("Game.CardSet");
 local GameUtil  = require("Game.GameUtil");
 
+local function BuildUserTable(sGame, sName)
+    --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
+    --Load any config and user environment that may exist TODO BUG FIX - FINISH - USE PROTECTED environment for loading this
+    --local sInitChunk    = _oActiveCardSet.GetCallCode("CellProc");
+    --TODO IT CAN BE USED IN THINGS LIKE oGame.RefreshCFG() and oGame.RefreshEnv() or just oGame.ReInit()
+    local sInitChunk = TextFile.ReadToString(FS.Scripts.."\\"..sName..".lua");
+    --TODO CHECK AND ERROR on bad file
+    --TODO Clear/Refresh UserEnv
+
+    --the error message in case things go south
+    local sChunkName = sGame.." sName";
+
+    --try to load the chuck
+    local fChunk, sError = load(sInitChunk, sChunkName, "t", UserEnv.Get());
+    if not (fChunk) then
+        error("Error running "..sName.." file for Game "..sGame..".\r\n"..sError, 2);
+    end
+
+    --try to call the chunk
+    local tInit = {pcall(fChunk)};
+
+    if not (tInit[1]) then
+        error("Error running "..sName.." file for Game "..sGame..".\r\n"..tInit[2], 2);
+    end
+
+    local tUserTable = table.unpack(tInit, 2);
+
+    if not (type(tUserTable) == "table") then
+        error("Error in return from "..sName.." file for Game "..sGame..".\r\nExpected type table, Got "..type(tUserTable)..'.', 2);
+    end
+
+    return tUserTable;
+end
+
+
+local function UpdateFileRepo(oGame)
+    --update the game's LiveFileRepo
+    local oOldLiveFileRepo = oGame.GetLiveFileRepo();
+
+    if (type(oOldLiveFileRepo) == "LiveFileRepo") then
+        LiveFile.Destroy(oOldLiveFileRepo);
+    end
+
+--TODO LEFT OFF HERE - NOT YET WORKING 
+    local oLiveFileRepo = LiveFile.CreateRepo();
+    oGame.SetLiveFileRepo(oLiveFileRepo);
+
+    local function RebuildCFG(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        local tCFG = BuildUserTable(sGame, "CFG");
+        UserEnv.UpdateCFG(tCFG);
+        --tLiveFile, sOldText, sNewText, nOldCRC, nCRC
+        p(nOldCRC)
+    end
+
+    LiveFile.Register(oLiveFileRepo, "CFG", FS.Scripts.."\\CFG.lua", 2000, RebuildCFG);
+    local tCFGFiles = File.Find(FS.CFG.."\\", "*.lua", false, false, nil, nil);
+
+    if (type(tCFGFiles) == "table") then
+
+        for nIndex, pFile in pairs(tCFGFiles) do
+            LiveFile.Register(oLiveFileRepo, "CFG"..tostring(nIndex):format("%02d"), pFile, 2000, RebuildCFG);
+        end
+
+    end
+
+    local function RebuildENV(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        local tEnv = BuildUserTable(sGame, "ENV");
+        UserEnv.UserUpdateRoot(tEnv);
+    end
+
+    LiveFile.Register(oLiveFileRepo, "ENV", FS.Scripts.."\\ENV.lua", 2000, RebuildENV);
+    local tENVFiles = File.Find(FS.ENV.."\\", "*.lua", false, false, nil, nil);
+
+    if (type(tENVFiles) == "table") then
+
+        for nIndex, pFile in pairs(tENVFiles) do
+            LiveFile.Register(oLiveFileRepo, "ENV"..tostring(nIndex):format("%02d"), pFile, 2000, RebuildENV);
+        end
+
+    end
+
+end
+
 
 local function ValidateAndUpdateGame(this, cdat)
     local pri           = cdat.pri;
@@ -34,7 +117,7 @@ local function ValidateAndUpdateGame(this, cdat)
     pri.CardSets = {};
 
     --iterate over all potential card set folders
-    local tCardSetFolders  = Folder.Find(pFolder.."\\Sets\\", "*", false, nil);
+    local tCardSetFolders  = Folder.Find(pFolder.."\\"..FOLDER_CARD_SETS.."\\", "*", false, nil);
 
     if (type(tCardSetFolders) == "table") then
 
@@ -56,9 +139,6 @@ local function ValidateAndUpdateGame(this, cdat)
 
     end
 
-    --update the game's LiveFileRepo
-    --TODO LEFT OFF HERE
-    
 end
 
 local function SortByName(oItemA, oItemB)
@@ -132,50 +212,36 @@ return class("Game",
             end
 
         end,
-        Prep = function(sGame) --TODO REDO THIS NOW THAT IT'S IN THIS MODULE TO INCLUDE VERIFYING THE INPUT
+        Prep = function(vGame) --TODO REDO THIS NOW THAT IT'S IN THIS MODULE TO INCLUDE VERIFYING THE INPUT
 
-            FS.PrepGame(sGame); --set the filepaths for the current game
-
-            --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
-            --Load any config and user environment that may exist TODO BUG FIX - FINISH - USE PROTECTED environment for loading this
-            --local sInitChunk    = _oActiveCardSet.GetCallCode("CellProc");
-            --TODO MOVE THIS OUT SO IT CAN BE USED IN THING SLIKE oGame.RefreshCFG() and oGame.RefreshEnv() or just oGame.ReInit()
-            local sInitChunk = TextFile.ReadToString(FS.Scripts.."\\Init.lua");
-            --TODO CHECK AND ERROR on bad file
-            --TODO Clear/Refresh UserEnv
-
-            --the error message in case things go south
-            local sChunkName = sGame.." Init";
-
-            --try to load the chuck
-            local fChunk, sError = load(sInitChunk, sChunkName, "t", UserEnv.Get());
-            if not (fChunk) then
-                error("Error running Init file for Game "..sGame..".\r\n"..sError, 2); --TODO LOG/display
+            if not (type(vGame) == "string" and not vGame:isempty()) then
+                error("Game.Prep: Error prepping game. Argument 1 must be a non-blank string. Got "..tostring(vGame)..' ('..type(vGame)..').');
             end
 
-            --try to call the chunk
-            local tInit = {pcall(fChunk)};
+            local sGame = vGame;
 
-            if not (tInit[1]) then
-                error("Error running Init file for Game "..sGame..".\r\n"..tInit[2], 2);
+            local oGame = Game.GetByName(sGame);
+
+            if not (type(oGame) == "Game") then
+                error("Game.Prep: Error prepping game. Could not find game object for \""..sGame..'."');
             end
 
-            local tCFG, tEnv = table.unpack(tInit, 2);
+            Game.SetActive(sGame);
 
-            if (type(tCFG) == "table") then
-                UserEnv.UpdateCFG(tCFG);
-            end
+            FS.PrepGame(oGame); --set the filepaths for the current game
 
-            if (type(tEnv) == "table") then
-                UserEnv.UserUpdateRoot(tEnv);
-            end
+            --load in the user's CFG table
+            local tCFG = BuildUserTable(sGame, "CFG");
+            UserEnv.UpdateCFG(tCFG);
 
+            --load in the user's ENV table
+            local tEnv = BuildUserTable(sGame, "ENV");
+            UserEnv.UserUpdateRoot(tEnv);
+
+            UpdateFileRepo(oGame);
 
             --reset the BuildMechanics var (it gets reloaded in Init.lua if present)
-            BuildMechanics = nil;
-
-            --init and set the game's forge
-            --ProcSys.PrepActiveGame();
+            BuildMechanics = nil; --TODO WHAT IS THIS?'
 
             --build the user's mechanics html if it exists QUESTION qhat is this? Is it used?
             if type(BuildMechanics) == "function" then
@@ -209,7 +275,7 @@ return class("Game",
             end
 
         end,
-        SetActive = function(vGame) --TODO update game objects
+        SetActive = function(vGame) --TODO update game objects MOVE THIS TO LOCAL SINCE NO ONE OUTSIDE THE CLASS WILL BE CALLING IT AND REMOVE CHECKS SINCE WE ALREADY DO THAT FIRST
             local zName = type(vGame);
             local oGame;
 
@@ -251,7 +317,7 @@ return class("Game",
         CFG__AUTOR_             = null,
         CardSets                = {},
         IncludePlugins__AUTOA_  = false,
-        LiveFileRepo__AUTOA_    = null,
+        LiveFileRepo__AUTO__    = null,
         Name__AUTOA_            = '',
         Path__AUTOR_            = null,
         UUID__AUTOR_            = null,
@@ -270,6 +336,7 @@ return class("Game",
 
             --set the game's folder
             pri.Path = pFolder;
+            --create the LiveFileRepo
 
             --update my info
             ValidateAndUpdateGame(this, cdat);
@@ -339,7 +406,7 @@ return class("Game",
         NewCardSet = function(this, cdat)
 
         end,
-        --updates game, all game's card sets, and all LIfeFiles
+        --updates game, all game's card sets, and all LiveFiles
         Update = ValidateAndUpdateGame,
     },
     nil,   --extending class

@@ -284,9 +284,10 @@ WinSys.OnShutdown();</Script>
 <Event>
 <Name>On Preload</Name>
 <Args/>
-<Script>Paragraph.SetText("par version", 'v'..APP_VERSION.." (Alpha)");
+<Script>Paragraph.SetText("par version", APP_VERSION);
 ScalerX.OnPreload(this);
-MainMenu.OnPreload(this);</Script>
+MainMenu.OnPreload(this);
+</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
@@ -540,7 +541,7 @@ end</Script>
 <Type>3</Type>
 <Name>img title frame</Name>
 <VisibleAtDesignTime>1</VisibleAtDesignTime>
-<VisibleAtRunTime>1</VisibleAtRunTime>
+<VisibleAtRunTime>0</VisibleAtRunTime>
 <Locked>1</Locked>
 <Enabled>1</Enabled>
 <ToolTip/>
@@ -1657,14 +1658,14 @@ MainMenu.OnPreload(this);</Script>
 <Args/>
 <Script>Log.OnShow(this);
 ProcSys.OnShow(this);
-Forge.OnShow();</Script>
+Forge.OnShow(this);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeLine>2</DesignCodeLine>
+<DesignCodeCol>17</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -11170,7 +11171,7 @@ end</Script>
 <VGuidelines/>
 </Page>
 </PageDialog>
-<PageDialog width="480" height="300" dialog_title="MyDialog" dialog_style="0" movable="1" use_custom_icon="0" custom_icon="" always_on_top="0" resizable="0" min_width="480" min_height="300" fit_custom_mask_to_window="1" custom_mask="">
+<PageDialog width="768" height="512" dialog_title="About" dialog_style="3" movable="1" use_custom_icon="0" custom_icon="" always_on_top="0" resizable="0" min_width="480" min_height="300" fit_custom_mask_to_window="1" custom_mask="AutoPlay\Images\About Mask.png">
 <Page>
 <Name>About</Name>
 <InheritObs/>
@@ -11178,28 +11179,28 @@ end</Script>
 <Description/>
 <Keywords/>
 <Background>
-<Type>0</Type>
+<Type>2</Type>
 <ImageStyle>0</ImageStyle>
 <TopColor>16711680</TopColor>
 <BottomColor>16777215</BottomColor>
-<UseCustomBackgroundSettings>0</UseCustomBackgroundSettings>
+<UseCustomBackgroundSettings>1</UseCustomBackgroundSettings>
 <TransitionEffect/>
 <TransProps/>
 <NormalImage>
-<Filename/>
+<Filename>AutoPlay\Images\Title Frame.png</Filename>
 </NormalImage>
 </Background>
 <Event>
 <Name>On Preload</Name>
 <Args/>
-<Script/>
+<Script>Paragraph.SetText("par version", APP_VERSION);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeCol>10</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -11276,14 +11277,14 @@ end</Script>
 <Event>
 <Name>On Mouse Button</Name>
 <Args>number e_Type, number e_X, number e_Y</Args>
-<Script/>
+<Script>DialogEx.Close(0);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeCol>8</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -11329,6 +11330,400 @@ end</Script>
 <BookMarks count="0">
 </BookMarks>
 </Event>
+<Object>
+<Type>3</Type>
+<Name>img black</Name>
+<VisibleAtDesignTime>1</VisibleAtDesignTime>
+<VisibleAtRunTime>1</VisibleAtRunTime>
+<Locked>0</Locked>
+<Enabled>1</Enabled>
+<ToolTip/>
+<Cursor>0</Cursor>
+<Group>0</Group>
+<MaintainAspectRatio>1</MaintainAspectRatio>
+<Pin>0</Pin>
+<TabIndex>-1</TabIndex>
+<AutoResize>0</AutoResize>
+<Coordinates>
+<Top>0</Top>
+<Bottom>512</Bottom>
+<Left>0</Left>
+<Right>768</Right>
+</Coordinates>
+<Ratios>
+<WidthRatio>-1.000000</WidthRatio>
+<HeightRatio>-1.000000</HeightRatio>
+</Ratios>
+<Event>
+<Name>On Click</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>15145</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Right-Click</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Enter</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>3043951</DesignCodeLine>
+<DesignCodeCol>1869567036</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Leave</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>-16763648</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Actions/>
+<NormalImage>
+<Filename>AutoPlay\Images\About Black BG.png</Filename>
+<UseTransColor>0</UseTransColor>
+<TransClr>16777215</TransClr>
+<TransTolerance>10</TransTolerance>
+<Opacity>100</Opacity>
+<HTMode>0</HTMode>
+</NormalImage>
+<MouseOverSndMode>0</MouseOverSndMode>
+<MouseOverSound/>
+<MouseClickSndMode>0</MouseClickSndMode>
+<MouseClickSound/>
+</Object>
+<Object>
+<Type>2</Type>
+<Name>par version</Name>
+<VisibleAtDesignTime>1</VisibleAtDesignTime>
+<VisibleAtRunTime>1</VisibleAtRunTime>
+<Locked>0</Locked>
+<Enabled>0</Enabled>
+<ToolTip/>
+<Cursor>0</Cursor>
+<Group>0</Group>
+<MaintainAspectRatio>0</MaintainAspectRatio>
+<Pin>0</Pin>
+<TabIndex>-1</TabIndex>
+<AutoResize>0</AutoResize>
+<Coordinates>
+<Top>324</Top>
+<Bottom>366</Bottom>
+<Left>197</Left>
+<Right>571</Right>
+</Coordinates>
+<Ratios>
+<WidthRatio>-1.000000</WidthRatio>
+<HeightRatio>-1.000000</HeightRatio>
+</Ratios>
+<Event>
+<Name>On Click</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>1919247468</DesignCodeLine>
+<DesignCodeCol>15145</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Right-Click</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>151613284</DesignCodeLine>
+<DesignCodeCol>7602185</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Enter</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>3158064</DesignCodeLine>
+<DesignCodeCol>1082422272</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Leave</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>15145</DesignCodeLine>
+<DesignCodeCol>-8323072</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Actions/>
+<Text>
+<Body/>
+<NormalColor>13209</NormalColor>
+<HighlightColor>13209</HighlightColor>
+<MouseDownColor>13209</MouseDownColor>
+<DisabledColor>13209</DisabledColor>
+<BorderColor>0</BorderColor>
+<BackColor>16777215</BackColor>
+<FontData>
+<FontName>Times New Roman</FontName>
+<CharacterSet>0</CharacterSet>
+<Height>-24</Height>
+<Weight>700</Weight>
+<Italic>0</Italic>
+<Underline>0</Underline>
+<StrikeOut>0</StrikeOut>
+<AntiAlias>1</AntiAlias>
+</FontData>
+<Alignment>1</Alignment>
+<TransBG>1</TransBG>
+<VSMode>2</VSMode>
+<HSMode>2</HSMode>
+<SBStyle>1</SBStyle>
+<SBSkin>Windows7</SBSkin>
+<Border>0</Border>
+<MouseOverSndMode>0</MouseOverSndMode>
+<MouseOverSound/>
+<MouseClickSndMode>0</MouseClickSndMode>
+<MouseClickSound/>
+</Text>
+</Object>
+<Object>
+<Type>3</Type>
+<Name>img Studio</Name>
+<VisibleAtDesignTime>1</VisibleAtDesignTime>
+<VisibleAtRunTime>1</VisibleAtRunTime>
+<Locked>0</Locked>
+<Enabled>0</Enabled>
+<ToolTip/>
+<Cursor>0</Cursor>
+<Group>0</Group>
+<MaintainAspectRatio>1</MaintainAspectRatio>
+<Pin>0</Pin>
+<TabIndex>-1</TabIndex>
+<AutoResize>0</AutoResize>
+<Coordinates>
+<Top>242</Top>
+<Bottom>315</Bottom>
+<Left>281</Left>
+<Right>488</Right>
+</Coordinates>
+<Ratios>
+<WidthRatio>-1.000000</WidthRatio>
+<HeightRatio>-1.000000</HeightRatio>
+</Ratios>
+<Event>
+<Name>On Click</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>7602185</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Right-Click</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>1918988130</DesignCodeLine>
+<DesignCodeCol>100</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Enter</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>3145738</DesignCodeLine>
+<DesignCodeCol>1073741945</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Leave</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>3158064</DesignCodeLine>
+<DesignCodeCol>1079828480</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Actions/>
+<NormalImage>
+<Filename>AutoPlay\Images\Studio.png</Filename>
+<UseTransColor>0</UseTransColor>
+<TransClr>16777215</TransClr>
+<TransTolerance>10</TransTolerance>
+<Opacity>100</Opacity>
+<HTMode>0</HTMode>
+</NormalImage>
+<MouseOverSndMode>0</MouseOverSndMode>
+<MouseOverSound/>
+<MouseClickSndMode>0</MouseClickSndMode>
+<MouseClickSound/>
+</Object>
+<Object>
+<Type>3</Type>
+<Name>img Card Forge</Name>
+<VisibleAtDesignTime>1</VisibleAtDesignTime>
+<VisibleAtRunTime>1</VisibleAtRunTime>
+<Locked>0</Locked>
+<Enabled>0</Enabled>
+<ToolTip/>
+<Cursor>0</Cursor>
+<Group>0</Group>
+<MaintainAspectRatio>1</MaintainAspectRatio>
+<Pin>0</Pin>
+<TabIndex>-1</TabIndex>
+<AutoResize>0</AutoResize>
+<Coordinates>
+<Top>163</Top>
+<Bottom>258</Bottom>
+<Left>189</Left>
+<Right>580</Right>
+</Coordinates>
+<Ratios>
+<WidthRatio>-1.000000</WidthRatio>
+<HeightRatio>-1.000000</HeightRatio>
+</Ratios>
+<Event>
+<Name>On Click</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>-8323072</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Right-Click</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>3877203</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Enter</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Leave</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Actions/>
+<NormalImage>
+<Filename>AutoPlay\Images\Card Forge.png</Filename>
+<UseTransColor>0</UseTransColor>
+<TransClr>16777215</TransClr>
+<TransTolerance>10</TransTolerance>
+<Opacity>100</Opacity>
+<HTMode>0</HTMode>
+</NormalImage>
+<MouseOverSndMode>0</MouseOverSndMode>
+<MouseOverSound/>
+<MouseClickSndMode>0</MouseClickSndMode>
+<MouseClickSound/>
+</Object>
 <HGuidelines/>
 <VGuidelines/>
 </Page>

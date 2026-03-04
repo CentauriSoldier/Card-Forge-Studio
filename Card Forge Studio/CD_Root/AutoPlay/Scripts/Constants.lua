@@ -1,4 +1,6 @@
-constant("APP_NAME", "Card Forge Studio");
+constant("APP_NAME",            "Card Forge Studio");
+constant("APP_MAJOR_VERSION",   "v0.");
+constant("APP_BUILD_VERSION",   ".alpha");
 
 constant("SANDBOX_TIME_START", os.time());
 
@@ -11,7 +13,9 @@ constant("CSV_DELIMITER", ',');
 constant("HOR", 0); --TODO QUESTION DO I NEED THESE ANYMORE?
 constant("VER", 1);
 constant("BIT_DEPTH_32", 32);
-constant("APP_CFG", "Card Forge.cfg");
+constant("APP_CFG", "Card Forge Studio.cfg");
+
+constant("FOLDER_CARD_SETS", "Card Sets"); --this must be here since it needs to be accessed before the game is prepped
 
 --constant("TIMER_HTML_PROCESS_INTERVAL", 3200);
 --constant("TIMER_HTML_PROCESS_ID",       97);

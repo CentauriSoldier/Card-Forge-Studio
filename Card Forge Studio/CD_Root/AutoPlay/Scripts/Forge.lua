@@ -255,26 +255,30 @@ end
 local function DrawUtilObjects(sObject, D, hInternalDC)
     ClearToTransparent(D);
 
-    --draw utility objects
-    local bDrawRulerHor = MainMenu.IsChecked("Options:>Draw:>Horizontal Ruler");
-    local bDrawRulerVer = MainMenu.IsChecked("Options:>Draw:>Vertical Ruler");
+    if MainMenu.IsChecked("Options:>Draw:>Utility Overlay") then
 
-    D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+        --draw utility objects
+        local bDrawRulerHor = MainMenu.IsChecked("Options:>Draw:>Horizontal Ruler");
+        local bDrawRulerVer = MainMenu.IsChecked("Options:>Draw:>Vertical Ruler");
 
-    if (bDrawRulerHor) then
-        DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC);
-    end
+        D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
 
-    if (bDrawRulerVer) then
-        DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC);
-    end
+        if (bDrawRulerHor) then
+            DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC);
+        end
 
-    if (MainMenu.IsChecked("Options:>Draw:>Horizontal Centerline")) then
-        DrawCenterLineHor(sObject, D, hInternalDC);
-    end
+        if (bDrawRulerVer) then
+            DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC);
+        end
 
-    if (MainMenu.IsChecked("Options:>Draw:>Vertical Centerline")) then
-        DrawCenterLineVer(sObject, D, hInternalDC);
+        if (MainMenu.IsChecked("Options:>Draw:>Horizontal Centerline")) then
+            DrawCenterLineHor(sObject, D, hInternalDC);
+        end
+
+        if (MainMenu.IsChecked("Options:>Draw:>Vertical Centerline")) then
+            DrawCenterLineVer(sObject, D, hInternalDC);
+        end
+
     end
 
 end

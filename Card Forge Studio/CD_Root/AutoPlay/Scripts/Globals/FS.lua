@@ -58,21 +58,13 @@ local tFunctions = {
 
     end,
     --assumes
-    PrepGame = function(sGame) --TODO CHANGE THIS TO USE THE GAME OBJECT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    PrepGame = function(oGame) --TODO CHANGE THIS TO USE THE GAME OBJECT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         --reset the package path
         package.path = _sOriginalPackagePath;
 
-        if not (type(sGame) == "string") then
-            error("FS: Error prepping game paths. Argument 1 must be of type string. Got "..type(sGame)..'.');
-        end
-
-        local oGame = Game.GetByName(sGame);
-
         if not (type(oGame) == "Game") then
-            error("FS: Error prepping game paths. Could not find game object for \""..type(sGame)..'."');
+            error("FS: Error prepping game paths. Argument 1 must be of type Game. Got "..type(oGame)..'.');
         end
-
-        Game.SetActive(sGame);
 
         local pGame = oGame.GetPath();
 
@@ -82,28 +74,30 @@ local tFunctions = {
 
         --setup the game's folder
         tPaths.Game         = pGame;                                --CheckFolder(pGame);
-        tPaths.Docs         = pGame             .."\\Docs";         CheckFolder(tPaths.Docs);
-        tPaths.Temp         = pGame             .."\\Temp";         CheckFolder(tPaths.Temp);
-        --tPaths.CardSets     = pGame             .."\\Sets";         CheckFolder(tPaths.CardSets);
-        tPaths.Set          = ""; --Gets set during set loading
-        tPaths.CSVBackup    = pGame             .."\\CSV Backup";   CheckFolder(tPaths.CSVBackup);
-        tPaths.CSVExport    = pGame             .."\\CSV Export";   CheckFolder(tPaths.CSVExport);
-        tPaths.CardExport   = pGame             .."\\Card Export";  CheckFolder(tPaths.CardExport);
-        tPaths.Scripts      = pGame             .."\\Scripts";      CheckFolder(tPaths.Scripts);
-        tPaths.Cards        = pGame             .."\\Cards";        CheckFolder(tPaths.Cards);
-        tPaths.Symbols      = pGame             .."\\Symbols";      CheckFolder(tPaths.Symbols);
-        tPaths.Config       = tPaths.Scripts    .."\\Config";       CheckFolder(tPaths.Config);
+        tPaths.Docs         = pGame             .."\\Docs";                 CheckFolder(tPaths.Docs);
+        tPaths.Temp         = pGame             .."\\Temp";                 CheckFolder(tPaths.Temp);
+        tPaths.CardSets     = pGame             .."\\"..FOLDER_CARD_SETS;   CheckFolder(tPaths.CardSets);
+        tPaths.Set          = ""; --Gets set during set loading QUESTION DOes it? How?
+        tPaths.CSVBackup    = pGame             .."\\CSV Backup";           CheckFolder(tPaths.CSVBackup);
+        tPaths.CSVExport    = pGame             .."\\CSV Export";           CheckFolder(tPaths.CSVExport);
+        tPaths.CardExport   = pGame             .."\\Card Export";          CheckFolder(tPaths.CardExport);
+        tPaths.Scripts      = pGame             .."\\Scripts";              CheckFolder(tPaths.Scripts);
+        tPaths.Cards        = pGame             .."\\Cards";                CheckFolder(tPaths.Cards);
+        tPaths.Symbols      = pGame             .."\\Symbols";              CheckFolder(tPaths.Symbols);
+        tPaths.CFG          = tPaths.Scripts    .."\\CFG";                  CheckFolder(tPaths.CFG);
+        tPaths.ENV          = tPaths.Scripts    .."\\ENV";                  CheckFolder(tPaths.ENV);
+
 
         --set the game name
         _sGame = oGame.GetName(); --TODO FINISH UPDATE THIS
 
         --setup the game's files
-        tPaths.Drafts        = pGame.."\\Drafts.lua";           CheckFile(tPaths.Drafts,                        "return\r\n{\r\n};"); --QUESTION IS THIS BEING USED?
-        tPaths.Info          = pGame.."\\Info.ini";             CheckFile(tPaths.Info,                          BuildInfoFile(_sGame));
-        tPaths.Scratch       = tPaths.Temp.."\\Scratch.lua";    CheckFile(tPaths.Scratch,                       "");
-        tPaths.Styles        = pGame.."\\Styles.ini";           CheckFile(tPaths.Styles,                        pTemplates.."\\Styles.ini");
-                                                                CheckFile(tPaths.Scripts.."\\Init.lua",         pTemplates.."\\Init.lua");
-                                                                CheckFile(tPaths.Scripts.."\\Config.lua",       pTemplates.."\\Config.lua");
+        tPaths.Drafts        = pGame.."\\Drafts.lua";                   CheckFile(tPaths.Drafts,                        "return\r\n{\r\n};"); --QUESTION IS THIS BEING USED?
+        tPaths.Info          = pGame.."\\Info.ini";                     CheckFile(tPaths.Info,                          BuildInfoFile(_sGame));
+        tPaths.Scratch       = tPaths.Temp.."\\Scratch.lua";            CheckFile(tPaths.Scratch,                       "");
+        tPaths.Styles        = pGame.."\\Styles.ini";                   CheckFile(tPaths.Styles,                        pTemplates.."\\Styles.ini");
+                                                                        CheckFile(tPaths.Scripts.."\\CFG.lua",          pTemplates.."\\CFG.lua");
+                                                                        CheckFile(tPaths.Scripts.."\\ENV.lua",          pTemplates.."\\ENV.lua");
 
         --add game's scripts folder to the package path
         package.path = _sOriginalPackagePath..";"..pGame.."\\Scripts\\?.lua";

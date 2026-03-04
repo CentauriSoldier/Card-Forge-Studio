@@ -75,6 +75,61 @@ return class("LiveFile",
 
             return tDecoy;
         end,
+        Destroy = function(oRepo)
+            type.assert.custom(oRepo, "LiveFileRepo", "LiveFile.Destroy: Argument 1 must be LiveFileRepo. Got "..type(oRepo)..'.');
+
+            local tRepo = _tRepos[oRepo];
+            if not (tRepo) then
+                error("LiveFile.Destroy: Repo is not registered (or already destroyed).", 2);
+            end
+
+            -- stop + destroy every LiveFile in this repo
+            for sID, oLiveFile in pairs(tRepo) do
+                local tLiveFile = _tLiveFiles[oLiveFile];
+
+                if (tLiveFile) then
+                    -- always stop
+                    if (tLiveFile.IsActive) then
+                        tLiveFile.IsActive = false;
+                        GlobalTimer.Stop(tLiveFile.TimerID);
+                    end
+
+                    -- drop timer/id indexes
+                    _tLiveFilesByTimerID[tLiveFile.TimerID] = nil;
+                    _tLiveFilesByID[sID] = nil;
+
+                    -- drop decoy->actual
+                    _tLiveFiles[oLiveFile] = nil;
+
+                    -- optional: make decoy inert
+                    pcall(setmetatable, oLiveFile, {
+                        __type = "LiveFileInfoDestroyed",
+                        __index = function() return nil end,
+                        __newindex = function() end,
+                    });
+
+                    -- clear payload
+                    tLiveFile.CRC           = nil;
+                    tLiveFile.Callback      = nil;
+                    tLiveFile.HasChanged    = nil;
+                    tLiveFile.IsActive      = nil;
+                    tLiveFile.LastError     = nil;
+                    tLiveFile.Path          = nil;
+                    tLiveFile.Repo          = nil;
+                    tLiveFile.Text          = nil;
+                    tLiveFile.TimerID       = nil;
+                    tLiveFile.TimerInterval = nil;
+                end
+
+                tRepo[sID] = nil;
+            end
+
+            -- remove repo-level error callback + repo mapping
+            _tErrorCallbacks[oRepo] = nil;
+            _tRepos[oRepo] = nil;
+
+            return true;
+        end,
         OnTimer = function(nID)
             local tLiveFile = _tLiveFilesByTimerID[nID];
 

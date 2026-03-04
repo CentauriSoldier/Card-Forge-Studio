@@ -45,7 +45,7 @@ function Status.Append(vStatus)
     Paragraph.SetText(sPar, Paragraph.GetText(sPar)..sStatus.."\r\n");
 end
 
-Description = require("Description");
+
 
 function BuildJSON(tSections, tSectionOrder, tFlatOrder)
 
@@ -126,7 +126,7 @@ function OnStartUp()--TODO move to its own module if it gets too big
     end
 
     if not (bIsCompiled) then
-        local sVersion = CoG.BuildVersionID();
+        local sVersion = CoG.BuildVersionID(APP_MAJOR_VERSION, APP_BUILD_VERSION);
         INIFile.SetValue(FS.AppCFG, "Settings", "Version", sVersion);
         constant("APP_VERSION", sVersion);
     else
