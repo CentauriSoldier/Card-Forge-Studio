@@ -193,7 +193,7 @@ tSupport = {
                 TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, {
                     [eMenu.OnSelected] = function(tItem)
                         --TODO check that the current Game isn't loaded first and that there are no unssaved changes
-                        Game.Prep(sGame);
+                        Game.Activate(oGame);
                         Page.Jump("Forge");
                     end
             });

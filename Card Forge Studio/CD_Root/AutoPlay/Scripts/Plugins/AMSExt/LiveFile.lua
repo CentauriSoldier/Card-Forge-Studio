@@ -159,10 +159,10 @@ return class("LiveFile",
                         if not (bOK) then
                             --TODO FINISH first check for tLiveFile Error Callback, then, if not present, use the repo or default
                             if (_tErrorCallbacks[tLiveFile.Repo]) then
-                                _tErrorCallbacks[tLiveFile.Repo](tLiveFile, sError);
+                                _tErrorCallbacks[tLiveFile.Repo](tLiveFile, sOldText, sNewText, nOldCRC, nCRC, sError);
                             end
 
-                            tLiveFile.LastError = sError;
+                            tLiveFile.LastError = sError; --TODO Set error per ID
                         end
 
                     end
@@ -280,6 +280,7 @@ return class("LiveFile",
 
                 if not (tLiveFile.IsActive) then
                     tLiveFile.IsActive = true;
+                    --p("Starting: "..tLiveFile.ID.." "..tLiveFile.TimerInterval.." "..tLiveFile.TimerID.." "..type(LiveFile.OnTimer).."\r\n"..tLiveFile.Path)
                     GlobalTimer.Start(tLiveFile.TimerInterval, tLiveFile.TimerID, LiveFile.OnTimer);
                 end
 

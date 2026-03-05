@@ -3,6 +3,7 @@ local _oActiveGame  = false;
 local GetCRC        = File.GetCRC
 local ReadToString  = TextFile.ReadToString;
 local io            = io;
+
 --TODO with New methods, checkf or existing item first...do not overwrite
 
 local CardSet   = require("Game.CardSet");
@@ -27,13 +28,13 @@ local function BuildUserTable(sGame, sName)
     end
 
     --try to call the chunk
-    local tInit = {pcall(fChunk)};
+    local bOK, sRetOrError = pcall(fChunk);
 
-    if not (tInit[1]) then
-        error("Error running "..sName.." file for Game "..sGame..".\r\n"..tInit[2], 2);
+    if not (bOK) then
+        error("Error running "..sName.." file for Game "..sGame..".\r\n"..sRetOrError, 2);
     end
 
-    local tUserTable = table.unpack(tInit, 2);
+    local tUserTable = sRetOrError;
 
     if not (type(tUserTable) == "table") then
         error("Error in return from "..sName.." file for Game "..sGame..".\r\nExpected type table, Got "..type(tUserTable)..'.', 2);
@@ -42,54 +43,10 @@ local function BuildUserTable(sGame, sName)
     return tUserTable;
 end
 
+local _nUserFileRepoInterval = 400;
 
-local function UpdateFileRepo(oGame)
-    --update the game's LiveFileRepo
-    local oOldLiveFileRepo = oGame.GetLiveFileRepo();
 
-    if (type(oOldLiveFileRepo) == "LiveFileRepo") then
-        LiveFile.Destroy(oOldLiveFileRepo);
-    end
 
---TODO LEFT OFF HERE - NOT YET WORKING 
-    local oLiveFileRepo = LiveFile.CreateRepo();
-    oGame.SetLiveFileRepo(oLiveFileRepo);
-
-    local function RebuildCFG(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
-        local tCFG = BuildUserTable(sGame, "CFG");
-        UserEnv.UpdateCFG(tCFG);
-        --tLiveFile, sOldText, sNewText, nOldCRC, nCRC
-        p(nOldCRC)
-    end
-
-    LiveFile.Register(oLiveFileRepo, "CFG", FS.Scripts.."\\CFG.lua", 2000, RebuildCFG);
-    local tCFGFiles = File.Find(FS.CFG.."\\", "*.lua", false, false, nil, nil);
-
-    if (type(tCFGFiles) == "table") then
-
-        for nIndex, pFile in pairs(tCFGFiles) do
-            LiveFile.Register(oLiveFileRepo, "CFG"..tostring(nIndex):format("%02d"), pFile, 2000, RebuildCFG);
-        end
-
-    end
-
-    local function RebuildENV(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
-        local tEnv = BuildUserTable(sGame, "ENV");
-        UserEnv.UserUpdateRoot(tEnv);
-    end
-
-    LiveFile.Register(oLiveFileRepo, "ENV", FS.Scripts.."\\ENV.lua", 2000, RebuildENV);
-    local tENVFiles = File.Find(FS.ENV.."\\", "*.lua", false, false, nil, nil);
-
-    if (type(tENVFiles) == "table") then
-
-        for nIndex, pFile in pairs(tENVFiles) do
-            LiveFile.Register(oLiveFileRepo, "ENV"..tostring(nIndex):format("%02d"), pFile, 2000, RebuildENV);
-        end
-
-    end
-
-end
 
 
 local function ValidateAndUpdateGame(this, cdat)
@@ -205,31 +162,25 @@ return class("Game",
             if (not bCancelPressed and not bIsEmpty) then
 
                 if (bIsFilesafe) then
-                    Game.Prep(sGame);
+                    Game.Activate(sGame);
                     MainMenu.RefreshGamesList();
                 end
 
             end
 
         end,
-        Prep = function(vGame) --TODO REDO THIS NOW THAT IT'S IN THIS MODULE TO INCLUDE VERIFYING THE INPUT
-
-            if not (type(vGame) == "string" and not vGame:isempty()) then
-                error("Game.Prep: Error prepping game. Argument 1 must be a non-blank string. Got "..tostring(vGame)..' ('..type(vGame)..').');
-            end
-
-            local sGame = vGame;
-
-            local oGame = Game.GetByName(sGame);
+        Activate = function(oGame) --TODO REDO THIS NOW THAT IT'S IN THIS MODULE TO INCLUDE VERIFYING THE INPUT
 
             if not (type(oGame) == "Game") then
-                error("Game.Prep: Error prepping game. Could not find game object for \""..sGame..'."');
+                error("Game.Activate: Error activating game. Expected game object. Got "..type(oGame)..'.');
             end
 
-            Game.SetActive(sGame);
+            _oActiveGame = oGame;
 
             FS.PrepGame(oGame); --set the filepaths for the current game
 
+            local sGame = oGame.GetName();
+--TODO MOVING TO PROCSYS
             --load in the user's CFG table
             local tCFG = BuildUserTable(sGame, "CFG");
             UserEnv.UpdateCFG(tCFG);
@@ -275,49 +226,12 @@ return class("Game",
             end
 
         end,
-        SetActive = function(vGame) --TODO update game objects MOVE THIS TO LOCAL SINCE NO ONE OUTSIDE THE CLASS WILL BE CALLING IT AND REMOVE CHECKS SINCE WE ALREADY DO THAT FIRST
-            local zName = type(vGame);
-            local oGame;
-
-            if (zName == "string") then
-
-                if (_tGames[vGame] ~= nil) then
-                    oGame = _tGames[vGame].Object;
-
-                else
-
-                    for sUUID, tGame in pairs(_tGames) do
-
-                        if (tGame.Name:lower() == vGame:lower()) then
-                            oGame = tGame.Object;
-                            break;
-                        end
-
-                    end
-
-                end
-
-            elseif (zName == "Game") then
-                _oActiveGame = vGame;
-
-            else
-                error("TODO: BAD THINGS HERE WRONG TYPE");
-
-            end
-
-            if not (oGame) then
-                error("TODO: BAD THINGS HERE..no game object found");
-            end
-
-            _oActiveGame = oGame;
-        end
     },
     {--PRIVATE
         Env__AUTOR_             = null,
         CFG__AUTOR_             = null,
         CardSets                = {},
         IncludePlugins__AUTOA_  = false,
-        LiveFileRepo__AUTO__    = null,
         Name__AUTOA_            = '',
         Path__AUTOR_            = null,
         UUID__AUTOR_            = null,

@@ -1481,6 +1481,7 @@ local tUserEnv = {
         end
 
         _tCFGMeta.__index = _tCFG;
+        setmetatable(_tCFGDecoy, _tCFGMeta);
 
     end,
     ProcSysUpdateRoot = function(tInput, bPurge) --permits additions/replacement to/of existing keys or a full purge, then new items added

@@ -37,8 +37,10 @@ local _nCardWidth = 0;
 local _nCardHeight = 0;
 local _sCardSetName = "";
 
-
-
+local _oGameLiveFileRepo        = LiveFile.CreateRepo();
+local _oCardSetLiveFileRepo     = LiveFile.CreateRepo();
+local _oCellProcLiveFileRepo    = LiveFile.CreateRepo();
+local _oDrawLiveFileRepo        = LiveFile.CreateRepo(); --QUESTION SHOULD THIS BE IN THE FORGE MODULE?
 
 -------------------------------------------------------------------------
 --local _tRowCRC          = {};
@@ -53,7 +55,10 @@ local _oCodeRepo        = null;
 --local _tRedrawRows      = {};  --tracks which rows need reprocessed/redrawn
 local _tReprocRows      = {};
 local _bDataChanged     = false;
-local _bCFGEnvChanged   = false;
+local _bCFGChanged      = false;
+local _sCFG             = "";
+local _bEnvChanged      = false;
+local _sENV             = "";
 local _bAnyProcChanged  = false;
 local _bDrawChanged     = false;
 
@@ -572,6 +577,63 @@ local function TryDrawActiveCard()
 end
 
 
+
+
+local function UpdateGameFileRepo(oGame)
+    local sGame = oGame.GetName();
+
+    --destroy the old repo
+    LiveFile.Destroy(_oLiveFileRepo);
+    _oLiveFileRepo = nil;
+
+    --create the new one
+    local oLiveFileRepo = LiveFile.CreateRepo();
+
+    --CFG Files
+    local function NotifyCFGChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _sCFG           = sNewText
+        _bCFGChanged    = true;
+    end
+
+    LiveFile.Register(oLiveFileRepo, "CFG", FS.Scripts.."\\CFG.lua", _nUserFileRepoInterval, NotifyCFGChanged);
+    local tCFGFiles = File.Find(FS.CFG.."\\", "*.lua", false, false, nil, nil);
+
+    if (type(tCFGFiles) == "table") then
+
+        for nIndex, pFile in pairs(tCFGFiles) do
+            LiveFile.Register(oLiveFileRepo, "CFG"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyCFGChanged);
+        end
+
+    end
+
+    --ENV Files
+    local function NotifyENVChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _sENV           = sNewText;
+        _bENVChanged    = true;
+    end
+
+    LiveFile.Register(oLiveFileRepo, "ENV", FS.Scripts.."\\ENV.lua", _nUserFileRepoInterval, NotifyENVChanged);
+    local tENVFiles = File.Find(FS.ENV.."\\", "*.lua", false, false, nil, nil);
+
+    if (type(tENVFiles) == "table") then
+
+        for nIndex, pFile in pairs(tENVFiles) do
+            LiveFile.Register(oLiveFileRepo, "ENV"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyENVChanged);
+        end
+
+    end
+
+    --TODO DRAW AND CELLPROCS
+
+    --LiveFile.StartAll(oLiveFileRepo);
+end
+
+
+
+
+
+
+
 --[[!
     @fqxn CFS.Classes.ProcSys
     @desc <h2>ProcSys</h2>
@@ -726,8 +788,8 @@ return class("ProcSys",
             end
 ]]
             --params for callbacks (if needed) -> tLiveFile, sOldText, sNewText, nOldCRC, nCRC
-            LiveFile.SetCallback("CellProc",    function() _bAnyProcChanged = true; end);
-            LiveFile.SetCallback("Draw",        function() _bDrawChanged    = true; end);
+            LiveFile.SetCallback(_oCellProcLiveFileRepo, function() _bAnyProcChanged = true; end);
+            LiveFile.SetCallback(_oDrawLiveFileRepo,     function() _bDrawChanged    = true; end);
 
             --LiveFile.SetCallback(); TODO LEFT OFF HERE ADDING OTHER WATCH ITEMS
             --tLiveFile, sOldText, sNewText, nOldCRC, nCRC
@@ -961,19 +1023,22 @@ return class("ProcSys",
 
             if (nID == _nFileSyncTimerID and _bReady) then
                 --_bAnyProcChanged    =
-                local bResetRows    = _bDataChanged or _bCFGEnvChanged or _bAnyProcChanged;
+                local bResetRows    = _bDataChanged or _bCFGChanged or _bEnvChanged or _bAnyProcChanged;
                 local bRedraw       = bResetRows or _bDrawChanged;
 
                 if (_bDataChanged) then
+                    _bDataChanged = false;
                     MainMenu.SetEnabled("Set:>Save", false);
                     LoadFileToGrid(pData);
                     --TODO Reselect row
-                    _bDataChanged = false;
                 end
 
-                if (_bCFGEnvChanged) then
-                    _oActiveGame.RefreshInit();
-                    _bCFGEnvChanged = false;
+                if (_bCFGChanged) then
+                    _bCFGChanged = false;
+                end
+
+                if (_bEnvChanged) then
+                    _bEnvChanged = false;
                 end
 
                 if (_bAnyProcChanged) then
@@ -987,8 +1052,8 @@ return class("ProcSys",
                 end
 
                 if (bRedraw) then
-                    TryDrawCard(Grid.GetRow(_sFinalDataGrid, _nCurrentRow));
                     _bDrawChanged = false;
+                    TryDrawCard(Grid.GetRow(_sFinalDataGrid, _nCurrentRow));
                 end
 
                 --[[
