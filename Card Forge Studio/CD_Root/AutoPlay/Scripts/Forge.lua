@@ -963,7 +963,7 @@ return class("Forge",
               <li>Style lookup during drawing is performed via <code>Forge.STYLE</code>.</li>
             </ul>
         !]]
-        LoadStyles = function() --called when a game is loaded
+        PrepGame = function() --called when a game is loaded
             --purge the styles
             setmetatable(_tStyles, {});
 

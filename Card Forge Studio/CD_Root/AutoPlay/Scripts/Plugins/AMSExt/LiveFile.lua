@@ -248,7 +248,7 @@ return class("LiveFile",
             local tLiveFile     = _tLiveFilesByID[sID];
             tLiveFile.IsActive  = rawtype(vFlag) == "boolean" and vFlag or false;
         end,]]
-        SetCallback = function(vID, fCallback)
+        SetCallback = function(vID, fCallback) --TODO use repo and ID
             type.assert.string(vID, "%S", "LiveFile.Start: ID must be a non-blank string.");
             local sID           = vID:upper();
             local tLiveFile     = _tLiveFilesByID[sID];
@@ -259,7 +259,7 @@ return class("LiveFile",
             local tRepo = _tRepos[oRepo];
             _tErrorCallbacks[oRepo] = rawtype(fCallback) == "function" and fCallback or nil;
         end,
-        Start = function(vID)
+        Start = function(vID)--TODO use repo and ID 
             type.assert.string(vID, "%S", "LiveFile.Start: ID must be a non-blank string.");
             local sID = vID:upper();
             local tLiveFile = _tLiveFilesByID[sID];

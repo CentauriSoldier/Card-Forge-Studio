@@ -9,45 +9,6 @@ local io            = io;
 local CardSet   = require("Game.CardSet");
 local GameUtil  = require("Game.GameUtil");
 
-local function BuildUserTable(sGame, sName)
-    --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
-    --Load any config and user environment that may exist TODO BUG FIX - FINISH - USE PROTECTED environment for loading this
-    --local sInitChunk    = _oActiveCardSet.GetCallCode("CellProc");
-    --TODO IT CAN BE USED IN THINGS LIKE oGame.RefreshCFG() and oGame.RefreshEnv() or just oGame.ReInit()
-    local sInitChunk = TextFile.ReadToString(FS.Scripts.."\\"..sName..".lua");
-    --TODO CHECK AND ERROR on bad file
-    --TODO Clear/Refresh UserEnv
-
-    --the error message in case things go south
-    local sChunkName = sGame.." sName";
-
-    --try to load the chuck
-    local fChunk, sError = load(sInitChunk, sChunkName, "t", UserEnv.Get());
-    if not (fChunk) then
-        error("Error running "..sName.." file for Game "..sGame..".\r\n"..sError, 2);
-    end
-
-    --try to call the chunk
-    local bOK, sRetOrError = pcall(fChunk);
-
-    if not (bOK) then
-        error("Error running "..sName.." file for Game "..sGame..".\r\n"..sRetOrError, 2);
-    end
-
-    local tUserTable = sRetOrError;
-
-    if not (type(tUserTable) == "table") then
-        error("Error in return from "..sName.." file for Game "..sGame..".\r\nExpected type table, Got "..type(tUserTable)..'.', 2);
-    end
-
-    return tUserTable;
-end
-
-local _nUserFileRepoInterval = 400;
-
-
-
-
 
 local function ValidateAndUpdateGame(this, cdat)
     local pri           = cdat.pri;
@@ -101,7 +62,6 @@ end
 local function SortByName(oItemA, oItemB)
     return oItemA.GetName() < oItemB.GetName();
 end
-
 
 return class("Game",
     {--METAMETHODS
@@ -162,34 +122,22 @@ return class("Game",
             if (not bCancelPressed and not bIsEmpty) then
 
                 if (bIsFilesafe) then
-                    Game.Activate(sGame);
+                    --Game.Activate(sGame);
                     MainMenu.RefreshGamesList();
                 end
 
             end
 
         end,
-        Activate = function(oGame) --TODO REDO THIS NOW THAT IT'S IN THIS MODULE TO INCLUDE VERIFYING THE INPUT
+        Activate = function(oGame)
 
             if not (type(oGame) == "Game") then
-                error("Game.Activate: Error activating game. Expected game object. Got "..type(oGame)..'.');
+                error("Game.Activate: Error activating game. Expected Game object. Got "..type(oGame)..'.');
             end
 
             _oActiveGame = oGame;
 
             FS.PrepGame(oGame); --set the filepaths for the current game
-
-            local sGame = oGame.GetName();
---TODO MOVING TO PROCSYS
-            --load in the user's CFG table
-            local tCFG = BuildUserTable(sGame, "CFG");
-            UserEnv.UpdateCFG(tCFG);
-
-            --load in the user's ENV table
-            local tEnv = BuildUserTable(sGame, "ENV");
-            UserEnv.UserUpdateRoot(tEnv);
-
-            UpdateFileRepo(oGame);
 
             --reset the BuildMechanics var (it gets reloaded in Init.lua if present)
             BuildMechanics = nil; --TODO WHAT IS THIS?'
@@ -204,9 +152,11 @@ return class("Game",
 
             end
 
-            ProcessDox(pGame);--TODO get this boolean from INI file before running Dox
+            ProcessDox();--TODO get this boolean from INI file before running Dox
 
-            Forge.LoadStyles();
+            Forge.PrepGame();
+
+            ProcSys.PrepGame(oGame);
         end,
         --rebuilds all game objects and refreshes the private static info
         Refresh = function()

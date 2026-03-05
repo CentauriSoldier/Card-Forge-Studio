@@ -19,7 +19,8 @@ local _nDescriptionMaxWidth = 100;
 local class                 = class;
 local _nCurrentRow          = -1;
 local _nCurrentColumn       = -1;
-local _sSetName             = "";
+local _sGameName            = "";
+local _sCardSetName         = "";
 local _nLastRow             = -1;
 
 local _tWindows             = {}; --stores windows
@@ -55,12 +56,16 @@ local _oCodeRepo        = null;
 --local _tRedrawRows      = {};  --tracks which rows need reprocessed/redrawn
 local _tReprocRows      = {};
 local _bDataChanged     = false;
-local _bCFGChanged      = false;
 local _sCFG             = "";
-local _bEnvChanged      = false;
+local _tCFG             = null;
+local _bCFGChanged      = false;
 local _sENV             = "";
+local _tENV             = null;
+local _bEnvChanged      = false;
 local _bAnyProcChanged  = false;
 local _bDrawChanged     = false;
+local _oActiveGame      = null;
+
 
 local function SetReprocRows(vFlag)
 
@@ -106,6 +111,53 @@ enum("PANE", {"MAIN", "DATA_EDIT", "DATA_VIEW"});
 !]]
 constant("GRID_BASE",   _sBaseDataGrid);
 constant("GRID_FINAL",  _sFinalDataGrid);
+
+
+
+
+
+
+
+local function BuildUserTable(sGame, sName)
+    --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
+    --Load any config and user environment that may exist TODO BUG FIX - FINISH - USE PROTECTED environment for loading this
+    --local sInitChunk    = _oActiveCardSet.GetCallCode("CellProc");
+    --TODO IT CAN BE USED IN THINGS LIKE oGame.RefreshCFG() and oGame.RefreshEnv() or just oGame.ReInit()
+    local sInitChunk = TextFile.ReadToString(FS.Scripts.."\\"..sName..".lua");
+    --TODO CHECK AND ERROR on bad file
+    --TODO Clear/Refresh UserEnv
+
+    --the error message in case things go south
+    local sChunkName = sGame.." sName";
+
+    --try to load the chuck
+    local fChunk, sError = load(sInitChunk, sChunkName, "t", UserEnv.Get());
+    if not (fChunk) then
+        error("Error running "..sName.." file for Game "..sGame..".\r\n"..sError, 2);
+    end
+
+    --try to call the chunk
+    local bOK, sRetOrError = pcall(fChunk);
+
+    if not (bOK) then
+        error("Error running "..sName.." file for Game "..sGame..".\r\n"..sRetOrError, 2);
+    end
+
+    local tUserTable = sRetOrError;
+
+    if not (type(tUserTable) == "table") then
+        error("Error in return from "..sName.." file for Game "..sGame..".\r\nExpected type table, Got "..type(tUserTable)..'.', 2);
+    end
+
+    return tUserTable;
+end
+
+local _nUserFileRepoInterval = 400;
+
+
+
+
+
 
 local function BuildWindows()
 
@@ -696,14 +748,30 @@ return class("ProcSys",
             return _oActiveCardSet;
         end,
 
+        PrepGame = function(oGame)
 
+            if not (type(oGame) == "Game") then
+                error("ProcSys.PrepGame: Error prepping game. Expected Game object. Got "..type(oGame)..'.');
+            end
+
+            _oActiveGame = oGame;
+            _sGameName   = oGame.GetName();
+
+            --load in the user's CFG table
+            local _tCFG = BuildUserTable(_sGameName, "CFG");
+            UserEnv.UpdateCFG(_tCFG);
+
+            --load in the user's ENV table
+            local _tEnv = BuildUserTable(_sGameName, "ENV");
+            UserEnv.UserUpdateRoot(_tEnv);
+        end,
         --[[! TODO FIX REDO
             @fqxn CFS.Classes.ProcSys.Methods.GetSetName
             @desc Returns the active card set name.
             @return string sSetName Active card set identifier.
         !]]
         GetSetName = function()
-            return _sSetName;
+            return _sCardSetName;
         end,
 
         --[[!TODO FINISH UPDATE
@@ -756,7 +824,7 @@ return class("ProcSys",
                 --TryBackupFile(pData); --TODO FIX uncomment this when ready!!
 
                 --store the set name
-                _sSetName = oCardSet.GetName();--String.SplitPath(pData).Filename; --TODO remove/update
+                _sCardSetName = oCardSet.GetName();--String.SplitPath(pData).Filename; --TODO remove/update
 
                 LoadFileToGrid(pData);
 
@@ -788,8 +856,8 @@ return class("ProcSys",
             end
 ]]
             --params for callbacks (if needed) -> tLiveFile, sOldText, sNewText, nOldCRC, nCRC
-            LiveFile.SetCallback(_oCellProcLiveFileRepo, function() _bAnyProcChanged = true; end);
-            LiveFile.SetCallback(_oDrawLiveFileRepo,     function() _bDrawChanged    = true; end);
+            LiveFile.SetCallback("CellProc", function() _bAnyProcChanged = true; end);
+            LiveFile.SetCallback("Draw",     function() _bDrawChanged    = true; end);
 
             --LiveFile.SetCallback(); TODO LEFT OFF HERE ADDING OTHER WATCH ITEMS
             --tLiveFile, sOldText, sNewText, nOldCRC, nCRC
@@ -916,14 +984,13 @@ return class("ProcSys",
                </ul>
         !]]
         OnShow = function(sPage)
-
             --create the game's windows table
             BuildWindows();
 
             --load last card set if present
             local sLastCardSetUUID  = INIFile.GetValue(FS.Info, "SESSION", "LastCardSet");
-            local oGame             = Game.GetActive();
-            local oLastCardSet      = oGame.GetCardSet(sLastCardSetUUID);
+
+            local oLastCardSet = _oActiveGame.GetCardSet(sLastCardSetUUID);
 
             if (type(oLastCardSet) == "CardSet") then
                 ProcSys.LoadCardSet(oLastCardSet);
@@ -1035,6 +1102,12 @@ return class("ProcSys",
 
                 if (_bCFGChanged) then
                     _bCFGChanged = false;
+
+
+
+
+
+                    UserEnv.UpdateCFG();
                 end
 
                 if (_bEnvChanged) then

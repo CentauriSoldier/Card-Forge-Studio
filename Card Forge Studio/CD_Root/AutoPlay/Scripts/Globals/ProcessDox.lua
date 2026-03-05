@@ -1,4 +1,4 @@
-return function(pGame)
+return function()
     local sName           = INIFile.GetValue(FS.Info, "SETTINGS", "Name");
     sName                 = (type.isstring(sName) and not sName:isempty()) and sName or APP_NAME;
     local bIncludePlugins = INIFile.GetValueBoolean(FS.Info, "SETTINGS", "IncludePlugins");
@@ -47,7 +47,7 @@ return function(pGame)
     end
 
     File.Delete(FS.Docs.."\\"..DOX_EXPORT_FILENAME);
-    
+
     oDoxLua.refresh();
     oDoxLua.setOutputPath(FS.Docs);
     oDoxLua.export(DOX_EXPORT_FILENAME);
