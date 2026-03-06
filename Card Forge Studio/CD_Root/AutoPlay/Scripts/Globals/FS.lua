@@ -72,6 +72,8 @@ local tFunctions = {
             error("FS: Error prepping game paths.\r\n\"${game}\" is not located in the expected directory of\r\n\"${games}.\"" % {game = pGame, games = pGames});
         end
 
+        --TODO USE FILESPECs WHERE POSSIBLE
+
         --setup the game's folder
         tPaths.Game         = pGame;                                --CheckFolder(pGame);
         tPaths.Docs         = pGame             .."\\Docs";                 CheckFolder(tPaths.Docs);

@@ -39,6 +39,9 @@ constant("DOX_EXPORT_FILENAME",     "API Documentation");
 
 constant("LOG_OBJECT", "inp log");
 
+
+
+
 local function BuildFileSpecTable(sName, sExt)
     local tActual   = {
         Name        = sName,
@@ -49,9 +52,7 @@ local function BuildFileSpecTable(sName, sExt)
     };
     local tDecoy    = {};
     local tMeta     = {
-        __index = function(t, k)
-            return tActual[k];
-        end,
+        __index = tActual,
         __newindex = function(t, k, v) error("Attempt to write to read-only FileSpec table.", 2) end,
         __type = "FileSpec",
     };
@@ -62,7 +63,9 @@ local function BuildFileSpecTable(sName, sExt)
 end
 
 --filenames/extensions
-constant("FILER_CARDSET_DATA",      BuildFileSpecTable("Data",     "csv"));
-constant("FILER_CARDSET_DRAW",      BuildFileSpecTable("Draw",     "lua"));
-constant("FILER_CARDSET_INFO",      BuildFileSpecTable("Info",     "ini"));
-constant("FILER_CARDSET_CELLPROC",  BuildFileSpecTable("CellProc", "lua"));
+constant("FILESPEC_CARDSET_DATA",       BuildFileSpecTable("Data",      "csv"));
+constant("FILESPEC_CARDSET_DRAW",       BuildFileSpecTable("Draw",      "lua"));
+constant("FILESPEC_CARDSET_INFO",       BuildFileSpecTable("Info",      "ini"));
+constant("FILESPEC_CARDSET_ROWPROC",    BuildFileSpecTable("RowProc",  "lua"));
+constant("FILESPEC_GAME_CFG",           BuildFileSpecTable("CFG",       "lua"));
+constant("FILESPEC_GAME_ENV",           BuildFileSpecTable("ENV",       "lua"));

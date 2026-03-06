@@ -34,14 +34,14 @@ return class("CardSet",
                 error("Invalid CardSet: CardSet path must lead to an existing directory.", 3);
             end
 
-            local pData     = pFolder.."\\"..FILER_CARDSET_DATA.Full;
-            local pInfo     = pFolder.."\\"..FILER_CARDSET_INFO.Full;
+            local pData     = pFolder.."\\"..FILESPEC_CARDSET_DATA.Full;
+            local pInfo     = pFolder.."\\"..FILESPEC_CARDSET_INFO.Full;
 
             --call files
-            local pDrawPath     = pFolder.."\\"..FILER_CARDSET_DRAW.Full;
-            local pCellProcPath = pFolder.."\\"..FILER_CARDSET_CELLPROC.Full;
+            local pDrawPath     = pFolder.."\\"..FILESPEC_CARDSET_DRAW.Full;
+            local pRowProcPath  = pFolder.."\\"..FILESPEC_CARDSET_ROWPROC.Full;
 
-            local tCheckFiles = {pData, pInfo, pDrawPath, pCellProcPath};
+            local tCheckFiles = {pData, pInfo, pDrawPath, pRowProcPath};
 
             for _, pFile in pairs(tCheckFiles) do
 
@@ -77,8 +77,8 @@ return class("CardSet",
             --create the LiveFileRepo and register the LiveFiles for each call.
             local oCallRepo = LiveFile.CreateRepo();
             pri.CallRepo    = oCallRepo;
-            LiveFile.Register(oCallRepo, "CellProc",    pCellProcPath,  PROCSYS_FILE_SYNC_TIMER_INTERVAL);
-            LiveFile.Register(oCallRepo, "Draw",        pDrawPath,      PROCSYS_FILE_SYNC_TIMER_INTERVAL);--TODO SPECIAL COLUMNS!!!
+            LiveFile.Register(oCallRepo, "RowProc", pRowProcPath,   PROCSYS_FILE_SYNC_TIMER_INTERVAL);
+            LiveFile.Register(oCallRepo, "Draw",    pDrawPath,      PROCSYS_FILE_SYNC_TIMER_INTERVAL);--TODO SPECIAL COLUMNS!!!
         end,
         GetLiveFile = function(this, cdat, sCall)
             local pri = cdat.pri;

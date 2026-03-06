@@ -30,40 +30,44 @@ local _pAppCFG              = FS.AppCFG;
 
 local _oActiveCardSet           = false;
 
-local _nFileSyncTimerID         = PROCSYS_FILE_SYNC_TIMER_ID;
-local _nFileSyncTimerInterval   = PROCSYS_FILE_SYNC_TIMER_INTERVAL;
+
 
 --stored after loading a card set
 local _nCardWidth = 0;
 local _nCardHeight = 0;
 local _sCardSetName = "";
-
+-------------------------------------------------------------------------
+--                       <<<File Sync System>>>
 local _oGameLiveFileRepo        = LiveFile.CreateRepo();
 local _oCardSetLiveFileRepo     = LiveFile.CreateRepo();
-local _oCellProcLiveFileRepo    = LiveFile.CreateRepo();
+local _oRowProcLiveFileRepo     = LiveFile.CreateRepo();
 local _oDrawLiveFileRepo        = LiveFile.CreateRepo(); --QUESTION SHOULD THIS BE IN THE FORGE MODULE?
-
+local _tReprocRows              = {};
+local _bDataChanged             = false;
+local _sCFG                     = "";
+local _tCFG                     = null;
+local _bCFGChanged              = false;
+local _sENV                     = "";
+local _tENV                     = null;
+local _bENVChanged              = false;
+local _bAnyProcChanged          = false;
+local _bDrawChanged             = false;
+local _nFileSyncTimerID         = PROCSYS_FILE_SYNC_TIMER_ID;
+local _nFileSyncTimerInterval   = PROCSYS_FILE_SYNC_TIMER_INTERVAL;
 -------------------------------------------------------------------------
+--                          <<<File Specs>>>
+local _tFileSpecCFG              = FILESPEC_GAME_CFG;
+local _tFileSpecENV              = FILESPEC_GAME_ENV; --TODO aadd all neede file specs here
 --local _tRowCRC          = {};
 --local _nDrawCRC         = -1;
---local _nCellProcCRC     = -1;
+--local _nRowProcCRC     = -1;
 --local _bDrawUpdated     = false;
---local _bCellProcUpdated = false;
+--local _bRowProcUpdated = false;
 
 local _bReady           = false; --prevents timer code from running until a selection has been made
 
-local _oCodeRepo        = null;
 --local _tRedrawRows      = {};  --tracks which rows need reprocessed/redrawn
-local _tReprocRows      = {};
-local _bDataChanged     = false;
-local _sCFG             = "";
-local _tCFG             = null;
-local _bCFGChanged      = false;
-local _sENV             = "";
-local _tENV             = null;
-local _bEnvChanged      = false;
-local _bAnyProcChanged  = false;
-local _bDrawChanged     = false;
+
 local _oActiveGame      = null;
 
 
@@ -81,7 +85,7 @@ end
 --[[--when changes occur
 Data            - Reload Set +
 CFG/UserEnv     - Reinit game +
-Cell/ColumnProc - Reproc All Rows (on demand ofc)
+Cell/RowProc - Reproc All Rows (on demand ofc)
 Draw            - Redraw Current Row
 ]]
 
@@ -96,7 +100,7 @@ Draw            - Redraw Current Row
         <li>DATA_VIEW – Final data viewer pane.</li>
     </ul>
 !]]
-enum("PANE", {"MAIN", "DATA_EDIT", "DATA_VIEW"});
+enum("PANE", {"MAIN", "DATA_EDIT", "DATA_VIEW"});--TODO MOVE AND LOCALIZE
 
 --local _nCurrentRow          = 0;
 --local _nCurrentColumn       = 0;
@@ -109,26 +113,30 @@ enum("PANE", {"MAIN", "DATA_EDIT", "DATA_VIEW"});
        <li><code>GRID_FINAL</code> – Identifier for the final (processed) data grid.</li>
    </ul>
 !]]
-constant("GRID_BASE",   _sBaseDataGrid);
-constant("GRID_FINAL",  _sFinalDataGrid);
+constant("GRID_BASE",   _sBaseDataGrid); --TODO MOVE AND LOCALIZE
+constant("GRID_FINAL",  _sFinalDataGrid);--TODO MOVE AND LOCALIZE
 
 
 
 
 
-
-
-local function BuildUserTable(sGame, sName)
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.BuildUserTable
+    @desc TODO
+!]]
+local function BuildUserTable(sGame, tFileSpec)
     --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
     --Load any config and user environment that may exist TODO BUG FIX - FINISH - USE PROTECTED environment for loading this
-    --local sInitChunk    = _oActiveCardSet.GetCallCode("CellProc");
+    --local sInitChunk    = _oActiveCardSet.GetCallCode("RowProc");
     --TODO IT CAN BE USED IN THINGS LIKE oGame.RefreshCFG() and oGame.RefreshEnv() or just oGame.ReInit()
-    local sInitChunk = TextFile.ReadToString(FS.Scripts.."\\"..sName..".lua");
+    local sInitChunk = TextFile.ReadToString(FS.Scripts.."\\"..tFileSpec.Full);
     --TODO CHECK AND ERROR on bad file
     --TODO Clear/Refresh UserEnv
 
+    local sName = tFileSpec.Filename;
+
     --the error message in case things go south
-    local sChunkName = sGame.." sName";
+    local sChunkName = sGame.." "..sName;
 
     --try to load the chuck
     local fChunk, sError = load(sInitChunk, sChunkName, "t", UserEnv.Get());
@@ -158,7 +166,12 @@ local _nUserFileRepoInterval = 400;
 
 
 
-
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.BuildWindows
+    @desc <p>Creates ProcSys’s auxiliary editor/viewer windows once, wires custom window callbacks, restores prior window state from the app INI, and registers ProcSys root conversions into the UserEnv.</p>
+        <p>This function is <strong>static</strong> and <strong>private</strong> to the ProcSys module.<br>
+        It builds the base data editor and final data viewer grids, captures each window’s original callbacks, then wraps OnClose/OnMaximize/OnResizeStop/OnRestore to both forward events and persist window geometry, visibility, and maximized state back to the INI.</p>
+!]]
 local function BuildWindows()
 
     if not (_bWindowsBuilt) then
@@ -291,7 +304,7 @@ local function BuildWindows()
 end
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.StaticPrivate.Methods.TryDrawCard
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.TryDrawCard
     @desc Attempts to draw the card for the given row using the resolved processor.
     @param class cProc Processor class providing the DrawCard method.
     @param number nRow Row index being drawn.
@@ -339,13 +352,21 @@ end
 
 
 
-
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.PrepUpdateGrids
+    @desc TODO
+!]]
 local function PrepUpdateGrids()
     Status.Set("");
     Grid.SetRedraw(_sBaseDataGrid, false);
     Grid.SetRedraw(_sFinalDataGrid, false);
 end
 
+
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateGrids
+    @desc TODO
+!]]
 local function UpdateGrids()--TODO FINISH MOVE Color stuff out to a theme system
     --adjust/refresh the appropriate grids QUESTION SHould this be after the refresh?
     --Grid.ExpandColumnsToFit(_sBaseDataGrid,     true, true);
@@ -450,7 +471,7 @@ end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.StaticPrivate.Methods.ProcessCell
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.ProcessCell
     @desc Processes a single base grid cell into the final grid and returns data for redraw/export.
     @param number nRow Row index of the cell being processed.
     @param number nColumn Column index of the cell being processed.
@@ -465,16 +486,16 @@ end
 local function ProcessCell(nRow, nColumn) --TODO LEFT OFF HERE 1
     local sColumn       = Grid.GetCellText(_sBaseDataGrid, 0, nColumn);
     local sText         = Grid.GetCellText(_sBaseDataGrid, nRow, nColumn);
-    local tLiveFile     = _oActiveCardSet.GetLiveFile("CellProc");
+    local tLiveFile     = _oActiveCardSet.GetLiveFile("RowProc");
     local sProcChunk    = tLiveFile.Text;
 
     --the error message in case things go south
-    local sChunkName = _sCardSetName.." CellProc";
+    local sChunkName = _sCardSetName.." RowProc";
 
     --try to load the chuck
     local fChunk, sError = load(sProcChunk, sChunkName, "t", UserEnv.Get());
     if not (fChunk) then
-        error("Error loading CellProc file for CardSet ".._sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
+        error("Error loading RowProc file for CardSet ".._sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
     end
 
     --try to call the chunk
@@ -499,8 +520,8 @@ local function ProcessCell(nRow, nColumn) --TODO LEFT OFF HERE 1
         return vRet;
     end
 
-    local fCellProc = vReturnOrError;
-    local vProcRet  = fCellProc(nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
+    local fRowProc = vReturnOrError;
+    local vProcRet  = fRowProc(nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
 
 
     if (vProcRet) then
@@ -521,7 +542,7 @@ end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.StaticPrivate.Methods.LoadFileToGrid
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.LoadFileToGrid
     @desc Loads a CSV into the base grid, rebuilds the final grid by processing all cells, and refreshes the UI.
     @param string pFile Path to the CSV to load.
     @note Disables saving while loading and re-enables normal editing after completion.
@@ -574,7 +595,10 @@ local function LoadFileToGrid(pFile)
     _bIsLoading = false;
 end
 
-
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.TryBackupFile
+    @desc TODO
+!]]
 local function TryBackupFile(pFile)--tFiles)
     --local pFile = tFiles[1];
     local tParts = String.SplitPath(pFile);
@@ -619,6 +643,11 @@ local function TryBackupFile(pFile)--tFiles)
     return bWriteFile;
 end
 
+
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.TryDrawActiveCard
+    @desc TODO
+!]]
 local function TryDrawActiveCard()
 
     if (_bReady) then
@@ -629,17 +658,19 @@ local function TryDrawActiveCard()
 end
 
 
-
-
-local function UpdateGameFileRepo(oGame)
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateCardSetLiveFileRepo
+    @desc TODO
+!]]
+local function UpdateCardSetLiveFileRepo(oGame) --TODO FINISH
     local sGame = oGame.GetName();
 
     --destroy the old repo
-    LiveFile.Destroy(_oLiveFileRepo);
-    _oLiveFileRepo = nil;
+    LiveFile.Destroy(_oGameLiveFileRepo);
+    _oGameLiveFileRepo = nil;
 
     --create the new one
-    local oLiveFileRepo = LiveFile.CreateRepo();
+    _oGameLiveFileRepo = LiveFile.CreateRepo();
 
     --CFG Files
     local function NotifyCFGChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
@@ -647,13 +678,13 @@ local function UpdateGameFileRepo(oGame)
         _bCFGChanged    = true;
     end
 
-    LiveFile.Register(oLiveFileRepo, "CFG", FS.Scripts.."\\CFG.lua", _nUserFileRepoInterval, NotifyCFGChanged);
+    LiveFile.Register(_oGameLiveFileRepo, "CFG", FS.Scripts.."\\CFG.lua", _nUserFileRepoInterval, NotifyCFGChanged);
     local tCFGFiles = File.Find(FS.CFG.."\\", "*.lua", false, false, nil, nil);
 
     if (type(tCFGFiles) == "table") then
 
         for nIndex, pFile in pairs(tCFGFiles) do
-            LiveFile.Register(oLiveFileRepo, "CFG"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyCFGChanged);
+            LiveFile.Register(_oGameLiveFileRepo, "CFG"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyCFGChanged);
         end
 
     end
@@ -664,12 +695,12 @@ local function UpdateGameFileRepo(oGame)
         _bENVChanged    = true;
     end
 
-    LiveFile.Register(oLiveFileRepo, "ENV", FS.Scripts.."\\ENV.lua", _nUserFileRepoInterval, NotifyENVChanged);
+    LiveFile.Register(_oGameLiveFileRepo, "ENV", FS.Scripts.."\\ENV.lua", _nUserFileRepoInterval, NotifyENVChanged);
     local tENVFiles = File.Find(FS.ENV.."\\", "*.lua", false, false, nil, nil);
 
     if (type(tENVFiles) == "table") then
 
-        for nIndex, pFile in pairs(tENVFiles) do
+        for nIndex, pFile in pairs(_oGameLiveFileRepo) do
             LiveFile.Register(oLiveFileRepo, "ENV"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyENVChanged);
         end
 
@@ -677,7 +708,63 @@ local function UpdateGameFileRepo(oGame)
 
     --TODO DRAW AND CELLPROCS
 
-    --LiveFile.StartAll(oLiveFileRepo);
+    --LiveFile.StartAll(_oGameLiveFileRepo);
+end
+
+
+
+
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateGameLiveFileRepo
+    @desc TODO
+!]]
+local function UpdateGameLiveFileRepo(oGame)
+    local sGame = oGame.GetName();
+
+    --destroy the old repo
+    LiveFile.Destroy(_oGameLiveFileRepo);
+    _oGameLiveFileRepo = nil;
+
+    --create the new one
+    _oGameLiveFileRepo = LiveFile.CreateRepo();
+
+    --CFG Files
+    local function NotifyCFGChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _sCFG           = sNewText;
+        _bCFGChanged    = true;
+    end
+
+    LiveFile.Register(_oGameLiveFileRepo, "CFG", FS.Scripts.."\\".._tFileSpecCFG.Full, _nUserFileRepoInterval, NotifyCFGChanged);
+    local tCFGFiles = File.Find(FS.CFG.."\\", "*.lua", false, false, nil, nil);
+
+    if (type(tCFGFiles) == "table") then
+
+        for nIndex, pFile in pairs(tCFGFiles) do
+            LiveFile.Register(_oGameLiveFileRepo, "CFG_"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyCFGChanged);
+        end
+
+    end
+
+    --ENV Files
+    local function NotifyENVChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _sENV           = sNewText;
+        _bENVChanged    = true;
+    end
+
+    LiveFile.Register(_oGameLiveFileRepo, "ENV", FS.Scripts.."\\".._tFileSpecENV.Full, _nUserFileRepoInterval, NotifyENVChanged);
+    local tENVFiles = File.Find(FS.ENV.."\\", "*.lua", false, false, nil, nil);
+
+    if (type(tENVFiles) == "table") then
+
+        for nIndex, pFile in pairs(_oGameLiveFileRepo) do
+            LiveFile.Register(oLiveFileRepo, "ENV_"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyENVChanged);
+        end
+
+    end
+
+    --TODO DRAW AND CELLPROCS
+
+    --LiveFile.StartAll(_oGameLiveFileRepo);
 end
 
 
@@ -758,12 +845,14 @@ return class("ProcSys",
             _sGameName   = oGame.GetName();
 
             --load in the user's CFG table
-            local _tCFG = BuildUserTable(_sGameName, "CFG");
-            UserEnv.UpdateCFG(_tCFG);
+            local _tCFG = BuildUserTable(_sGameName, _tFileSpecCFG);
+            UserEnv.UserUpdateCFG(_tCFG);
 
             --load in the user's ENV table
-            local _tEnv = BuildUserTable(_sGameName, "ENV");
-            UserEnv.UserUpdateRoot(_tEnv);
+            local _tEnv = BuildUserTable(_sGameName, _tFileSpecENV);
+            UserEnv.UserUpdateENV(_tEnv);
+
+            UpdateGameLiveFileRepo(oGame);
         end,
         --[[! TODO FIX REDO
             @fqxn CFS.Classes.ProcSys.Methods.GetSetName
@@ -856,7 +945,7 @@ return class("ProcSys",
             end
 ]]
             --params for callbacks (if needed) -> tLiveFile, sOldText, sNewText, nOldCRC, nCRC
-            LiveFile.SetCallback("CellProc", function() _bAnyProcChanged = true; end);
+            LiveFile.SetCallback("RowProc", function() _bAnyProcChanged = true; end);
             LiveFile.SetCallback("Draw",     function() _bDrawChanged    = true; end);
 
             --LiveFile.SetCallback(); TODO LEFT OFF HERE ADDING OTHER WATCH ITEMS
@@ -866,7 +955,7 @@ return class("ProcSys",
 
             --[[local nRows     = Grid.GetRowCount(_sBaseDataGrid);
             for nRow = 0, nRows - 1 do
-                _tRowUpdate.CellProc[nRow] = lCellProc.HasChanged;
+                _tRowUpdate.RowProc[nRow] = lRowProc.HasChanged;
                 _tRowUpdate.Draw[nRow]     = lDraw.HasChanged;
             end]]
 
@@ -939,7 +1028,7 @@ return class("ProcSys",
 
                 --update saveability
                 _bAllowSave = true;
-                MainMenu.SetEnabled("Set:>Save", true);
+                MainMenu.SetEnabled("Card Set:>Save", true);
 
                 --update the draw call
                 if (MainMenu.IsChecked("Options:>Draw:>Redraw On Cell Changed")) then
@@ -951,8 +1040,8 @@ return class("ProcSys",
         end,
 
 
-        OnExit = function()
-
+        OnExit = function() --TODO RENAME THIS AN PUT IT I NTHE PROPER PACES TOO...such as OnShutdown
+            --TODO FIX kill all global timers!
             if (_bAllowSave) then
                 local nYesNoCancel = Dialog.Message("Warning!", "You have unsaved changes.\r\nWould you like to save them now?", MB_YESNOCANCEL, MB_ICONEXCLAMATION, MB_DEFBUTTON1);
 
@@ -996,6 +1085,8 @@ return class("ProcSys",
                 ProcSys.LoadCardSet(oLastCardSet);
             end
 
+            LiveFile.StartAll(_oGameLiveFileRepo);
+
             Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
         end,
 
@@ -1030,7 +1121,7 @@ return class("ProcSys",
             if (_nLastRow ~= nRow or _tReprocRows[_nCurrentRow]) then
                 local tRow = Grid.GetRow(_sFinalDataGrid, nRow);
                 UserEnv.ProcSysUpdateRoot {_tRow = tRow};
-                ProcSys.ProcessActiveRow(not _bReady);
+                ProcSys.ProcessActiveRow(not _bReady); --TODO NOTE FLICKER IS PROBABLY HERE!!!!
                 _nLastRow = nRow;
                 _tReprocRows[_nCurrentRow] = false;
                 _bReady = true;
@@ -1057,18 +1148,18 @@ return class("ProcSys",
             end
 
             --check if the user has updated any relevant files
-            local bCellProcCRCMismatch  = _tRowUpdate.CellProc[nRow];
+            local bRowProcCRCMismatch  = _tRowUpdate.RowProc[nRow];
             local bDrawCRCMismatch      = _tRowUpdate.Draw[nRow];
             local bProcessed            = false;
 
-            if (bCellProcCRCMismatch) then
+            if (bRowProcCRCMismatch) then
                 ProcSys.ProcessActiveRow();
-                _tRowUpdate.CellProc[nRow] = false;
+                _tRowUpdate.RowProc[nRow] = false;
                 bProcessed = true;
             end
 
             --try to draw the card
-            if (_nLastRow ~= nRow or bCellProcCRCMismatch or bDrawCRCMismatch) then
+            if (_nLastRow ~= nRow or bRowProcCRCMismatch or bDrawCRCMismatch) then
 
                 if not (bProcessed) then
                     _nLastRow = nRow;
@@ -1089,29 +1180,24 @@ return class("ProcSys",
         OnTimer = function(nID)
 
             if (nID == _nFileSyncTimerID and _bReady) then
-                --_bAnyProcChanged    =
-                local bResetRows    = _bDataChanged or _bCFGChanged or _bEnvChanged or _bAnyProcChanged;
+                local bResetRows    = _bDataChanged or _bCFGChanged or _bENVChanged or _bAnyProcChanged;
                 local bRedraw       = bResetRows or _bDrawChanged;
 
                 if (_bDataChanged) then
                     _bDataChanged = false;
-                    MainMenu.SetEnabled("Set:>Save", false);
+                    MainMenu.SetEnabled("Card Set:>Save", false);
                     LoadFileToGrid(pData);
                     --TODO Reselect row
                 end
 
                 if (_bCFGChanged) then
                     _bCFGChanged = false;
-
-
-
-
-
-                    UserEnv.UpdateCFG();
+                    UserEnv.UserUpdateCFG(BuildUserTable(_sGameName, _tFileSpecCFG));
                 end
 
-                if (_bEnvChanged) then
-                    _bEnvChanged = false;
+                if (_bENVChanged) then
+                    _bENVChanged = false;
+                    UserEnv.UserUpdateENV(BuildUserTable(_sGameName, _tFileSpecENV));
                 end
 
                 if (_bAnyProcChanged) then
@@ -1131,17 +1217,17 @@ return class("ProcSys",
 
                 --[[
                 if (_oActiveCardSet) then
-                    local nCellProcCRC  = _oActiveCardSet.GetLiveFile("CellProc").CRC;
+                    local nRowProcCRC  = _oActiveCardSet.GetLiveFile("RowProc").CRC;
                     local nDrawCRC      = _oActiveCardSet.GetLiveFile("Draw").CRC;
                     local bProcessed    = false;
 
-                    if (nCellProcCRC ~= _nCellProcCRC) then
-                        _nCellProcCRC = nCellProcCRC;
+                    if (nRowProcCRC ~= _nRowProcCRC) then
+                        _nRowProcCRC = nRowProcCRC;
 
                         if (_nCurrentRow ~= -1) then
                             ProcSys.ProcessActiveRow();
-                            _tRowCRC.CellProc[_nCurrentRow] = _nCellProcCRC;
-                            --_tRowCRC.CellProc[_nCurrentRow] = false;
+                            _tRowCRC.RowProc[_nCurrentRow] = _nRowProcCRC;
+                            --_tRowCRC.RowProc[_nCurrentRow] = false;
                             _tRowCRC.Draw[_nCurrentRow]     = nDrawCRC;
                             bProcessed = true;
                         end
@@ -1233,7 +1319,7 @@ return class("ProcSys",
                 --Grid.SaveToFile(_sFinalDataGrid, _pExportCSV);
 
                 _bAllowSave = false;
-                MainMenu.SetEnabled("Set:>Save", false);
+                MainMenu.SetEnabled("Card Set:>Save", false);
             end
 
         end,

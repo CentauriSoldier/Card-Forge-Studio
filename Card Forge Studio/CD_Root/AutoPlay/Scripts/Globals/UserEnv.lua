@@ -173,14 +173,15 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     select           = select,
     --Forge            = tForgeDecoy,
     --ProcSys          = tProcSysDecoy,
+    Log              = Log.Note,
     --[[!
     @fqxn CFS.UserEnv.Import
     @desc
     Loads and executes a Lua file from within the active game's directory, then returns the chunk results.
 
-    The import path is treated as a **relative path rooted at the user's currently active game** (the game’s root folder). Absolute paths and traversal are rejected. The file is read as text, compiled with the UserEnv execution environment, and run protected so errors can be returned instead of crashing the caller.
+    The import path is treated as a relative path rooted at the user's currently active game (the game’s root folder). Absolute paths and traversal are rejected. The file is read as text, compiled with the UserEnv execution environment, and run protected so errors can be returned instead of crashing the caller.
 
-    All code inside the imported file is executed **sandboxed within the UserEnv**. The file has access only to the APIs explicitly exposed by the user environment, ensuring imported code cannot escape or access unsafe globals.
+    All code inside the imported file is executed sandboxed within the UserEnv. The file has access only to the APIs explicitly exposed by the user environment, ensuring imported code cannot escape or access unsafe globals.
     @param string sPathRaw Relative path to a Lua file inside the active game (for example: "Scripts/MyModule.lua").
     @param any vMessage Optional extra text appended to error output.
     @ret any ... On success, returns whatever values the imported file returns.
@@ -197,7 +198,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     @desc
     <p>Returns the number of seconds elapsed since the UserEnv (sandbox) was created.
     <br><br>
-    This value is **relative**, not wall-clock time. It does not expose system time,
+    This value is relative, not wall-clock time. It does not expose system time,
     timezone, or date information, and is safe for use inside restricted or sandboxed
     environments. The uptime origin cannot be reset or modified by sandboxed code.
     Although the various random functions in the environment have already been seeded with
@@ -1472,18 +1473,6 @@ local tUserEnv = {
     Refresh = function()
         --TODO FINISH CLEAN THIS OUT!!! On game  load, it should be clean
     end,
-    --expects new CFG to have brought in through the user env
-    UpdateCFG = function(tInput)
-        _tCFG = {};
-
-        if (rawtype(tInput) == "table") then
-            _tCFG = tInput--table.shadowreadonly(tInput);
-        end
-
-        _tCFGMeta.__index = _tCFG;
-        setmetatable(_tCFGDecoy, _tCFGMeta);
-
-    end,
     ProcSysUpdateRoot = function(tInput, bPurge) --permits additions/replacement to/of existing keys or a full purge, then new items added
 
         if (rawtype(tInput) == "table") then
@@ -1509,7 +1498,19 @@ local tUserEnv = {
 
         end
     end,
-    UserUpdateRoot = function(tInput) --TODO BUG update this to use protected env when able : the user table will get input thourgh forge constructor, then run through the safe env filter, then iterated over and dumped into main env table (error on overwriteing ofc.)
+    --expects new CFG to have brought in through the user env
+    UserUpdateCFG = function(tInput)
+        _tCFG = {};
+
+        if (rawtype(tInput) == "table") then
+            _tCFG = tInput--table.shadowreadonly(tInput);
+        end
+
+        _tCFGMeta.__index = _tCFG;
+        setmetatable(_tCFGDecoy, _tCFGMeta);
+
+    end,
+    UserUpdateENV = function(tInput) --TODO BUG update this to use protected env when able : the user table will get input thourgh forge constructor, then run through the safe env filter, then iterated over and dumped into main env table (error on overwriteing ofc.)
         --local tInput = --GetUserEnv();
         --TODO ALSO DO NOT LEt user indices overwrite exiting onces...keep track of list afte rinjhection and allow new injectio to overwrite only user indices
 

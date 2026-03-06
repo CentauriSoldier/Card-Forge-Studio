@@ -170,7 +170,9 @@ TheMenu.Add("Window",                   _nIconID,       _bEnabled,      -_bCheck
 ██║  ██║███████╗███████╗██║
 ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ]]
 TheMenu.Add("Help",                     _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
-        Add("Help:>Documentation",      _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(FS.Game.."\\Docs\\"..DOX_EXPORT_FILENAME..".html", "", SW_SHOWNORMAL); end}).
+        Add("Help:>Game Documentation", _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(FS.Game.."\\Docs\\"..DOX_EXPORT_FILENAME..".html", "", SW_SHOWNORMAL); end}).
+        Add("Help:>Draw API",           _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(_Docs.."\\Draw.chm", "", SW_SHOWNORMAL); end}).
+        Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Help:>Tutorials",          _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(FS.AppDir.."\\index.html", "", SW_SHOWNORMAL); end}).
         Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Help:>Visit Website",      _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.OpenURL("https://www.cardforge.studio/", SW_SHOWNORMAL); end}).
@@ -244,7 +246,7 @@ tSupport = {
             --tools items
             TheMenu.SetEnabled("Tools:>Rebuild Dox",        false);
             --help items
-            TheMenu.SetEnabled("Help:>Documentation",       false);
+            TheMenu.SetEnabled("Help:>Game Documentation",  false);
             --window items
             TheMenu.SetEnabled(sWindow.."Base Data",        false);
             TheMenu.SetEnabled(sWindow.."Final Data",       false);
@@ -273,7 +275,7 @@ tSupport = {
             --tools items
             TheMenu.SetEnabled("Tools:>Rebuild Dox",        true);
             --help items
-            TheMenu.SetEnabled("Help:>Documentation",       true);
+            TheMenu.SetEnabled("Help:>Game Documentation",  true);
             --window items
             TheMenu.SetEnabled(sWindow.."Base Data",        true);
             TheMenu.SetEnabled(sWindow.."Final Data",       true);
