@@ -34,6 +34,22 @@ constant("PROCSYS_FILE_SYNC_TIMER_ID",        101);
 constant("PROCSYS_FILE_SYNC_TIMER_INTERVAL",  400);
 constant("PROCSYS_TO_TABLE",    1);
 constant("PROCSYS_TO_NUMBER",   2);
+constant("PROCSYS_GRID_BASE",   "grd base data");
+constant("PROCSYS_GRID_FINAL",  "grd final data");
+
+
+constant("USER_FILE_REPO_TIMER_INTERVAL",  400);
+
+--[[!
+    @fqxn CFS.Enums.PANE
+    @desc Identifiers for common window panes.
+    <ul>
+        <li>DATA_EDIT – Base data editor pane.</li>
+        <li>DATA_VIEW – Final data viewer pane.</li>
+    </ul>
+!]]
+enum("PANE", {"MAIN", "DATA_EDIT", "DATA_VIEW"});
+
 
 constant("DOX_EXPORT_FILENAME",     "API Documentation");
 

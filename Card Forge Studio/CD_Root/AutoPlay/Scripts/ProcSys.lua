@@ -1,86 +1,85 @@
---[[!
-    @fqxn CFS.Classes.ProcSys.Private Static Fields._tProcResolvers
-    @desc TODO
-!]]
-local _tProcResolvers       = {}; --indexed by game name, value is proc resolver funciton
-local _tExporters           = {};
-
---local _sActiveProcessor     = ""; --the name of the processing function (as regsitered)
-local _sCSVDelimiter        = CSV_DELIMITER;
-local _bAllowSave           = false;
-local _pActiveCSV           = "";
-local _pExportCSV           = "";
-local _bAutoSizeGrid        = true;
-local _sBaseDataGrid        = "grd base data";
-local _sFinalDataGrid       = "grd final data";
-local _bIsLoading           = false;
---local _RedrawOnCellChanged  = true;
-local _nDescriptionMaxWidth = 100;
-local class                 = class;
-local _nCurrentRow          = -1;
-local _nCurrentColumn       = -1;
-local _sGameName            = "";
-local _sCardSetName         = "";
-local _nLastRow             = -1;
-
-local _tWindows             = {}; --stores windows
-local _bWindowsBuilt        = false;
-
-local _pAppCFG              = FS.AppCFG;
-
-local _oActiveCardSet           = false;
-
-
-
---stored after loading a card set
-local _nCardWidth = 0;
-local _nCardHeight = 0;
-local _sCardSetName = "";
--------------------------------------------------------------------------
---                       <<<File Sync System>>>
-local _oGameLiveFileRepo        = LiveFile.CreateRepo();
-local _oCardSetLiveFileRepo     = LiveFile.CreateRepo();
-local _oRowProcLiveFileRepo     = LiveFile.CreateRepo();
-local _oDrawLiveFileRepo        = LiveFile.CreateRepo(); --QUESTION SHOULD THIS BE IN THE FORGE MODULE?
-local _tReprocRows              = {};
+-------------------------------- Localization
+local class                     = class;
+-------------------------------- General
+local _pAppCFG                  = FS.AppCFG;
+local _bReady                   = false; --prevents timer executions until a selection has been made
+local _bAllowSave               = false;
+local _nUserFileRepoInterval    = USER_FILE_REPO_TIMER_INTERVAL;
+-------------------------------- Windows
+local _tWindows                 = {}; --stores windows
+local _bWindowsBuilt            = false;
+local _ePane                    = PANE;
+-------------------------------- Grid
+local _bAutoSizeGrid            = true;
+local _sBaseDataGrid            = PROCSYS_GRID_BASE;
+local _sFinalDataGrid           = PROCSYS_GRID_FINAL;
+local _bIsLoading               = false;
+local _nCurrentRow              = -1;
+local _nCurrentColumn           = -1;
+local _nLastRow                 = -1;
+-------------------------------- Export
+local _tExporters               = {};
+-------------------------------- CSV
 local _bDataChanged             = false;
-local _sCFG                     = "";
-local _tCFG                     = null;
-local _bCFGChanged              = false;
-local _sENV                     = "";
-local _tENV                     = null;
-local _bENVChanged              = false;
-local _bAnyProcChanged          = false;
+local _sCSVDelimiter            = CSV_DELIMITER;
+local _pActiveCSV               = "";
+local _pExportCSV               = "";
+-------------------------------- RowProc / Special Procs
+local _tReprocRows              = {};
+local _oRowProcLiveFileRepo     = LiveFileRepo();
+local _bRowProcChanged          = false;
+local _sRowProcCode             = "";
+local _fRowProc                 = false;
+
+local _bRowProcChanged          = false;
+-------------------------------- Draw (Draw function doesn't get stored here as it's sent to Forge upon creation)
+local _oDrawLiveFileRepo        = LiveFileRepo(); --QUESTION SHOULD THIS BE IN THE FORGE MODULE?
 local _bDrawChanged             = false;
+local _sDrawCode                = "";
+-------------------------------- Game Including CGF & ENV
+local _oGameLiveFileRepo        = LiveFileRepo();
+local _oActiveGame              = null;
+local _sGameName                = "";
+local _bCFGChanged              = false;
+local _bENVChanged              = false;
+local _sCFGCode                 = "";
+local _sENVCode                 = "";
+local _tCFG                     = null;
+local _tENV                     = null;
+-------------------------------- Card Set
+local _oCardSetLiveFileRepo     = LiveFileRepo();
+local _oActiveCardSet           = false;
+local _sCardSetName             = "";
+local _nCardWidth               = 0;
+local _nCardHeight              = 0;
+-------------------------------- Timers
 local _nFileSyncTimerID         = PROCSYS_FILE_SYNC_TIMER_ID;
 local _nFileSyncTimerInterval   = PROCSYS_FILE_SYNC_TIMER_INTERVAL;
--------------------------------------------------------------------------
---                          <<<File Specs>>>
-local _tFileSpecCFG              = FILESPEC_GAME_CFG;
-local _tFileSpecENV              = FILESPEC_GAME_ENV; --TODO aadd all neede file specs here
+-------------------------------- File Specs
+local _tFileSpecCFG             = FILESPEC_GAME_CFG;
+local _tFileSpecENV             = FILESPEC_GAME_ENV; --TODO add all neede file specs here
+local _tFileSpecDraw            = FILESPEC_CARDSET_DRAW;
+local _tFileSpecRowProc         = FILESPEC_CARDSET_ROWPROC;
+-------------------------------- Preemptive Declarations
+local ProcessCell;
+local PrepUpdateGrids;
+local UpdateGrids;
+----------------------------------------------------------------------------------------------------------------------
+--TODO Clean these up
+local _nDescriptionMaxWidth = 100;
 --local _tRowCRC          = {};
 --local _nDrawCRC         = -1;
 --local _nRowProcCRC     = -1;
 --local _bDrawUpdated     = false;
 --local _bRowProcUpdated = false;
 
-local _bReady           = false; --prevents timer code from running until a selection has been made
-
 --local _tRedrawRows      = {};  --tracks which rows need reprocessed/redrawn
 
-local _oActiveGame      = null;
-
-
-local function SetReprocRows(vFlag)
-
-    local nRows = Grid.GetRowCount(_sBaseDataGrid);
-    local bFlag = rawtype(vFlag) == "boolean" and vFlag or false;
-
-    for nRow = 0, nRows - 1 do
-        _tReprocRows[nRow] = bFlag;
-    end
-
-end
+--may be used by the proc's cell processor to get final values
+--local _nFinalValueRow = -1; --TODO QUESTION is the ever used?
+--local function GetFinalValue(sColumn)
+--    return Grid.GetCellText(_sFinalDataGrid, _nFinalValueRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
+--end
 
 --[[--when changes occur
 Data            - Reload Set +
@@ -88,41 +87,35 @@ CFG/UserEnv     - Reinit game +
 Cell/RowProc - Reproc All Rows (on demand ofc)
 Draw            - Redraw Current Row
 ]]
+-----------------------------------------------------------------------------------------------------------------------
 
 
+local function BuildCardSetFunction(sName, sChunk)
+    local sChunkName = _sCardSetName..' '..sName;
 
+    local fChunk, sError = load(sChunk, sChunkName, "t", UserEnv.Get());
+    if not (fChunk) then
+        error("Error loading '"..sName.."' function for CardSet, '".._sCardSetName.."'.\r\n"..sError, 2);
+    end
 
---[[!
-    @fqxn CFS.Classes.ProcSys.Enums.PANE
-    @desc Identifiers for ProcSys window panes.
-    <ul>
-        <li>DATA_EDIT – Base data editor pane.</li>
-        <li>DATA_VIEW – Final data viewer pane.</li>
-    </ul>
-!]]
-enum("PANE", {"MAIN", "DATA_EDIT", "DATA_VIEW"});--TODO MOVE AND LOCALIZE
+    local bOK, fRetOrErr = pcall(fChunk);
+    if not (bOK) then
+        error("Error running '"..sName.."' chuck (function) for CardSet, '".._sCardSetName.."'.\r\n"..fRetOrErr, 2);
+    end
 
---local _nCurrentRow          = 0;
---local _nCurrentColumn       = 0;
+    if not (rawtype(fRetOrErr) == "function") then
+        error("Error building '"..sName.."' function for CardSet, '".._sCardSetName.."'.\r\nExpected return type function. Got "..rawtype(fRetOrErr)..'.', 2);
+    end
 
---[[!
-    @fqxn CFS.Classes.ProcSys.Constants
-    @desc ProcSys grid identifier constants.
-    <ul>
-       <li><code>GRID_BASE</code> – Identifier for the base (source) data grid.</li>
-       <li><code>GRID_FINAL</code> – Identifier for the final (processed) data grid.</li>
-   </ul>
-!]]
-constant("GRID_BASE",   _sBaseDataGrid); --TODO MOVE AND LOCALIZE
-constant("GRID_FINAL",  _sFinalDataGrid);--TODO MOVE AND LOCALIZE
-
-
+    return fRetOrErr;
+end
 
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.BuildUserTable
+    @fqxn CFS.Classes.ProcSys.Methods.BuildUserTable
     @desc TODO
+    @vis Static Private
 !]]
 local function BuildUserTable(sGame, tFileSpec)
     --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
@@ -160,17 +153,13 @@ local function BuildUserTable(sGame, tFileSpec)
     return tUserTable;
 end
 
-local _nUserFileRepoInterval = 400;
-
-
-
-
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.BuildWindows
+    @fqxn CFS.Classes.ProcSys.Methods.BuildWindows
     @desc <p>Creates ProcSys’s auxiliary editor/viewer windows once, wires custom window callbacks, restores prior window state from the app INI, and registers ProcSys root conversions into the UserEnv.</p>
         <p>This function is <strong>static</strong> and <strong>private</strong> to the ProcSys module.<br>
         It builds the base data editor and final data viewer grids, captures each window’s original callbacks, then wraps OnClose/OnMaximize/OnResizeStop/OnRestore to both forward events and persist window geometry, visibility, and maximized state back to the INI.</p>
+    @vis Static Private
 !]]
 local function BuildWindows()
 
@@ -182,13 +171,13 @@ local function BuildWindows()
         end
 
         --store the card/main window (mainly for the forge)
-        tWindows[PANE.MAIN] = {
+        tWindows[_ePane.MAIN] = {
             WindowHandle = HWND_APP,
         };
 
         --create the data editor first
         local oDataEdit = WinAMS(OBJECT_GRID, "Base Data Editor", 0, 0, 800, 1000, "grd base data", nil, OnReadyGrids)--TODO get values from INI, CHANGE NAME
-        tWindows[PANE.DATA_EDIT] = {
+        tWindows[_ePane.DATA_EDIT] = {
             Object = oDataEdit,
             WindowHandle = oDataEdit.GetWindowHandle(),
             Callback        = {
@@ -201,7 +190,7 @@ local function BuildWindows()
 
         --then the data viewer
         local oDataView = WinAMS(OBJECT_GRID, "Final Data Viewer", 1400, 0, 800, 1000, "grd final data", nil, OnReadyGrids)--TODO get values from INI
-        tWindows[PANE.DATA_VIEW] = {
+        tWindows[_ePane.DATA_VIEW] = {
             Object          = oDataView,
             WindowHandle    = oDataView.GetWindowHandle(),
             Callback        = {
@@ -213,8 +202,8 @@ local function BuildWindows()
         };
 
         local tPaneByHandle = {
-            [tWindows[PANE.DATA_EDIT].WindowHandle] = PANE.DATA_EDIT,
-            [tWindows[PANE.DATA_VIEW].WindowHandle] = PANE.DATA_VIEW,
+            [tWindows[_ePane.DATA_EDIT].WindowHandle] = _ePane.DATA_EDIT,
+            [tWindows[_ePane.DATA_VIEW].WindowHandle] = _ePane.DATA_VIEW,
         };
 
         local function RestoreWindow(hWnd)
@@ -290,8 +279,8 @@ local function BuildWindows()
         oDataView.SetCallback(WinSys.EVENT.OnRestore,       OnRestore);
 
 
-        RestoreWindow(tWindows[PANE.DATA_EDIT].WindowHandle);
-        RestoreWindow(tWindows[PANE.DATA_VIEW].WindowHandle);
+        RestoreWindow(tWindows[_ePane.DATA_EDIT].WindowHandle);
+        RestoreWindow(tWindows[_ePane.DATA_VIEW].WindowHandle);
 
         _bWindowsBuilt = true;
 
@@ -303,251 +292,14 @@ local function BuildWindows()
 
 end
 
---[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.TryDrawCard
-    @desc Attempts to draw the card for the given row using the resolved processor.
-    @param class cProc Processor class providing the DrawCard method.
-    @param number nRow Row index being drawn.
-    @param table tRow Final grid row data for the card.
-    @note
-        <ul>
-            <li>Sets Forge orientation based on row data.</li>
-            <li>Optionally exports the card when the corresponding menu option is enabled.</li>
-        </ul>
-!]]
---local function TryDrawCard(cProc, nRow, tRow)
-local function TryDrawCard(tRow)
-
-    --if (cProc and type(cProc.DrawCard) == "function" and nRow > 0) then
-
-        --make sure there's data in the row
-        if (#tRow > 0) then
-            --check for export call
-            --local fExport = _tExporters[_sGame][_pActiveCSV];
-            --local bExport = MainMenu.IsChecked("Options:>Draw:>Export Selected Card") and rawtype(fExport) == "function"; --TODO FINISH use new/custom exporter system BUT dnot here...do not draw for every export, simply export
-
-            --tell Forge to draw (and possibly export) the card
-            Forge.DrawCard(tRow, bExport, fExport);
-        end
-
-    --end
-
-end
-
---may be used by the proc's cell processor to get final values
-local _nFinalValueRow = -1; --TODO QUESTION is the ever used?
-local function GetFinalValue(sColumn)
-    return Grid.GetCellText(_sFinalDataGrid, _nFinalValueRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
-end
-
-
-
-
-
-
-
-
-
-
-
-
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.PrepUpdateGrids
-    @desc TODO
-!]]
-local function PrepUpdateGrids()
-    Status.Set("");
-    Grid.SetRedraw(_sBaseDataGrid, false);
-    Grid.SetRedraw(_sFinalDataGrid, false);
-end
-
-
---[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateGrids
-    @desc TODO
-!]]
-local function UpdateGrids()--TODO FINISH MOVE Color stuff out to a theme system
-    --adjust/refresh the appropriate grids QUESTION SHould this be after the refresh?
-    --Grid.ExpandColumnsToFit(_sBaseDataGrid,     true, true);
-    --Grid.ExpandColumnsToFit(_sFinalDataGrid,    true, true);
-    --local nColumnID = Grid.GetColumnIDByName(_sBaseDataGrid, "Description");
-    --Grid.SetColumnWidth(_sBaseDataGrid, nColumnID, _nDescriptionMaxWidth);--TODO magick number
-    --Grid.SetColumnWidth(_sFinalDataGrid, nColumnID, _nDescriptionMaxWidth);
-    local nColumns = Grid.GetColumnCount(_sBaseDataGrid);
-
-
-    local tAltColor = {
-        [_sBaseDataGrid]    = -1,
-        [_sFinalDataGrid]   = -1,
-    };
-
-    local function LoadColor(sSection, sColorValue)
-    	local nColor;
-    	local sColor = INIFile.GetValue(_pAppCFG, sSection, sColorValue):collapse();
-    	local tColor = sColor:totable(',');
-
-    	if (type(tColor) == "table" and #tColor == 3) then
-    		local nRed 		= tonumber(tColor[1]);
-    		local nGreen 	= tonumber(tColor[2]);
-    		local nBlue 	= tonumber(tColor[3]);
-
-    		if (nRed and nGreen and nBlue) then
-    			nColor = Grid.MakeColorRGB(nRed, nGreen, nBlue);
-    		end
-
-    	end
-
-    	return nColor;
-    end
-
-    local tGrids = {
-    	[_sBaseDataGrid]   = tostring(PANE.DATA_EDIT),
-    	[_sFinalDataGrid]  = tostring(PANE.DATA_VIEW),
-    };
-
-    local tItems = {
-    	TextColor				= true,
-    	TextBackgroundColor		= true,
-        TextAltBackgroundColor  = true,
-    	FixedTextColor			= true,
-    	FixedBackgroundColor	= true,
-    	GridLineColor			= true,
-    	GridBackgroundColor		= true,
-    	TitleTipBackgroundColor	= true,
-    	TitleTipTextColor 		= true,
-    };
-
-    for sObject, sSection in pairs(tGrids) do
-    	local tProps = {};
-
-    	for sValue, __ in pairs(tItems) do
-
-            if (sValue == "TextAltBackgroundColor") then
-                tAltColor[sObject] = LoadColor(sSection, sValue);
-
-            else
-                tProps[sValue] = LoadColor(sSection, sValue);
-            end
-
-
-    	end
-
-    	Grid.SetProperties(sObject, tProps);
-    end
-
-    for sObject, sSection in pairs(tGrids) do
-        local tProps = {Background = tAltColor[sObject]};
-
-        for nRow = 1, Grid.GetRowCount(sObject) do
-            local bIsEven = nRow % 2 == 0;
-
-            if (bIsEven) then
-
-                for nColumn = 0, nColumns - 1 do
-                    Grid.SetCellColors(sObject, nRow, nColumn, tProps, false);
-                end
-
-            end
-
-        end
-
-    end
-
-    --local nColumnID             = Grid.GetColumnIDByName(_sBaseDataGrid, "ID");
-    local nColumnDescription    = Grid.GetColumnIDByName(_sBaseDataGrid, "Description");
-
-    --Grid.AutoSizeColumns(_sBaseDataGrid, GVS_DEFAULT, false);
-    --Grid.AutoSizeColumns(_sFinalDataGrid, GVS_DEFAULT, false);
-    Grid.Refresh(_sBaseDataGrid);
-    Grid.SetRedraw(_sBaseDataGrid, true);
-    Grid.Refresh(_sFinalDataGrid);
-    Grid.SetRedraw(_sFinalDataGrid, true);
-    Grid.SetColumnWidth(_sBaseDataGrid, nColumnDescription, 100);--TODO magick number THIS SHOULD NOT BE DONE HERE, THIS SHOULD BE GOTTEN FROM SET INI
-    Grid.SetColumnWidth(_sFinalDataGrid, nColumnDescription, 100);--TODO magick number
-    --Grid.SetColumnWidth(_sBaseDataGrid, nColumnID, 40);--TODO magick number
-    --Grid.SetColumnWidth(_sFinalDataGrid, nColumnID, 40);--TODO magick number
-end
-
-
---[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.ProcessCell
-    @desc Processes a single base grid cell into the final grid and returns data for redraw/export.
-    @param number nRow Row index of the cell being processed.
-    @param number nColumn Column index of the cell being processed.
-    @return class cProc Resolved processor class for the row.
-    @return table tRow Final grid row data after the cell is updated.
-    @note
-        <ul>
-            <li>Calls the processor's public static <code>ProcessCell</code> when available; otherwise copies base text through.</li>
-            <li>Provides <code>fGetFinalValue</code> to the processor to read processed values from prior columns.</li>
-        </ul>
-!]]
-local function ProcessCell(nRow, nColumn) --TODO LEFT OFF HERE 1
-    local sColumn       = Grid.GetCellText(_sBaseDataGrid, 0, nColumn);
-    local sText         = Grid.GetCellText(_sBaseDataGrid, nRow, nColumn);
-    local tLiveFile     = _oActiveCardSet.GetLiveFile("RowProc");
-    local sProcChunk    = tLiveFile.Text;
-
-    --the error message in case things go south
-    local sChunkName = _sCardSetName.." RowProc";
-
-    --try to load the chuck
-    local fChunk, sError = load(sProcChunk, sChunkName, "t", UserEnv.Get());
-    if not (fChunk) then
-        error("Error loading RowProc file for CardSet ".._sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
-    end
-
-    --try to call the chunk
-    local bOk, vReturnOrError = pcall(fChunk);
-
-    if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
-        p("ERror 538 - ProcSys: "..vReturnOrError)
-        --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
-    end
-
-    local function fGetFinalValue(sColumn, vCoerce)
-        local vRet = Grid.GetCellText(_sFinalDataGrid, nRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
-        local nCoerce = rawtype(vCoerce) == "number" and vCoerce or nil;
-
-        if (nCoerce == PROCSYS_TO_NUMBER) then
-            local vRetCollapsed = vRet:collapse();
-            vRet = tonumber(vRetCollapsed) or vRet; --TODO QUESTION SHOULD THIS FAIL with error msg INSTEAD???
-        --elseif (nCoerce == PROCSYS_TO_TABLE) then TODO
-
-        end
-
-        return vRet;
-    end
-
-    local fRowProc = vReturnOrError;
-    local vProcRet  = fRowProc(nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
-
-
-    if (vProcRet) then
-        ---update the cell's text
-        Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, vProcRet);
-    else
-        Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, sText);
-    end
-
-    --TODO Also, be sure to add function to the env that indicates if a given column as been processed (basically if Column_A.index Column_< B.index)
-
-    --get the row after modifications
-    local tFinalRow = Grid.GetRow(_sFinalDataGrid, nRow);
-
-    --send back info for the card redraw attempt
-    return tFinalRow;
-end
-
-
---[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.LoadFileToGrid
+    @fqxn CFS.Classes.ProcSys.Methods.LoadFileToGrid
     @desc Loads a CSV into the base grid, rebuilds the final grid by processing all cells, and refreshes the UI.
     @param string pFile Path to the CSV to load.
     @note Disables saving while loading and re-enables normal editing after completion.
+    @vis Static Private
 !]]
-
 local function LoadFileToGrid(pFile)
     _bIsLoading = true;
     PrepUpdateGrids();
@@ -594,6 +346,86 @@ local function LoadFileToGrid(pFile)
     MainMenu.SetEnabled("Card Set:>Save", false);
     _bIsLoading = false;
 end
+
+
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.PrepUpdateGrids
+    @desc TODO
+!]]
+PrepUpdateGrids = function()
+    Status.Set("");
+    Grid.SetRedraw(_sBaseDataGrid, false);
+    Grid.SetRedraw(_sFinalDataGrid, false);
+end
+
+
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.ProcessCell
+    @desc Processes a single base grid cell into the final grid and returns data for redraw/export.
+    @param number nRow Row index of the cell being processed.
+    @param number nColumn Column index of the cell being processed.
+    @return class cProc Resolved processor class for the row.
+    @return table tRow Final grid row data after the cell is updated.
+    @note
+        <ul>
+            <li>Calls the processor's public static <code>ProcessCell</code> when available; otherwise copies base text through.</li>
+            <li>Provides <code>fGetFinalValue</code> to the processor to read processed values from prior columns.</li>
+        </ul>
+!]]
+ProcessCell = function(nRow, nColumn) --TODO LEFT OFF HERE 1
+    local sColumn       = Grid.GetCellText(_sBaseDataGrid, 0, nColumn);
+    local sText         = Grid.GetCellText(_sBaseDataGrid, nRow, nColumn);
+
+    local function fGetFinalValue(sColumn, vCoerce)
+        local vRet = Grid.GetCellText(_sFinalDataGrid, nRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
+        local nCoerce = rawtype(vCoerce) == "number" and vCoerce or nil;
+
+        if (nCoerce == PROCSYS_TO_NUMBER) then
+            local vRetCollapsed = vRet:collapse();
+            vRet = tonumber(vRetCollapsed) or vRet; --TODO QUESTION SHOULD THIS FAIL with error msg INSTEAD???
+        --elseif (nCoerce == PROCSYS_TO_TABLE) then TODO
+
+        end
+
+        return vRet;
+    end
+
+    --try to call the chunk
+    --local bOk, vProcRet = pcall(_fRowProc, nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
+    local vProcRet = _fRowProc(nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
+
+    --if not (bOk) then
+    --    error("ProcSys Error: ProcessCell for Row: "..nRow..", Column: '"..sColumn.."'.\r\n"..vProcRet);--TODO LOG and display
+    --end
+
+    if (vProcRet) then
+        ---update the cell's text
+        Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, vProcRet);
+    else
+        Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, sText);
+    end
+
+    --TODO Also, be sure to add function to the env that indicates if a given column as been processed (basically if Column_A.index Column_< B.index)
+
+    --get the row after modifications
+    local tFinalRow = Grid.GetRow(_sFinalDataGrid, nRow);
+
+    --send back info for the card redraw attempt
+    return tFinalRow;
+end
+
+
+local function SetReprocRows(vFlag)
+
+    local nRows = Grid.GetRowCount(_sBaseDataGrid);
+    local bFlag = rawtype(vFlag) == "boolean" and vFlag or false;
+
+    for nRow = 0, nRows - 1 do
+        _tReprocRows[nRow] = bFlag;
+    end
+
+end
+
 
 --[[!
     @fqxn CFS.Classes.ProcSys.Static Private.Methods.TryBackupFile
@@ -659,116 +491,277 @@ end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateCardSetLiveFileRepo
-    @desc TODO
+    @fqxn CFS.Classes.ProcSys.Methods.TryDrawCard
+    @desc Attempts to draw the card for the given row using the resolved processor.
+    @param class cProc Processor class providing the DrawCard method.
+    @param number nRow Row index being drawn.
+    @param table tRow Final grid row data for the card.
+    @note
+        <ul>
+            <li>Sets Forge orientation based on row data.</li>
+            <li>Optionally exports the card when the corresponding menu option is enabled.</li>
+        </ul>
+    @vis Static Private
 !]]
-local function UpdateCardSetLiveFileRepo(oGame) --TODO FINISH
-    local sGame = oGame.GetName();
+--local function TryDrawCard(cProc, nRow, tRow)
+local function TryDrawCard(tRow)
 
-    --destroy the old repo
-    LiveFile.Destroy(_oGameLiveFileRepo);
-    _oGameLiveFileRepo = nil;
+    --if (cProc and type(cProc.DrawCard) == "function" and nRow > 0) then
 
-    --create the new one
-    _oGameLiveFileRepo = LiveFile.CreateRepo();
+        --make sure there's data in the row
+        if (#tRow > 0) then
+            --check for export call
+            --local fExport = _tExporters[_sGame][_pActiveCSV];
+            --local bExport = MainMenu.IsChecked("Options:>Draw:>Export Selected Card") and rawtype(fExport) == "function"; --TODO FINISH use new/custom exporter system BUT dnot here...do not draw for every export, simply export
 
-    --CFG Files
-    local function NotifyCFGChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
-        _sCFG           = sNewText
-        _bCFGChanged    = true;
-    end
-
-    LiveFile.Register(_oGameLiveFileRepo, "CFG", FS.Scripts.."\\CFG.lua", _nUserFileRepoInterval, NotifyCFGChanged);
-    local tCFGFiles = File.Find(FS.CFG.."\\", "*.lua", false, false, nil, nil);
-
-    if (type(tCFGFiles) == "table") then
-
-        for nIndex, pFile in pairs(tCFGFiles) do
-            LiveFile.Register(_oGameLiveFileRepo, "CFG"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyCFGChanged);
+            --tell Forge to draw (and possibly export) the card
+            Forge.DrawCard(tRow, bExport, fExport);
         end
 
-    end
+    --end
 
-    --ENV Files
-    local function NotifyENVChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
-        _sENV           = sNewText;
-        _bENVChanged    = true;
-    end
-
-    LiveFile.Register(_oGameLiveFileRepo, "ENV", FS.Scripts.."\\ENV.lua", _nUserFileRepoInterval, NotifyENVChanged);
-    local tENVFiles = File.Find(FS.ENV.."\\", "*.lua", false, false, nil, nil);
-
-    if (type(tENVFiles) == "table") then
-
-        for nIndex, pFile in pairs(_oGameLiveFileRepo) do
-            LiveFile.Register(oLiveFileRepo, "ENV"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyENVChanged);
-        end
-
-    end
-
-    --TODO DRAW AND CELLPROCS
-
-    --LiveFile.StartAll(_oGameLiveFileRepo);
 end
 
 
+--[[!
+    @fqxn CFS.Classes.ProcSys.Methods.UpdateCardSetLiveFileRepo
+    @desc TODO
+    @vis Static Private
+!]]
+local function UpdateCardSetLiveFileRepo() --TODO FINISH
+    local oCardSet      = _oActiveCardSet;
+    local oLiveFileRepo = _oCardSetLiveFileRepo;
+    local pCardSet      = oCardSet.GetPath();
+
+    --reset the old repo
+    oLiveFileRepo.Reset();--vID, pFile, nTimerInterval, fCallback
+    oLiveFileRepo.Add("RowProc", pCardSet.."\\".._tFileSpecRowProc.Full, _nUserFileRepoInterval,
+    function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _sRowProcCode       = sNewText;
+        _bRowProcChanged    = true;
+    end);
+
+    --TODO all the special procs
+
+    oLiveFileRepo.Add("Draw", pCardSet.."\\".._tFileSpecDraw.Full, _nUserFileRepoInterval,
+    function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _sDrawCode      = sNewText;
+        _bDrawChanged   = true;
+    end);
+
+    oLiveFileRepo.StartAll();
+end
+
+
+--[[local function UpdateCardSetFunctions()
+    local oCardSet      = _oActiveCardSet;
+    local oLiveFileRepo = _oCardSetLiveFileRepo;
+    local pCardSet      = oCardSet.GetPath();
+
+    _fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(pCardSet.."\\".._tFileSpecRowProc.Full));
+end]]
 
 
 --[[!
     @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateGameLiveFileRepo
     @desc TODO
 !]]
-local function UpdateGameLiveFileRepo(oGame)
-    local sGame = oGame.GetName();
+local function UpdateGameLiveFileRepo()
+    local sGame         = _oActiveGame;
+    local oLiveFileRepo = _oGameLiveFileRepo;
 
-    --destroy the old repo
-    LiveFile.Destroy(_oGameLiveFileRepo);
-    _oGameLiveFileRepo = nil;
-
-    --create the new one
-    _oGameLiveFileRepo = LiveFile.CreateRepo();
+    --reset the live file repo
+    oLiveFileRepo.Reset();
 
     --CFG Files
     local function NotifyCFGChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
-        _sCFG           = sNewText;
+        _sCFGCode       = sNewText;
         _bCFGChanged    = true;
     end
 
-    LiveFile.Register(_oGameLiveFileRepo, "CFG", FS.Scripts.."\\".._tFileSpecCFG.Full, _nUserFileRepoInterval, NotifyCFGChanged);
+    oLiveFileRepo.Add("CFG", FS.Scripts.."\\".._tFileSpecCFG.Full, _nUserFileRepoInterval, NotifyCFGChanged);
     local tCFGFiles = File.Find(FS.CFG.."\\", "*.lua", false, false, nil, nil);
 
     if (type(tCFGFiles) == "table") then
 
         for nIndex, pFile in pairs(tCFGFiles) do
-            LiveFile.Register(_oGameLiveFileRepo, "CFG_"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyCFGChanged);
+            oLiveFileRepo.Add("CFG_"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyCFGChanged);
         end
 
     end
 
     --ENV Files
     local function NotifyENVChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
-        _sENV           = sNewText;
+        _sENVCode       = sNewText;
         _bENVChanged    = true;
     end
 
-    LiveFile.Register(_oGameLiveFileRepo, "ENV", FS.Scripts.."\\".._tFileSpecENV.Full, _nUserFileRepoInterval, NotifyENVChanged);
+    oLiveFileRepo.Add("ENV", FS.Scripts.."\\".._tFileSpecENV.Full, _nUserFileRepoInterval, NotifyENVChanged);
     local tENVFiles = File.Find(FS.ENV.."\\", "*.lua", false, false, nil, nil);
 
     if (type(tENVFiles) == "table") then
 
-        for nIndex, pFile in pairs(_oGameLiveFileRepo) do
-            LiveFile.Register(oLiveFileRepo, "ENV_"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyENVChanged);
+        for nIndex, pFile in pairs(tENVFiles) do
+            oLiveFileRepo.Add("ENV_"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyENVChanged);
         end
 
     end
 
-    --TODO DRAW AND CELLPROCS
+    _oGameLiveFileRepo.StartAll();
+end
 
-    --LiveFile.StartAll(_oGameLiveFileRepo);
+
+--[[!
+    @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateGrids
+    @desc TODO
+!]]
+UpdateGrids = function ()--TODO FINISH MOVE Color stuff out to a theme system
+    Application.SetRedraw(false);
+    --adjust/refresh the appropriate grids QUESTION SHould this be after the refresh?
+    --Grid.ExpandColumnsToFit(_sBaseDataGrid,     true, true);
+    --Grid.ExpandColumnsToFit(_sFinalDataGrid,    true, true);
+    --local nColumnID = Grid.GetColumnIDByName(_sBaseDataGrid, "Description");
+    --Grid.SetColumnWidth(_sBaseDataGrid, nColumnID, _nDescriptionMaxWidth);--TODO magick number
+    --Grid.SetColumnWidth(_sFinalDataGrid, nColumnID, _nDescriptionMaxWidth);
+    local nColumns = Grid.GetColumnCount(_sBaseDataGrid);
+
+
+    local tAltColor = {
+        [_sBaseDataGrid]    = -1,
+        [_sFinalDataGrid]   = -1,
+    };
+
+    local function LoadColor(sSection, sColorValue)
+    	local nColor;
+    	local sColor = INIFile.GetValue(_pAppCFG, sSection, sColorValue):collapse();
+    	local tColor = sColor:totable(',');
+
+    	if (type(tColor) == "table" and #tColor == 3) then
+    		local nRed 		= tonumber(tColor[1]);
+    		local nGreen 	= tonumber(tColor[2]);
+    		local nBlue 	= tonumber(tColor[3]);
+
+    		if (nRed and nGreen and nBlue) then
+    			nColor = Grid.MakeColorRGB(nRed, nGreen, nBlue);
+    		end
+
+    	end
+
+    	return nColor;
+    end
+
+    local tGrids = {
+    	[_sBaseDataGrid]   = tostring(_ePane.DATA_EDIT),
+    	[_sFinalDataGrid]  = tostring(_ePane.DATA_VIEW),
+    };
+
+    local tItems = {
+    	TextColor				= true,
+    	TextBackgroundColor		= true,
+        TextAltBackgroundColor  = true,
+    	FixedTextColor			= true,
+    	FixedBackgroundColor	= true,
+    	GridLineColor			= true,
+    	GridBackgroundColor		= true,
+    	TitleTipBackgroundColor	= true,
+    	TitleTipTextColor 		= true,
+    };
+
+    for sObject, sSection in pairs(tGrids) do
+    	local tProps = {};
+
+    	for sValue, __ in pairs(tItems) do
+
+            if (sValue == "TextAltBackgroundColor") then
+                tAltColor[sObject] = LoadColor(sSection, sValue);
+
+            else
+                tProps[sValue] = LoadColor(sSection, sValue);
+            end
+
+
+    	end
+
+    	Grid.SetProperties(sObject, tProps);
+    end
+
+    for sObject, sSection in pairs(tGrids) do
+        local tProps = {Background = tAltColor[sObject]};
+
+        for nRow = 1, Grid.GetRowCount(sObject) do
+            local bIsEven = nRow % 2 == 0;
+
+            if (bIsEven) then
+
+                for nColumn = 0, nColumns - 1 do
+                    Grid.SetCellColors(sObject, nRow, nColumn, tProps, false);
+                end
+
+            end
+
+        end
+
+    end
+
+    --local nColumnID             = Grid.GetColumnIDByName(_sBaseDataGrid, "ID");
+    local nColumnDescription    = Grid.GetColumnIDByName(_sBaseDataGrid, "Description");
+
+    --Grid.AutoSizeColumns(_sBaseDataGrid, GVS_DEFAULT, false);
+    --Grid.AutoSizeColumns(_sFinalDataGrid, GVS_DEFAULT, false);
+    Grid.Refresh(_sBaseDataGrid);
+    Grid.SetRedraw(_sBaseDataGrid, true);
+    Grid.Refresh(_sFinalDataGrid);
+    Grid.SetRedraw(_sFinalDataGrid, true);
+    Grid.SetColumnWidth(_sBaseDataGrid, nColumnDescription, 100);--TODO magick number THIS SHOULD NOT BE DONE HERE, THIS SHOULD BE GOTTEN FROM SET INI
+    Grid.SetColumnWidth(_sFinalDataGrid, nColumnDescription, 100);--TODO magick number
+    --Grid.SetColumnWidth(_sBaseDataGrid, nColumnID, 40);--TODO magick number
+    --Grid.SetColumnWidth(_sFinalDataGrid, nColumnID, 40);--TODO magick number
+    Application.SetRedraw(true);
+    Page.Redraw();
 end
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+local function UpdateCardSetDrawRepo()
+--TODO LEFT OFF HERE
+end
+
+local function UpdateDraw()
+    --get the chunk from the active card set
+    local sDrawChunk = _oDrawLiveFileRepo.Text;
+
+    --the error message in case things go south
+    local sCardSetName  = oCardSet.GetName(); --TODO cache this value
+    local sChunkName    = sCardSetName.." Draw";
+
+    --try to load the chuck
+    local fChunk, sError = load(sDrawChunk, sChunkName, "t", UserEnv.Get());
+    if not (fChunk) then
+        error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
+    end
+
+    --try to call the chunk
+    local bOk, vReturnOrError = pcall(fChunk);
+
+    if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
+        error("ERror 539 - Forge: "..vReturnOrError)
+        --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
+    else
+        fSetOnImageDraw = vReturnOrError;--(this, tRow, nWidth, nHeight);
+    end
+
+end
 
 
 
@@ -787,16 +780,16 @@ end
     <ul>
       <li><strong>Loads</strong> a CSV into the base grid, then builds the final grid by processing every cell.</li>
       <li><strong>Processes</strong> individual cell edits and keeps the final grid in sync immediately.</li>
-      <li><strong>Refreshes</strong> the grids efficiently (batch redraw off/on) to avoid flicker and slow updates.</li>
+      <li><strong>Refreshes</strong> the grids efficiently to avoid flicker and slow updates.</li>
       <li><strong>Draws</strong> the current row’s card when selection changes or when a cell edit occurs (when enabled).</li>
       <li><strong>Saves</strong> the updated base CSV when requested.</li>
-      <li><strong>Backs up</strong> source CSVs to a per-file backup folder using a timestamp + retention rules.</li>
+      <li><strong>Backs up</strong> source CSVs to a per-file backup folder using timestamp and retention rules.</li>
     </ul>
 
     <h3>How processing works</h3>
     <p>
-      Each row can resolve to a processor object. If that processor provides a cell-processing hook, the system calls it during
-      initial load and on edits. If the hook returns nothing, the original text is copied through unchanged.
+      Each row resolves to a processor object. As that processor provides a processing hook, the system calls it during
+      initial load and on edits. If the hook returns nothing, the original text is copied through, unchanged.
     </p>
 
     <h3>Workflow</h3>
@@ -852,7 +845,7 @@ return class("ProcSys",
             local _tEnv = BuildUserTable(_sGameName, _tFileSpecENV);
             UserEnv.UserUpdateENV(_tEnv);
 
-            UpdateGameLiveFileRepo(oGame);
+            UpdateGameLiveFileRepo();
         end,
         --[[! TODO FIX REDO
             @fqxn CFS.Classes.ProcSys.Methods.GetSetName
@@ -869,8 +862,20 @@ return class("ProcSys",
             @param string|nil vFile Optional CSV file path; prompts when omitted or invalid.
         !]]
         LoadCardSet = function(oCardSet)
-
             --TODO assert type
+            _oActiveCardSet = oCardSet;
+
+            --reset the update status for each row
+            SetReprocRows(_tReprocRows, false);
+
+            local pCardSet = oCardSet.GetPath();
+
+            local fDraw = BuildCardSetFunction("Draw", TextFile.ReadToString(pCardSet.."\\".._tFileSpecDraw.Full));
+            Forge.SetDrawFunction(fDraw);
+
+            _fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(pCardSet.."\\".._tFileSpecRowProc.Full));
+
+            UpdateCardSetLiveFileRepo();
 
             if (_bAllowSave) then
                 local nYesNoCancel = Dialog.Message("Warning!", "You have unsaved changes.\r\nWould you like to save them now?", MB_YESNOCANCEL, MB_ICONEXCLAMATION, MB_DEFBUTTON1);
@@ -884,15 +889,9 @@ return class("ProcSys",
 
             end
 
-            --update
-            if (type(_oActiveCardSet) == "CardSet") then
-                _oActiveCardSet.SetActive(false);
-            end
-
             --set defaults
             _pActiveCSV     = "";
             _bAllowSave     = false;
-            _oActiveCardSet = oCardSet;
             _sCardSetName   = oCardSet.GetName();
             _nCardWidth     = oCardSet.GetCardWidth();
             _nCardHeight    = oCardSet.GetCardHeight();
@@ -913,7 +912,7 @@ return class("ProcSys",
                 --TryBackupFile(pData); --TODO FIX uncomment this when ready!!
 
                 --store the set name
-                _sCardSetName = oCardSet.GetName();--String.SplitPath(pData).Filename; --TODO remove/update
+                --_sCardSetName = oCardSet.GetName();--String.SplitPath(pData).Filename; --TODO remove/update
 
                 LoadFileToGrid(pData);
 
@@ -926,8 +925,6 @@ return class("ProcSys",
 
             Forge.SetActiveCardSet(oCardSet);
 
-            --reset the update status for each row
-            SetReprocRows(_tReprocRows, false);
 --[[
             local function LiveFileUpdateCallback(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
 
@@ -945,10 +942,10 @@ return class("ProcSys",
             end
 ]]
             --params for callbacks (if needed) -> tLiveFile, sOldText, sNewText, nOldCRC, nCRC
-            LiveFile.SetCallback("RowProc", function() _bAnyProcChanged = true; end);
-            LiveFile.SetCallback("Draw",     function() _bDrawChanged    = true; end);
+            --LiveFile.SetCallback("RowProc", function() _bRowProcChanged = true; end);
+            --LiveFile.SetCallback("Draw",     function() _bDrawChanged    = true; end);
 
-            --LiveFile.SetCallback(); TODO LEFT OFF HERE ADDING OTHER WATCH ITEMS
+            --LiveFile.SetCallback(); 
             --tLiveFile, sOldText, sNewText, nOldCRC, nCRC
 
 
@@ -960,7 +957,8 @@ return class("ProcSys",
             end]]
 
             --Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
-            oCardSet.SetActive(true);
+            --oCardSet.SetActive(true);
+
         end,
 
         --[[!
@@ -1085,7 +1083,7 @@ return class("ProcSys",
                 ProcSys.LoadCardSet(oLastCardSet);
             end
 
-            LiveFile.StartAll(_oGameLiveFileRepo);
+            _oGameLiveFileRepo.StartAll();
 
             Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
         end,
@@ -1119,8 +1117,16 @@ return class("ProcSys",
             --local bRedrawn = false;
 
             if (_nLastRow ~= nRow or _tReprocRows[_nCurrentRow]) then
+
+
                 local tRow = Grid.GetRow(_sFinalDataGrid, nRow);
                 UserEnv.ProcSysUpdateRoot {_tRow = tRow};
+
+                if not (_fRowProc) then --first functions load
+                    --UpdateCardSetFunctions();
+                    _fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
+                end
+
                 ProcSys.ProcessActiveRow(not _bReady); --TODO NOTE FLICKER IS PROBABLY HERE!!!!
                 _nLastRow = nRow;
                 _tReprocRows[_nCurrentRow] = false;
@@ -1180,13 +1186,13 @@ return class("ProcSys",
         OnTimer = function(nID)
 
             if (nID == _nFileSyncTimerID and _bReady) then
-                local bResetRows    = _bDataChanged or _bCFGChanged or _bENVChanged or _bAnyProcChanged;
+                local bResetRows    = _bDataChanged or _bCFGChanged or _bENVChanged or _bRowProcChanged;
                 local bRedraw       = bResetRows or _bDrawChanged;
 
                 if (_bDataChanged) then
                     _bDataChanged = false;
                     MainMenu.SetEnabled("Card Set:>Save", false);
-                    LoadFileToGrid(pData);
+                    LoadFileToGrid(pData); --TODO BUG FIX this...get the proper data path, this is nil here
                     --TODO Reselect row
                 end
 
@@ -1200,14 +1206,21 @@ return class("ProcSys",
                     UserEnv.UserUpdateENV(BuildUserTable(_sGameName, _tFileSpecENV));
                 end
 
-                if (_bAnyProcChanged) then
-                    _bAnyProcChanged = false;
+                if (_bRowProcChanged) then
+                    _bRowProcChanged = false;
+                    _fRowProc = BuildCardSetFunction("RowProc", _sRowProcCode);
                 end
 
                 if (bResetRows) then
                     SetReprocRows(true);
                     ProcSys.ProcessActiveRow(true);
                     _tReprocRows[_nCurrentRow] = false;
+                end
+
+                if (_bDrawChanged) then
+                    _bDrawChanged = false;
+                    local fDraw = BuildCardSetFunction("Draw", _sDrawCode);
+                    Forge.SetDrawFunction(fDraw);
                 end
 
                 if (bRedraw) then

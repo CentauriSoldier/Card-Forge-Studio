@@ -12,12 +12,12 @@ return class("CardSet",
     },
     {--PRIVATE
         --Calls               = {}, --holds things like Draw, Proc, etc.
-        CallRepo            = null,
+        --CallRepo            = null,
         CardWidth__AUTOR_   = null,
         CardHeight__AUTOR_  = null,
         DataPath__AUTOR_    = null,
         InfoPath__AUTOR_    = null,
-        IsActive__AUTOA_    = false,
+        --IsActive__AUTOA_    = false,
         Name__AUTOA_        = '',
         Path__AUTOR_        = null,
         UUID__AUTOR_        = null,
@@ -46,7 +46,7 @@ return class("CardSet",
             for _, pFile in pairs(tCheckFiles) do
 
                 if not (File.DoesExist(pFile)) then
-                    error("Invalid CardSet: missing expected file at \""..pFile..".\"");
+                    error("Invalid Card Set: missing expected file at \""..pFile..".\"");
                 end
 
             end
@@ -75,12 +75,12 @@ return class("CardSet",
             pri.CardHeight  = math.abs(nCardHeight);
 
             --create the LiveFileRepo and register the LiveFiles for each call.
-            local oCallRepo = LiveFile.CreateRepo();
-            pri.CallRepo    = oCallRepo;
-            LiveFile.Register(oCallRepo, "RowProc", pRowProcPath,   PROCSYS_FILE_SYNC_TIMER_INTERVAL);
-            LiveFile.Register(oCallRepo, "Draw",    pDrawPath,      PROCSYS_FILE_SYNC_TIMER_INTERVAL);--TODO SPECIAL COLUMNS!!!
+            --local oCallRepo = LiveFile.CreateRepo();
+            --pri.CallRepo    = oCallRepo;
+            --LiveFile.Register(oCallRepo, "RowProc", pRowProcPath,   PROCSYS_FILE_SYNC_TIMER_INTERVAL);
+            --LiveFile.Register(oCallRepo, "Draw",    pDrawPath,      PROCSYS_FILE_SYNC_TIMER_INTERVAL);--TODO SPECIAL COLUMNS!!!
         end,
-        GetLiveFile = function(this, cdat, sCall)
+        --[[GetLiveFile = function(this, cdat, sCall)
             local pri = cdat.pri;
             return pri.CallRepo[sCall];
             --local tCalls = pri.Calls;
@@ -90,7 +90,7 @@ return class("CardSet",
             --end
 
             --return tCalls[sCall].Code;
-        end,
+        end,]]
         --[[GetLiveFileRepo = function(this, cdat)
             return cdat.pri.CallRepo;
             --local tCalls = pri.Calls;
@@ -115,7 +115,7 @@ return class("CardSet",
             local pri = cdat.pri;
             return {Width = pri.CardWidth, Height = pri.CardHeight};
         end,
-        SetActive = function(this, cdat, vFlag)
+        --[[SetActive = function(this, cdat, vFlag)
             local pri       = cdat.pri;
             local bActive   = rawtype(vFlag) == "boolean" and vFlag or false;
 
@@ -125,7 +125,7 @@ return class("CardSet",
                 LiveFile.StopAll(pri.CallRepo);
             end
 
-        end,
+        end,]]
         --updates proc, draw, etc.
         --[[UpdateCallCode = function(this, cdat, sCall)
             local pri       = cdat.pri;

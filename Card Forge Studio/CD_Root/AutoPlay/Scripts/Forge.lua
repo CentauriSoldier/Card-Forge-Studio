@@ -52,7 +52,7 @@ local _tCenterLines = {
     Color       = Color.RGBA(50, 50, 255, 255),
 };
 
-
+local _fDraw;
 
 -------------------------------------------------------------------
 local _nPageWidth           = -1;
@@ -412,47 +412,15 @@ return class("Forge",
 
             --draw the card
             local function ProcDraw(sObject, D, hInternalDC)
-                ClearToTransparent(D);
-
-                --get the proc's draw method
-                local fSetOnImageDraw   = sink;
-                local oCardSet          = _oActiveCardSet;
-
                 --update private vars for use in DrawText and other functions
                 _Object      = sObject;
                 _D           = D;
                 _InternalDC  = hInternalDC;
 
-                if (type(oCardSet) == "CardSet") then --TODO MOVE THIS OUT TO ITS OWN PRIVATE FUNCTION
-                    --get the chunk from the active card set
-                    local sDrawChunk = oCardSet.GetLiveFile("Draw").Text;
-
-                    --the error message in case things go south
-                    local sCardSetName  = oCardSet.GetName(); --TODO cache this value
-                    local sChunkName    = sCardSetName.." Draw";
-
-                    --try to load the chuck
-                    local fChunk, sError = load(sDrawChunk, sChunkName, "t", UserEnv.Get());
-                    if not (fChunk) then
-                        error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
-                    end
-
-                    --try to call the chunk
-                    local bOk, vReturnOrError = pcall(fChunk);
-
-                    if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
-                        error("ERror 539 - Forge: "..vReturnOrError)
-                        --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
-                    else
-                        fSetOnImageDraw = vReturnOrError;--(this, tRow, nWidth, nHeight);
-                    end
-
-                end
-                --check it
-                --assert(rawtype(fProcDraw) == "function", "Error Drawing Card, \""..tRow.Name.."\".\r\nMissing static DrawCard function in "..tostring(cProc).." class or function not correctly implemented."); --TODO FINISH
+                ClearToTransparent(D);
 
                 --execute the proc's draw method
-                fSetOnImageDraw(sObject, D, hInternalDC);
+                _fDraw(sObject, D, hInternalDC);
             end
 
             --reset the image size to its original size
@@ -1199,6 +1167,14 @@ return class("Forge",
 
             end
 
+        end,
+        SetDrawFunction = function(fDraw)
+
+            if not (rawtype(fDraw) == "function") then
+                error("Forge.SetDrawFunction: expected function at argument 1. Got "..rawtype(fDraw), 3);
+            end
+
+            _fDraw = fDraw;
         end,
         SetActiveCardSet = function(oCardSet)
 

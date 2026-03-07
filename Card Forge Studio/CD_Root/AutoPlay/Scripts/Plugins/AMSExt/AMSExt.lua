@@ -80,7 +80,7 @@ require("Plugins.AMSExt.DialogEx");
 require("Plugins.AMSExt.Grid");
 require("Plugins.AMSExt.INIFile");
 
-LiveFile = require("Plugins.AMSExt.LiveFile");
-Menu = require("Plugins.AMSExt.Menu");
-WinSys = require("Plugins.AMSExt.WinSys");
-WinAMS = require("Plugins.AMSExt.WinSys.WinAMS");
+LiveFileRepo    = require("Plugins.AMSExt.LiveFileRepo");
+Menu            = require("Plugins.AMSExt.Menu");
+WinSys          = require("Plugins.AMSExt.WinSys");
+WinAMS          = require("Plugins.AMSExt.WinSys.WinAMS");
