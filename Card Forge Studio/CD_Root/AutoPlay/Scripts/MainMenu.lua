@@ -32,10 +32,13 @@ end
 local TheMenu = Menu();
 TheMenu.SetAutoUpdate(false);
 
-local _nIconID = -1;
+--------------------------------------------------------------
+local _nIconID                          = -1;
 local _bEnabled, _bChecked, _bCheckable = true, true, true;
-local _tNoCallbacks = nil;
-
+local _tNoCallbacks                     = nil;
+local _bSkipRedrawCard                  = true;
+local _bRedrawUtil                      = true;
+--------------------------------------------------------------
 
 --[[
 ███████╗██╗██╗     ███████╗
@@ -110,14 +113,14 @@ local sRCC = "Redraw On Cell Changed";
 local sDSP = "---";
 
 TheMenu.Add(sOD,                 _nIconID,       _bEnabled,     -_bChecked,                      -_bCheckable,   _tNoCallbacks).
-        Add(sOD.._sSub..sUO,     _nIconID,       _bEnabled,     LoadB(sUO:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sUO:collapse(),  tItem.IsChecked); ProcSys.ForceRedraw(); end}).
+        Add(sOD.._sSub..sUO,     _nIconID,       _bEnabled,     LoadB(sUO:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sUO:collapse(),  tItem.IsChecked); Forge.RequestUtilRedraw(); end}).
         Add(sOD.._sSub..sDSP,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks).
         Add(sOD.._sSub..sUOO,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks).
         Add(sOD.._sSub..sDSP,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks).
-        Add(sOD.._sSub..sHRE,    _nIconID,       _bEnabled,     LoadB(sHRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHRE:collapse(), tItem.IsChecked); ProcSys.ForceRedraw(); end}).
-        Add(sOD.._sSub..sVRE,    _nIconID,       _bEnabled,     LoadB(sVRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVRE:collapse(), tItem.IsChecked); ProcSys.ForceRedraw(); end}).
-        Add(sOD.._sSub..sHCE,    _nIconID,       _bEnabled,     LoadB(sHCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHCE:collapse(), tItem.IsChecked); ProcSys.ForceRedraw(); end}).
-        Add(sOD.._sSub..sVCE,    _nIconID,       _bEnabled,     LoadB(sVCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVCE:collapse(), tItem.IsChecked); ProcSys.ForceRedraw(); end}).
+        Add(sOD.._sSub..sHRE,    _nIconID,       _bEnabled,     LoadB(sHRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHRE:collapse(), tItem.IsChecked); Forge.RequestUtilRedraw(); end}).
+        Add(sOD.._sSub..sVRE,    _nIconID,       _bEnabled,     LoadB(sVRE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVRE:collapse(), tItem.IsChecked); Forge.RequestUtilRedraw(); end}).
+        Add(sOD.._sSub..sHCE,    _nIconID,       _bEnabled,     LoadB(sHCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sHCE:collapse(), tItem.IsChecked); Forge.RequestUtilRedraw(); end}).
+        Add(sOD.._sSub..sVCE,    _nIconID,       _bEnabled,     LoadB(sVCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVCE:collapse(), tItem.IsChecked); Forge.RequestUtilRedraw(); end}).
         Add(sOD.._sSub..sDSP,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks).
         Add(sOD.._sSub..sESC,    _nIconID,       _bEnabled,     LoadB(sESC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sESC:collapse(), tItem.IsChecked) end}).
         Add(sOD.._sSub..sDSP,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks).
@@ -161,7 +164,7 @@ TheMenu.Add("Window",                   _nIconID,       _bEnabled,      -_bCheck
         Add("Window:>Style Editor",     _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Style Editor",       false, nil, nil); end}).  --TODO save coords
         Add("Window:>Mechanics Viewer", _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Mechanics Viewer",   false, nil, nil); end})   --TODO save coords
 
-
+--TODO ADD game website and author stuff...
 --[[
 ██╗  ██╗███████╗██╗     ██████╗
 ██║  ██║██╔════╝██║     ██╔══██╗
@@ -175,7 +178,10 @@ TheMenu.Add("Help",                     _nIconID,       _bEnabled,      -_bCheck
         Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Help:>Tutorials",          _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.Open(FS.AppDir.."\\index.html", "", SW_SHOWNORMAL); end}).
         Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
-        Add("Help:>Visit Website",      _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.OpenURL("https://www.cardforge.studio/", SW_SHOWNORMAL); end}).
+        Add("Help:>Patreon",            _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.OpenURL(APP_PATREON,   SW_SHOWNORMAL); end}).
+        Add("Help:>GitHub",             _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.OpenURL(APP_GITHUB,    SW_SHOWNORMAL); end}).
+        Add("Help:>Visit Website",      _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) File.OpenURL(APP_WEBSITE,   SW_SHOWNORMAL); end}).
+        Add("Help:>---",                _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Help:>License",            _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("License", true, nil, nil); end}).
         Add("Help:>About",              _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("About", true, nil, nil); end});--TODO
 

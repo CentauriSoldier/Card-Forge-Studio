@@ -13,7 +13,12 @@ constant("CSV_DELIMITER", ',');
 constant("HOR", 0); --TODO QUESTION DO I NEED THESE ANYMORE?
 constant("VER", 1);
 constant("BIT_DEPTH_32", 32);
-constant("APP_CFG", "Card Forge Studio.cfg");
+
+constant("APP_CFG",     "Card Forge Studio.cfg");
+constant("APP_GITHUB",  "https://github.com/CentauriSoldier/Card-Forge-Studio");
+constant("APP_PATREON", "https://www.patreon.com/CentauriSoldier");
+constant("APP_WEBSITE", "https://www.cardforge.studio/");
+
 
 constant("FOLDER_CARD_SETS", "Card Sets"); --this must be here since it needs to be accessed before the game is prepped
 
@@ -39,6 +44,11 @@ constant("PROCSYS_GRID_FINAL",  "grd final data");
 
 
 constant("USER_FILE_REPO_TIMER_INTERVAL",  400);
+
+
+
+
+
 
 --[[!
     @fqxn CFS.Enums.PANE

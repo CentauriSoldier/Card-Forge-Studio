@@ -12,8 +12,6 @@ ELProfiler.setClock(os.clock);
 FS                  = require("Globals.FS");  --load the program's file/path management system
 Log                 = require("Log");
 
-CustomRuntimeErrorHandler = Log.Error;
-
 local tImportSystem = require("Globals.ImportSystem");
 Import              = tImportSystem.Import;
 SanitizePath        = tImportSystem.SanitizePath;
@@ -160,6 +158,7 @@ function OnStartUp()--TODO move to its own module if it gets too big
         Tutorial.Init();
     end
 
+    CustomRuntimeErrorHandler = Log.Error; --TODO add option to show log on error if window is hidden!!
     _DisableRuntimeErrorDialog = true;--bIsCompiled;
     --ScalerX.OnStartup(1400, 1200);
 end

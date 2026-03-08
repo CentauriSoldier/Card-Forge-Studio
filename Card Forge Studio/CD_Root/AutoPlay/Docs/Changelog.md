@@ -3,6 +3,24 @@
 ---
 
 <details open>
+<summary><strong>v2026.65.22</strong></summary>
+
+### Added
+- Veritcal and horizontal guides to the canvas
+
+### Changed
+- ***CellProc*** system renamed to ***RowProc***
+- ***RowProc*** function now cached
+- ***Draw*** function now cached
+- Cleaned up **ProcSys** module
+- All **LiveFileRepo**s moved out of their respective classes (e.g., **CardSet**) and into **ProcSys**.
+- Forge's utility image is now redrawn only on changes.
+
+</details>
+
+---
+
+<details>
 <summary><strong>v2026.60.19</strong></summary>
 
 ### Added
@@ -12,7 +30,7 @@
 
 ### Changed
 - Custom draw, cell processor, and other functions are now stored within a LiveFileRepo (held by CardSet)
-- Class system removed in reference to basic, custom card data. Now purely CSV-drive
+- Class system removed in relation to basic, custom card data. Now purely CSV-drive
 - Custom functions are now at the CardSet level rather than the class level
 - Refactored Forge to be a Singelton helper class
 - Removed draw overlay/border functions and options from utility. These are CardSet-specific and user-defined.

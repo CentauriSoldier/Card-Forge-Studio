@@ -23,14 +23,14 @@ local INIFile       = INIFile;
 
 local FontStyle   = require("Forge.FontStyle");
 -------------------------------------------------------------------
---TODO move all these settings to file
+--TODO move all these settings to file AND add a LiveFileRepo...long after Beta, not critical
 local _oWhite               = Color.RGBA(255, 255, 255, 255); --TODO Fix names!!! _
 local _oBlack               = Color.RGBA(0, 0, 0, 255);
 local _oClear               = Color.RGBA(0, 0, 0, 0)
 local _nRulerColor          = Color.RGBA(240, 100, 100, 255); --TODO change these values from INI file
 local _nRulerBGColor        = Color.RGBA(255, 255, 255, 0)
 
-local _tHorRuler            = {--TODO static functions and variables io change these values
+local _tHorRuler            = {--TODO static functions and variables to change these values
     Y           = 0,
     Width       = 825,
     MajorStep   = 100,
@@ -39,7 +39,7 @@ local _tHorRuler            = {--TODO static functions and variables io change t
     MinorHeight = 10,
     Color       = _nRulerColor,
 };
-local _tVerRuler            = {--TODO static functions and variables io change these values
+local _tVerRuler            = {--TODO static functions and variables to change these values
     X           = 0,
     HHeight     = 1125,
     MajorStep   = 100,
@@ -51,6 +51,14 @@ local _tVerRuler            = {--TODO static functions and variables io change t
 local _tCenterLines = {
     Color       = Color.RGBA(50, 50, 255, 255),
 };
+local _tHorGuide = {
+    Color       = Color.RGBA(0, 255, 48, 255),
+};
+local _tVerGuide = {
+    Color       = Color.RGBA(0, 255, 48, 255),
+};
+
+
 
 local _fDraw;
 
@@ -65,23 +73,30 @@ local _InternalDC   = null;
 -------------------------------------------------------------------
 local _tStyles          = {};
 local _bAutoUpdateStyle = false;
---------------------🅲🅰🅽🆅🅰🆂 🆁🅴🅻🅰🆃🅴🅳-----------------------
+------------------------------------------------------------------- Canvas Guides
+local _nGuideHorY = -1; --start off canvas
+local _nGuideVerX = -1; --start off canvas
+------------------------------------------------------------------- Canvas Keyboard Modifiers
+local _bIsAltDown       = false;
+local _bIsControlDown   = false;
+local _bIsShiftDown     = false;
+------------------------------------------------------------------- Canvas Related
 local _sCanvas          = FORGE_CANVAS_NAME;
 local _bCanvasCreated   = false;
 local _nCanvasWidth     = 100;
 local _nCanvasHeight    = 100;
 local _hWndCard         = false;
----------------------🅼🅾🆄🆂🅴 & 🆂🆃🅰🆃🆄🆂------------------------
+------------------------------------------------------------------- Mouse & Status
 local _sStatusObject            = FORGE_STATUS_NAME;
 local _sStatusMouseObject       = FORGE_STATUS_MOUSE_NAME;
 local _sStatusMouseNegObject    = FORGE_STATUS_MOUSE_NEG_NAME;
 local _nStatusHeight            = 50;  --applies to all status par objects
 local _nStatusMouseWidth        = 180; --applies to both mouse status par objects
 local _sStatus                  = "";
------------------------🅲🅾🆅 🆅🅰🅻🆄🅴🆂----------------------------
+------------------------------------------------------------------- CoV Values
 local _CoVXW = 1;
 local _CoVYH = 1;
----------------------🅳🆁🅰🆆 🅿🅻🆄🅶🅸🅽 🅸🅼🅰🅶🅴🆂-----------------
+------------------------------------------------------------------- Draw Plugin Images
 local _hImage           = null;
 local _nImageID         = null;
 local _hImageExport     = null;
@@ -91,14 +106,16 @@ local _nImageUtilID     = null;
 -------------------------------------------------------------------
 local _tImageCache      = {};
 local _tUserImageCache  = {};
--------------------------🅲🅰🆁🅳 🅸🅽🅵🅾---------------------------
+------------------------------------------------------------------- Card Info
 local _oActiveCardSet = false;
 local _nCardWidth     = 100;
 local _nCardHeight    = 100;
 local _sCardSetName   = "";
----------------🆁🅴🅳🆁🅰🆆 & 🅵🅸🅻🅴 🆂🆈🅽🅲 🅵🅸🅴🅻🅳🆂--------------
-local _tLastRow;
-local _bRedrawRequested         = false;
+------------------------------------------------------------------- Redraw & Filesync
+local _bRedrawUtil              = true; --set to true so the Util redraws on first pass by default
+local _bRedrawCard              = false;
+local _bRedrawCanvas            = false;
+local _tActiveRow               = false;
 local _bIsResizing              = false;
 local _bForgeAutoSizing         = false;
 local _nTimeDelta               = 0;
@@ -178,6 +195,22 @@ local function CreateImage(hImage, nImageID)
     return hRet, nRet;
 end
 
+--[[TODO add
+Draw X
+Draw Grid
+Guides
+]]
+
+--TODO add Grid lines util
+
+local function DrawGuideHor(sObject, D, hInternalDC)--TODO ALlowwidth changes for these (and all) lines
+    D.DrawLineEx(0, _nGuideHorY, _nCardWidth, _nGuideHorY, _tHorGuide.Color);
+end
+
+local function DrawGuideVer(sObject, D, hInternalDC)
+    D.DrawLineEx(_nGuideVerX, 0, _nGuideVerX, _nCardHeight, _tVerGuide.Color);
+end
+
 local function DrawCenterLineHor(sObject, D, hInternalDC)
     local nMidPointY = floor(_nCardHeight / 2);
     D.DrawLineEx(0, nMidPointY, _nCardWidth, nMidPointY, _tCenterLines.Color);
@@ -221,6 +254,7 @@ local function DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC)
 end
 
 local function DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC) --TODO minor issue, realign first minor step when HOR ruler is drawing to be in line with both minor ticks
+
     local nX             = _tVerRuler.X;
     local nMajorStep     = _tVerRuler.MajorStep;
     local nMinorStep     = _tVerRuler.MinorStep;
@@ -252,37 +286,207 @@ local function DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC) --TODO minor
 
 end
 
+
+
+
 local function DrawUtilObjects(sObject, D, hInternalDC)
     ClearToTransparent(D);
 
-    if MainMenu.IsChecked("Options:>Draw:>Utility Overlay") then
+    --draw utility objects
+    local bDrawRulerHor = MainMenu.IsChecked("Options:>Draw:>Horizontal Ruler");
+    local bDrawRulerVer = MainMenu.IsChecked("Options:>Draw:>Vertical Ruler");
 
-        --draw utility objects
-        local bDrawRulerHor = MainMenu.IsChecked("Options:>Draw:>Horizontal Ruler");
-        local bDrawRulerVer = MainMenu.IsChecked("Options:>Draw:>Vertical Ruler");
+    D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
 
-        D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+    if (bDrawRulerHor) then
+        DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC);
+    end
 
-        if (bDrawRulerHor) then
-            DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC);
+    if (bDrawRulerVer) then
+        DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC);
+    end
+
+    if (MainMenu.IsChecked("Options:>Draw:>Horizontal Centerline")) then
+        DrawCenterLineHor(sObject, D, hInternalDC);
+    end
+
+    if (MainMenu.IsChecked("Options:>Draw:>Vertical Centerline")) then
+        DrawCenterLineVer(sObject, D, hInternalDC);
+    end
+
+    --TODO FINISH add options to turn these off and be sure to save them in INI when changed
+    DrawGuideHor(sObject, D, hInternalDC);
+
+    DrawGuideVer(sObject, D, hInternalDC);
+
+end
+
+
+
+--mouse event callback functions
+local function CanvasInputCallback(tEvent)
+    local nEventCode = tEvent.EventCode;
+
+    --update basic info
+    local nX     = floor(tEvent.Mouse.x * _CoVXW);
+    local nY     = floor(tEvent.Mouse.y * _CoVYH);
+    local nNegX  = floor(nX - _nCardWidth);
+    local nNegY  = floor(nY - _nCardHeight);
+
+    _bIsAltDown     = tEvent.Keyboard.Modifiers.Alt;
+    _bIsControlDown = tEvent.Keyboard.Modifiers.Control;
+    _bIsShiftDown   = tEvent.Keyboard.Modifiers.Shift;
+
+    if (nEventCode == CANVAS_MOUSE_MOVE) then
+        Paragraph.SetText(_sStatusMouseObject,      nX..", "..nY);
+        Paragraph.SetText(_sStatusMouseNegObject,   nNegX..", "..nNegY);
+
+    elseif (nEventCode == CANVAS_MOUSE_LEFT_CLICK) then
+
+        if _bIsControlDown and not _bIsShiftDown then
+            _nGuideHorY         = floor(tEvent.Mouse.y * _CoVYH);
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+            Clipboard.CopyText(nY..", "..nNegY);
+
+        elseif _bIsControlDown and _bIsShiftDown and _nGuideHorY > -1 then
+            _nGuideHorY         = -100;
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+
+        else
+            Clipboard.CopyText(Paragraph.GetText(_sStatusMouseObject));
         end
 
-        if (bDrawRulerVer) then
-            DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC);
+    elseif (nEventCode == CANVAS_MOUSE_RIGHT_CLICK) then
+
+        if _bIsControlDown and not _bIsShiftDown then
+            _nGuideVerX         = floor(tEvent.Mouse.x * _CoVXW);
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+            Clipboard.CopyText(nX..", "..nNegX);
+
+        elseif _bIsControlDown and _bIsShiftDown and _nGuideVerX > -1 then
+            _nGuideVerX         = -100;
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+        else
+            Clipboard.CopyText(Paragraph.GetText(_sStatusMouseNegObject));
         end
 
-        if (MainMenu.IsChecked("Options:>Draw:>Horizontal Centerline")) then
-            DrawCenterLineHor(sObject, D, hInternalDC);
-        end
+    elseif (nEventCode == CANVAS_MOUSE_MIDDLE_DOWN) then
 
-        if (MainMenu.IsChecked("Options:>Draw:>Vertical Centerline")) then
-            DrawCenterLineVer(sObject, D, hInternalDC);
+        if _bIsControlDown and not _bIsShiftDown then
+            _nGuideVerX         = floor(tEvent.Mouse.x * _CoVXW);
+            _nGuideHorY         = floor(tEvent.Mouse.y * _CoVYH);
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+            Clipboard.CopyText(nX..", "..nY);
+
+        elseif _bIsControlDown and _bIsShiftDown and _nGuideVerX > -1 and _nGuideHorY > -1 then
+            _nGuideVerX         = -100;
+            _nGuideHorY         = -100;
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+
+        else
+            Clipboard.CopyText(Paragraph.GetText(_sStatusMouseObject));
         end
 
     end
 
+
 end
 
+--[[!
+    @fqxn CFS.Classes.Forge.Methods.DrawCard
+    @desc Draws the currently selected card into the Forge canvas.
+
+    <p>
+      Executes the active CardSet’s live <code>Draw</code> script using the current row data,
+      renders editor utility overlays (rulers, centerlines, etc.) into a separate layer,
+      and composites all results onto the Forge canvas.
+    </p>
+
+    <h3>Behavior</h3>
+    <ul>
+      <li>Clears internal render targets to transparent before drawing.</li>
+      <li>Loads and executes the CardSet <code>Draw</code> chunk in the active UserEnv.</li>
+      <li>Invokes the CardSet-provided draw function to render card artwork.</li>
+      <li>Renders utility overlays into a dedicated utility image.</li>
+      <li>Composites the card image and utility image onto the canvas.</li>
+    </ul>
+
+    <h3>Notes</h3>
+    <ul>
+      <li>This method does not perform export; it is strictly for preview rendering.</li>
+      <li>Utility overlays are rendered independently of card artwork.</li>
+      <li>The most recently drawn row is cached to support deferred redraw after resizing.</li>
+      <li>Intended to be called by ProcSys in response to selection changes or redraw requests.</li>
+    </ul>
+
+    @param table tRow Final grid row data for the card being drawn.
+!]]
+local function Draw()--, bExport, fExport) --TODO move this out to private static to be used here and in new export function
+    --in case a resize happens
+    --_tActiveRow  = tRow;
+
+    --draw the card
+    local function ProcDraw(sObject, D, hInternalDC)
+        --update private vars for use in DrawText and other functions
+        _Object      = sObject;
+        _D           = D;
+        _InternalDC  = hInternalDC;
+
+        ClearToTransparent(D);
+
+        --execute the proc's draw method
+        _fDraw(sObject, D, hInternalDC);
+    end
+
+    --reset the image size to its original size
+    --hImage:Resize(nWidth, nHeight, DRAW_RESIZE_RAW);
+
+    --clear the canvas
+    Canvas.Clear(_sCanvas, _oClear);
+
+    --draw on the card image
+    if (_bRedrawCard) then
+        _hImage:Draw(ProcDraw);
+        _bRedrawCard = false;
+    end
+
+    --draw on the util image
+    if (_bRedrawUtil) then
+        _hImageUtil:Draw(DrawUtilObjects);
+        _bRedrawUtil = false;
+    end
+
+    --draw the card and util images onto the canvas (since drawing directly on the canvas is no bueno)
+    Canvas.Draw(_sCanvas,
+        function(sObject, D, hInternalDC)
+            D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+            D.DrawImage(_nImageID,      0, 0, _nCanvasWidth, _nCanvasHeight);
+
+            if MainMenu.IsChecked("Options:>Draw:>Utility Overlay") then--TODO FINISH Break this OUt of here so util and card can be drawn seperately and composited in a nother function...this will fix having to redraw the card whenever the util changes
+                D.DrawImage(_nImageUtilID,  0, 0, _nCanvasWidth, _nCanvasHeight);
+            end
+
+        end
+    );
+
+    --if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..Teach export should not be displayed first
+    --    fExport(D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
+    --end
+
+    --[[
+    --saves the entire canvas!
+    local hNew = Canvas.GrabImage(_sCanvas);
+    if(hNew)then
+        DrawingImage.Save(hNew, tRow.Name..".png", DRAW_FORMAT_PNG);
+        DrawingImage.Free(hNew);
+    end]]
+end
 
 
 
@@ -376,89 +580,6 @@ return class("Forge",
         end,
         CenterOn = function(nX, nY)
 
-        end,
-        --[[!
-            @fqxn CFS.Classes.Forge.Methods.DrawCard
-            @desc Draws the currently selected card into the Forge canvas.
-
-            <p>
-              Executes the active CardSet’s live <code>Draw</code> script using the current row data,
-              renders editor utility overlays (rulers, centerlines, etc.) into a separate layer,
-              and composites all results onto the Forge canvas.
-            </p>
-
-            <h3>Behavior</h3>
-            <ul>
-              <li>Clears internal render targets to transparent before drawing.</li>
-              <li>Loads and executes the CardSet <code>Draw</code> chunk in the active UserEnv.</li>
-              <li>Invokes the CardSet-provided draw function to render card artwork.</li>
-              <li>Renders utility overlays into a dedicated utility image.</li>
-              <li>Composites the card image and utility image onto the canvas.</li>
-            </ul>
-
-            <h3>Notes</h3>
-            <ul>
-              <li>This method does not perform export; it is strictly for preview rendering.</li>
-              <li>Utility overlays are rendered independently of card artwork.</li>
-              <li>The most recently drawn row is cached to support deferred redraw after resizing.</li>
-              <li>Intended to be called by ProcSys in response to selection changes or redraw requests.</li>
-            </ul>
-
-            @param table tRow Final grid row data for the card being drawn.
-        !]]
-        DrawCard = function(tRow)--, bExport, fExport) --TODO move this out to private static to be used here and in new export function
-            --in case a resize happens
-            _tLastRow  = tRow;
-
-            --draw the card
-            local function ProcDraw(sObject, D, hInternalDC)
-                --update private vars for use in DrawText and other functions
-                _Object      = sObject;
-                _D           = D;
-                _InternalDC  = hInternalDC;
-
-                ClearToTransparent(D);
-
-                --execute the proc's draw method
-                _fDraw(sObject, D, hInternalDC);
-            end
-
-            --reset the image size to its original size
-            --hImage:Resize(nWidth, nHeight, DRAW_RESIZE_RAW);
-
-            --clear the canvas
-            Canvas.Clear(_sCanvas, _oClear);
-
-            --draw on the card image
-            _hImage:Draw(ProcDraw);
-
-            --draw on the util image
-            _hImageUtil:Draw(DrawUtilObjects);
-
-            --resize the image to the canvas size
-            --local tSize = Input.GetSize(_sCanvas);
-            --hImage:Resize(tSize.Width, tSize.Height, DRAW_RESIZE_RAW);
-
-            --draw the card and util images onto the canvas (since drawing directly on the canvas is no bueno)
-            Canvas.Draw(_sCanvas,
-                        function(sObject, D, hInternalDC)
-                            D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
-                            D.DrawImage(_nImageID,      0, 0, _nCanvasWidth, _nCanvasHeight);
-                            D.DrawImage(_nImageUtilID,  0, 0, _nCanvasWidth, _nCanvasHeight);
-                        end
-            );
-
-            --if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..Teach export should not be displayed first
-            --    fExport(D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
-            --end
-
-            --[[
-            --saves the entire canvas!
-            local hNew = Canvas.GrabImage(_sCanvas);
-            if(hNew)then
-                DrawingImage.Save(hNew, tRow.Name..".png", DRAW_FORMAT_PNG);
-                DrawingImage.Free(hNew);
-            end]]
         end,
         --[[!
             @fqxn CFS.Classes.Forge.Methods.DrawImage
@@ -1010,10 +1131,12 @@ return class("Forge",
             setmetatable(_tStyles, tStylesMeta);
         end,
         OnShow = function()
+            local nV = KEY_CODES.v.dec;
+            local nH = KEY_CODES.h.dec;
 
             --create the canvas
             if not (_bCanvasCreated) then
-                local bCanvasCreated = Canvas.Create(_sCanvas);
+                local bCanvasCreated = Canvas.Create(_sCanvas, {Keyboard = true});
                 assert(bCanvasCreated, "Error in Forge, \"${game}\": Could not create canvas for object, \"${canvas}\"." % {game = "TODO GET GAME NAME", canvas = _sCanvas});
             end
 
@@ -1021,28 +1144,7 @@ return class("Forge",
                 _hWndCard = ProcSys.GetWindowHandle(PANE.MAIN);
             end
 
-            --mouse event callback functions
-            local function MouseUpdate(eEvent)
-
-                if (eEvent.EventCode == CANVAS_MOUSE_MOVE) then
-                    local nX     = floor(eEvent.Mouse.x * _CoVXW);
-                    local nY     = floor(eEvent.Mouse.y * _CoVYH);
-                    local nNegX  = floor(nX - _nCardWidth);
-                    local nNegY  = floor(nY - _nCardHeight);
-                    Paragraph.SetText(_sStatusMouseObject,      nX..", "..nY);
-                    Paragraph.SetText(_sStatusMouseNegObject,   nNegX..", "..nNegY);
-
-                elseif (eEvent.EventCode == CANVAS_MOUSE_LEFT_CLICK) then
-                    Clipboard.CopyText(Paragraph.GetText(_sStatusMouseObject));
-
-                elseif (eEvent.EventCode == CANVAS_MOUSE_RIGHT_CLICK) then
-                    Clipboard.CopyText(Paragraph.GetText(_sStatusMouseNegObject));
-
-                end
-
-            end
-
-            Canvas.SetCallback(_sCanvas, MouseUpdate);
+            Canvas.SetCallback(_sCanvas, CanvasInputCallback);
 
             --set the Forge's window size and adjust the images
             local sSection = "ForgeWindow";
@@ -1063,7 +1165,7 @@ return class("Forge",
 
             _bForgeAutoSizing = false;
 
-            Page.StartTimer(_nRedrawTimerInterval,      _nRedrawTimerID);
+            Page.StartTimer(_nRedrawTimerInterval, _nRedrawTimerID);
         end,
         OnSize = function(nWindowWidth, nWindowHeight, nPageWidth, nPageHeight, nType)
             _nPageWidth     = nPageWidth;
@@ -1136,9 +1238,9 @@ return class("Forge",
             _CoVXW = _nCardWidth    /   _nCanvasWidth;
             _CoVYH = _nCardHeight   /   _nCanvasHeight;
 
-            if (_tLastRow) then
-                _bRedrawRequested   = true;
-                _bIsResizing        = true;
+            if (_tActiveRow) then
+                _bRedrawCanvas = true;
+                _bIsResizing   = true;
             end
 
         end,
@@ -1150,11 +1252,11 @@ return class("Forge",
                 _nTimeDelta = _nTimeDelta + _nRedrawTimerInterval;
 
                 --check if a redraw request was made and that we're done resizing
-                if (_bRedrawRequested and not _bIsResizing) then
+                if (_bRedrawCanvas and not _bIsResizing) then
                     --redraw the card
-                    Forge.DrawCard(_tLastRow);
+                    Draw();
                     --fulfill the request
-                    _bRedrawRequested = false;
+                    _bRedrawCanvas = false;
                 end
 
                 --if enough time has passed...
@@ -1168,6 +1270,14 @@ return class("Forge",
             end
 
         end,
+        RequestCardRedraw = function()
+            _bRedrawCard    = true;
+            _bRedrawCanvas  = true;
+        end,
+        RequestUtilRedraw = function()
+            _bRedrawUtil    = true;
+            _bRedrawCanvas  = true;
+        end,
         SetDrawFunction = function(fDraw)
 
             if not (rawtype(fDraw) == "function") then
@@ -1175,6 +1285,13 @@ return class("Forge",
             end
 
             _fDraw = fDraw;
+        end,
+        SetActiveRow = function(tRow)
+
+            if (type(tRow) == "table") then
+                _tActiveRow = tRow;
+            end
+
         end,
         SetActiveCardSet = function(oCardSet)
 

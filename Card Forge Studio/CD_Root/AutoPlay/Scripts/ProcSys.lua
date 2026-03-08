@@ -63,6 +63,7 @@ local _tFileSpecRowProc         = FILESPEC_CARDSET_ROWPROC;
 -------------------------------- Preemptive Declarations
 local ProcessCell;
 local PrepUpdateGrids;
+local TryDrawCard;
 local UpdateGrids;
 ----------------------------------------------------------------------------------------------------------------------
 --TODO Clean these up
@@ -236,7 +237,7 @@ local function BuildWindows()
             tWindows[ePane].Callback.OnClose(hWnd, nWidth, nHeight);
 
             INIFile.SetValue(_pAppCFG, tostring(ePane), "Visible", "false");
-            fCurrentOnClose(hWnd);
+            --fCurrentOnClose(hWnd);
         end
 
         local function FireAndSaveWindowInfo(hWnd, nX, nY, nWidth, nHeight, nCWidth, nCHeight, sCallback)
@@ -484,12 +485,13 @@ local function TryDrawActiveCard()
 
     if (_bReady) then
         local tRow = Grid.GetRow(_sFinalDataGrid, _nCurrentRow);
-        TryDrawCard(tRow);
+        --Forge.SetActiveRow();
+
     end
 
 end
 
-
+--TODO clean all these functions up...params are messy
 --[[!
     @fqxn CFS.Classes.ProcSys.Methods.TryDrawCard
     @desc Attempts to draw the card for the given row using the resolved processor.
@@ -504,7 +506,7 @@ end
     @vis Static Private
 !]]
 --local function TryDrawCard(cProc, nRow, tRow)
-local function TryDrawCard(tRow)
+TryDrawCard = function(tRow)
 
     --if (cProc and type(cProc.DrawCard) == "function" and nRow > 0) then
 
@@ -515,7 +517,8 @@ local function TryDrawCard(tRow)
             --local bExport = MainMenu.IsChecked("Options:>Draw:>Export Selected Card") and rawtype(fExport) == "function"; --TODO FINISH use new/custom exporter system BUT dnot here...do not draw for every export, simply export
 
             --tell Forge to draw (and possibly export) the card
-            Forge.DrawCard(tRow, bExport, fExport);
+            Forge.SetActiveRow(tRow);
+            Forge.RequestCardRedraw();
         end
 
     --end
@@ -945,7 +948,7 @@ return class("ProcSys",
             --LiveFile.SetCallback("RowProc", function() _bRowProcChanged = true; end);
             --LiveFile.SetCallback("Draw",     function() _bDrawChanged    = true; end);
 
-            --LiveFile.SetCallback(); 
+            --LiveFile.SetCallback();
             --tLiveFile, sOldText, sNewText, nOldCRC, nCRC
 
 
@@ -1127,7 +1130,7 @@ return class("ProcSys",
                     _fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
                 end
 
-                ProcSys.ProcessActiveRow(not _bReady); --TODO NOTE FLICKER IS PROBABLY HERE!!!!
+                ProcSys.ProcessActiveRow(not _bReady);
                 _nLastRow = nRow;
                 _tReprocRows[_nCurrentRow] = false;
                 _bReady = true;
@@ -1277,16 +1280,24 @@ return class("ProcSys",
             local nRow = _nCurrentRow;
 
             --reprocess the row
+            --Grid.SetRedraw(_sBaseDataGrid, false); --TODO this may work, check it out
             for nColumn = 1, Grid.GetColumnCount(_sBaseDataGrid) - 1 do
                 ProcessCell(nRow, nColumn);
             end
+            --Grid.SetRedraw(_sBaseDataGrid, true);
 
             --get the final row
             local tRow  = Grid.GetRow(_sFinalDataGrid, nRow);
             --update the final row in the UserEnv
             UserEnv.ProcSysUpdateRoot {_tRow = tRow};
             --redraw the card
-            TryDrawCard(tRow);--TODO QUESTION...should this be drawing here? Seems like it's doing more than the name suggests.
+            Forge.SetActiveRow(tRow);
+
+            if not (bSkipRedraw) then
+                Forge.RequestCardRedraw();
+            end
+
+            --TryDrawCard(tRow);--TODO QUESTION...should this be drawing here? Seems like it's doing more than the name suggests.
         end,
 
         --TODO put in examplke and show the args for the callback
@@ -1404,8 +1415,8 @@ return class("ProcSys",
         !]]
         SetWindowVisible = function(eTool, vFlag)
             --TODO assertions
-            local bFlag = type(vFlag) == "boolean" and vFlag or false;
-            local tWindows = _tWindows;
+            local bFlag     = rawtype(vFlag) == "boolean" and vFlag or false;
+            local tWindows  = _tWindows;
 
             if (bFlag) then
                 Window.Show(tWindows[eTool].WindowHandle);

@@ -75,7 +75,7 @@ local tFunctions = {
         --TODO USE FILESPECs WHERE POSSIBLE
 
         --setup the game's folder
-        tPaths.Game         = pGame;                                --CheckFolder(pGame);
+        tPaths.Game         = pGame;                                        --CheckFolder(pGame);
         tPaths.Docs         = pGame             .."\\Docs";                 CheckFolder(tPaths.Docs);
         tPaths.Temp         = pGame             .."\\Temp";                 CheckFolder(tPaths.Temp);
         tPaths.CardSets     = pGame             .."\\"..FOLDER_CARD_SETS;   CheckFolder(tPaths.CardSets);
