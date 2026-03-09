@@ -1607,8 +1607,8 @@ end</Script>
 </Text>
 <Box>
 <BorderStyle>0</BorderStyle>
-<VerticalScrollbar>0</VerticalScrollbar>
-<HorizontalScrollbar>0</HorizontalScrollbar>
+<VerticalScrollbar>1</VerticalScrollbar>
+<HorizontalScrollbar>1</HorizontalScrollbar>
 <Style>1</Style>
 <Mode>0</Mode>
 <Mask/>

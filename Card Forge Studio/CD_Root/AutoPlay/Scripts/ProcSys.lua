@@ -140,13 +140,8 @@ end
     @vis Static Private
 !]]
 local function BuildUserTable(sGame, tFileSpec)
-    --TODO FIX FINISH THIS SHOULD NOT BE CALLED HERE WITHOUT SAFE ENV
-    --Load any config and user environment that may exist TODO BUG FIX - FINISH - USE PROTECTED environment for loading this
-    --local sInitChunk    = _oActiveCardSet.GetCallCode("RowProc");
-    --TODO IT CAN BE USED IN THINGS LIKE oGame.RefreshCFG() and oGame.RefreshEnv() or just oGame.ReInit()
     local sInitChunk = TextFile.ReadToString(FS.Scripts.."\\"..tFileSpec.Full);
     --TODO CHECK AND ERROR on bad file
-    --TODO Clear/Refresh UserEnv
 
     local sName = tFileSpec.Filename;
 

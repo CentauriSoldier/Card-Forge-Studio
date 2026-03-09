@@ -173,6 +173,10 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     select           = select,
     --Forge            = tForgeDecoy,
     --ProcSys          = tProcSysDecoy,
+    --TODO FINISH this function and add Dox Note (update it with Game load)
+    Exists           = function(sPath)
+        --TextFile.DoesExist
+    end,
     Log              = Log.Note,
     --[[!
     @fqxn CFS.UserEnv.Import
