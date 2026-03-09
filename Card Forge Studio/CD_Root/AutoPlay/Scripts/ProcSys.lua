@@ -1,73 +1,81 @@
--------------------------------- Localization
-local class                     = class;
--------------------------------- General
-local _pAppCFG                  = FS.AppCFG;
-local _bReady                   = false; --prevents timer executions until a selection has been made
-local _bAllowSave               = false;
-local _nUserFileRepoInterval    = USER_FILE_REPO_TIMER_INTERVAL;
--------------------------------- Windows
-local _tWindows                 = {}; --stores windows
-local _bWindowsBuilt            = false;
-local _ePane                    = PANE;
--------------------------------- Grid
-local _bAutoSizeGrid            = true;
-local _sBaseDataGrid            = PROCSYS_GRID_BASE;
-local _sFinalDataGrid           = PROCSYS_GRID_FINAL;
-local _bIsLoading               = false;
-local _nCurrentRow              = -1;
-local _nCurrentColumn           = -1;
-local _nLastRow                 = -1;
--------------------------------- Export
-local _tExporters               = {};
--------------------------------- CSV
-local _bDataChanged             = false;
-local _sCSVDelimiter            = CSV_DELIMITER;
-local _pActiveCSV               = "";
-local _pExportCSV               = "";
--------------------------------- RowProc / Special Procs
-local _tReprocRows              = {};
-local _oRowProcLiveFileRepo     = LiveFileRepo();
-local _bRowProcChanged          = false;
-local _sRowProcCode             = "";
-local _fRowProc                 = false;
-
-local _bRowProcChanged          = false;
--------------------------------- Draw (Draw function doesn't get stored here as it's sent to Forge upon creation)
-local _oDrawLiveFileRepo        = LiveFileRepo(); --QUESTION SHOULD THIS BE IN THE FORGE MODULE?
-local _bDrawChanged             = false;
-local _sDrawCode                = "";
--------------------------------- Game Including CGF & ENV
-local _oGameLiveFileRepo        = LiveFileRepo();
-local _oActiveGame              = null;
-local _sGameName                = "";
-local _bCFGChanged              = false;
-local _bENVChanged              = false;
-local _sCFGCode                 = "";
-local _sENVCode                 = "";
-local _tCFG                     = null;
-local _tENV                     = null;
--------------------------------- Card Set
-local _oCardSetLiveFileRepo     = LiveFileRepo();
-local _oActiveCardSet           = false;
-local _sCardSetName             = "";
-local _nCardWidth               = 0;
-local _nCardHeight              = 0;
--------------------------------- Timers
-local _nFileSyncTimerID         = PROCSYS_FILE_SYNC_TIMER_ID;
-local _nFileSyncTimerInterval   = PROCSYS_FILE_SYNC_TIMER_INTERVAL;
--------------------------------- File Specs
-local _tFileSpecCFG             = FILESPEC_GAME_CFG;
-local _tFileSpecENV             = FILESPEC_GAME_ENV; --TODO add all neede file specs here
-local _tFileSpecDraw            = FILESPEC_CARDSET_DRAW;
-local _tFileSpecRowProc         = FILESPEC_CARDSET_ROWPROC;
--------------------------------- Preemptive Declarations
+------------------------------------- Localization
+local Grid                          = Grid;
+    local GetCellText               = Grid.GetCellText;
+    local SetCellText               = Grid.SetCellText;
+local class                         = class;
+------------------------------------- General
+local _pAppCFG                      = FS.AppCFG;
+--local _bReady                       = false; --prevents timer executions until a selection has been made
+local _bAllowSave                   = false;
+local _nLiveFileRepoTimerInterval   = PROCSYS_LIVE_FILE_REPO_TIMER_INTERVAL;
+local _bSelectionMade               = false;
+------------------------------------- Windows
+local _tWindows                     = {}; --stores windows
+local _bWindowsBuilt                = false;
+local _ePane                        = PANE;
+------------------------------------- Grid
+local _bAutoSizeGrid                = true;
+local _sBaseDataGrid                = PROCSYS_GRID_BASE;
+local _sFinalDataGrid               = PROCSYS_GRID_FINAL;
+local _bIsLoading                   = false;
+local _nCurrentRow                  = false;
+local _nCurrentColumn               = false;
+local _nLastRow                     = -1;
+local _nRowCount                    = -1;
+local _nColumnCount                 = -1;
+------------------------------------- Export
+local _tExporters                   = {};
+------------------------------------- CSV
+local _bDataChanged                 = false;
+local _sCSVDelimiter                = CSV_DELIMITER;
+local _pActiveCSV                   = "";
+local _pExportCSV                   = "";
+------------------------------------- RowProc / Special Procs
+local _tReprocRows                  = {};
+local _oRowProcLiveFileRepo         = LiveFileRepo();
+local _bRowProcChanged              = false;
+local _sRowProcCode                 = "";
+ --NOTE: DO NOT REMOVE: dead function in case initial user function is bad
+local _fRowProc                     = function() end;
+local _bRowProcChanged              = false;
+------------------------------------- Draw (Draw function doesn't get stored here as it's sent to Forge upon creation)
+local _oDrawLiveFileRepo            = LiveFileRepo(); --QUESTION SHOULD THIS BE IN THE FORGE MODULE?
+local _bDrawChanged                 = false;
+local _sDrawCode                    = "";
+------------------------------------- Game Including CGF & ENV
+local _oGameLiveFileRepo            = LiveFileRepo();
+local _oActiveGame                  = null;
+local _sGameName                    = "";
+local _bCFGChanged                  = false;
+local _bENVChanged                  = false;
+local _sCFGCode                     = "";
+local _sENVCode                     = "";
+local _tCFG                         = null;
+local _tENV                         = null;
+------------------------------------- CardSet
+local _oCardSetLiveFileRepo         = LiveFileRepo();
+local _oActiveCardSet               = false;
+local _sCardSetName                 = "";
+local _nCardWidth                   = 0;
+local _nCardHeight                  = 0;
+------------------------------------- Timer Stuff
+local _nFileSyncTimerID             = PROCSYS_SYNC_TIMER_ID;
+local _nFileSyncTimerInterval       = PROCSYS_SYNC_TIMER_INTERVAL;
+local _bSyncBlocked                 = false;
+local _bSyncBusy                    = false;
+------------------------------------- File Specs
+local _tFileSpecCFG                 = FILESPEC_GAME_CFG;
+local _tFileSpecENV                 = FILESPEC_GAME_ENV; --TODO add all neede file specs here
+local _tFileSpecDraw                = FILESPEC_CARDSET_DRAW;
+local _tFileSpecRowProc             = FILESPEC_CARDSET_ROWPROC;
+------------------------------------- Preemptive Declarations
 local ProcessCell;
 local PrepUpdateGrids;
 local TryDrawCard;
 local UpdateGrids;
 ----------------------------------------------------------------------------------------------------------------------
 --TODO Clean these up
-local _nDescriptionMaxWidth = 100;
+local _nDescriptionMaxWidth         = 100;
 --local _tRowCRC          = {};
 --local _nDrawCRC         = -1;
 --local _nRowProcCRC     = -1;
@@ -79,7 +87,7 @@ local _nDescriptionMaxWidth = 100;
 --may be used by the proc's cell processor to get final values
 --local _nFinalValueRow = -1; --TODO QUESTION is the ever used?
 --local function GetFinalValue(sColumn)
---    return Grid.GetCellText(_sFinalDataGrid, _nFinalValueRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
+--    return GetCellText(_sFinalDataGrid, _nFinalValueRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
 --end
 
 --[[--when changes occur
@@ -90,22 +98,35 @@ Draw            - Redraw Current Row
 ]]
 -----------------------------------------------------------------------------------------------------------------------
 
+local function XPCallError(vErr)
+    return debug.traceback(tostring(vErr), 2);
+end
+
 
 local function BuildCardSetFunction(sName, sChunk)
+
+    if not (rawtype(sName) == "string" and not sName:isempty()) then
+        error("BuildCardSetFunction: Argument 1 (function name) must be non-empty string. Got "..rawtype(sName)..".", 2);
+    end
+
+    if not (rawtype(sChunk) == "string" and not sChunk:isempty()) then
+        error("BuildCardSetFunction: Argument 2 (function chunk) must be non-empty string. Got "..rawtype(sChunk)..".", 2);
+    end
+
     local sChunkName = _sCardSetName..' '..sName;
 
     local fChunk, sError = load(sChunk, sChunkName, "t", UserEnv.Get());
     if not (fChunk) then
-        error("Error loading '"..sName.."' function for CardSet, '".._sCardSetName.."'.\r\n"..sError, 2);
+        error("Error loading '"..sName.."' function for CardSet, '".._sCardSetName.."'.\r\n"..sError, 1);
     end
 
     local bOK, fRetOrErr = pcall(fChunk);
     if not (bOK) then
-        error("Error running '"..sName.."' chuck (function) for CardSet, '".._sCardSetName.."'.\r\n"..fRetOrErr, 2);
+        error("Error running '"..sName.."' chuck (function) for CardSet, '".._sCardSetName.."'.\r\n"..fRetOrErr, 1);
     end
 
     if not (rawtype(fRetOrErr) == "function") then
-        error("Error building '"..sName.."' function for CardSet, '".._sCardSetName.."'.\r\nExpected return type function. Got "..rawtype(fRetOrErr)..'.', 2);
+        error("Error building '"..sName.."' function for CardSet, '".._sCardSetName.."'.\r\nExpected return type function. Got "..rawtype(fRetOrErr)..'.', 1);
     end
 
     return fRetOrErr;
@@ -135,20 +156,20 @@ local function BuildUserTable(sGame, tFileSpec)
     --try to load the chuck
     local fChunk, sError = load(sInitChunk, sChunkName, "t", UserEnv.Get());
     if not (fChunk) then
-        error("Error running "..sName.." file for Game "..sGame..".\r\n"..sError, 2);
+        error("Error running '"..sName.."' file for Game '"..sGame.."'.\r\n"..sError, 2);
     end
 
     --try to call the chunk
     local bOK, sRetOrError = pcall(fChunk);
 
     if not (bOK) then
-        error("Error running "..sName.." file for Game "..sGame..".\r\n"..sRetOrError, 2);
+        error("Error running '"..sName.."' file for Game '"..sGame.."'.\r\n"..sRetOrError, 2);
     end
 
     local tUserTable = sRetOrError;
 
     if not (type(tUserTable) == "table") then
-        error("Error in return from "..sName.." file for Game "..sGame..".\r\nExpected type table, Got "..type(tUserTable)..'.', 2);
+        error("Error in return from '"..sName.."' file for Game '"..sGame.."'.\r\nExpected type table, Got "..type(tUserTable)..'.', 2);
     end
 
     return tUserTable;
@@ -315,14 +336,14 @@ local function LoadFileToGrid(pFile)
         }
     };
 
-    --confgure the grids and load the file(s)
+    --confgure the grids and load the data file
     for _, tGrid in ipairs(tGrids) do
         local sGrid = tGrid.Name;
         Grid.DeleteAllItems(        sGrid);
         Grid.LoadFromFile(          sGrid, tGrids[1].File, _sCSVDelimiter, _bAutoSizeGrid);
         Grid.SetFixedRowCount(      sGrid, 1);
         --Grid.SetFixedColumnCount(   sGrid, 1);
-        Grid.SetToolTipsEnabled(    sGrid, false);
+        Grid.SetToolTipsEnabled(    sGrid, false); --TODO at some point, allow user to set tooltips for rows in Info file
         --Grid.SetHeaderSort(         sGrid, false);
         --Grid.SetListMode(           sGrid, true);
         --Grid.ExpandColumnsToFit(    sGrid, true, true);
@@ -330,11 +351,15 @@ local function LoadFileToGrid(pFile)
         --Grid.SetColumnWidth(sGrid, nColumnID, _nDescriptionMaxWidth);
     end
 
+    --update the card set's grid values
+    _nRowCount      = Grid.GetRowCount(_sBaseDataGrid);
+    _nColumnCount   = Grid.GetColumnCount(_sBaseDataGrid);
+    _nCurrentRow    = 1;
+    _nCurrentColumn = 1;
 
+    for nRow = 1, _nRowCount - 1 do
 
-    for nRow = 1, Grid.GetRowCount(_sBaseDataGrid) - 1 do
-
-        for nColumn = 1, Grid.GetColumnCount(_sBaseDataGrid) - 1 do
+        for nColumn = 1, _nColumnCount - 1 do
             ProcessCell(nRow, nColumn);
         end
 
@@ -344,7 +369,7 @@ local function LoadFileToGrid(pFile)
 
     --set loading to finished
     _bAllowSave = false;
-    MainMenu.SetEnabled("Card Set:>Save", false);
+    MainMenu.SetEnabled("CardSet:>Save", false);
     _bIsLoading = false;
 end
 
@@ -365,20 +390,18 @@ end
     @desc Processes a single base grid cell into the final grid and returns data for redraw/export.
     @param number nRow Row index of the cell being processed.
     @param number nColumn Column index of the cell being processed.
-    @return class cProc Resolved processor class for the row.
-    @return table tRow Final grid row data after the cell is updated.
     @note
         <ul>
             <li>Calls the processor's public static <code>ProcessCell</code> when available; otherwise copies base text through.</li>
             <li>Provides <code>fGetFinalValue</code> to the processor to read processed values from prior columns.</li>
         </ul>
 !]]
-ProcessCell = function(nRow, nColumn) --TODO LEFT OFF HERE 1
-    local sColumn       = Grid.GetCellText(_sBaseDataGrid, 0, nColumn);
-    local sText         = Grid.GetCellText(_sBaseDataGrid, nRow, nColumn);
+ProcessCell = function(nRow, nColumn)
+    local sColumn       = GetCellText(_sBaseDataGrid, 0, nColumn);
+    local sText         = GetCellText(_sBaseDataGrid, nRow, nColumn);
 
     local function fGetFinalValue(sColumn, vCoerce)
-        local vRet = Grid.GetCellText(_sFinalDataGrid, nRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
+        local vRet = GetCellText(_sFinalDataGrid, nRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
         local nCoerce = rawtype(vCoerce) == "number" and vCoerce or nil;
 
         if (nCoerce == PROCSYS_TO_NUMBER) then
@@ -391,15 +414,13 @@ ProcessCell = function(nRow, nColumn) --TODO LEFT OFF HERE 1
         return vRet;
     end
 
-    --try to call the chunk
-    --local bOk, vProcRet = pcall(_fRowProc, nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
+    --call the row processor
+    --if
+    --_fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
+
     local vProcRet = _fRowProc(nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
 
-    --if not (bOk) then
-    --    error("ProcSys Error: ProcessCell for Row: "..nRow..", Column: '"..sColumn.."'.\r\n"..vProcRet);--TODO LOG and display
-    --end
-
-    if (vProcRet) then
+    if (rawtype(vProcRet) == "string") then
         ---update the cell's text
         Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, vProcRet);
     else
@@ -409,10 +430,10 @@ ProcessCell = function(nRow, nColumn) --TODO LEFT OFF HERE 1
     --TODO Also, be sure to add function to the env that indicates if a given column as been processed (basically if Column_A.index Column_< B.index)
 
     --get the row after modifications
-    local tFinalRow = Grid.GetRow(_sFinalDataGrid, nRow);
+    --local tFinalRow = Grid.GetRow(_sFinalDataGrid, nRow);
 
     --send back info for the card redraw attempt
-    return tFinalRow;
+    --return tFinalRow;
 end
 
 
@@ -483,10 +504,9 @@ end
 !]]
 local function TryDrawActiveCard()
 
-    if (_bReady) then
+    if (_nCurrentRow) then
         local tRow = Grid.GetRow(_sFinalDataGrid, _nCurrentRow);
-        --Forge.SetActiveRow();
-
+        TryDrawCard(tRow);
     end
 
 end
@@ -534,36 +554,37 @@ end
 local function UpdateCardSetLiveFileRepo() --TODO FINISH
     local oCardSet      = _oActiveCardSet;
     local oLiveFileRepo = _oCardSetLiveFileRepo;
-    local pCardSet      = oCardSet.GetPath();
 
-    --reset the old repo
-    oLiveFileRepo.Reset();--vID, pFile, nTimerInterval, fCallback
-    oLiveFileRepo.Add("RowProc", pCardSet.."\\".._tFileSpecRowProc.Full, _nUserFileRepoInterval,
+    --reset the repo
+    oLiveFileRepo.Reset();
+
+    --watch the RowProc file
+    oLiveFileRepo.Add("RowProc", oCardSet.GetRowProcPath(), _nLiveFileRepoTimerInterval,
     function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
         _sRowProcCode       = sNewText;
         _bRowProcChanged    = true;
     end);
 
-    --TODO all the special procs
-
-    oLiveFileRepo.Add("Draw", pCardSet.."\\".._tFileSpecDraw.Full, _nUserFileRepoInterval,
+    --watch the Draw file
+    oLiveFileRepo.Add("Draw", oCardSet.GetDrawPath(), _nLiveFileRepoTimerInterval,
     function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
         _sDrawCode      = sNewText;
         _bDrawChanged   = true;
     end);
 
+    --watch the Info file
+
+    --watch the Data file
+    oLiveFileRepo.Add("Data", oCardSet.GetDataPath(), _nLiveFileRepoTimerInterval,
+    function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _bDataChanged = true;
+    end);
+
+    --TODO all the special procs, as well as info and
+
+
     oLiveFileRepo.StartAll();
 end
-
-
---[[local function UpdateCardSetFunctions()
-    local oCardSet      = _oActiveCardSet;
-    local oLiveFileRepo = _oCardSetLiveFileRepo;
-    local pCardSet      = oCardSet.GetPath();
-
-    _fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(pCardSet.."\\".._tFileSpecRowProc.Full));
-end]]
-
 
 --[[!
     @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateGameLiveFileRepo
@@ -582,13 +603,13 @@ local function UpdateGameLiveFileRepo()
         _bCFGChanged    = true;
     end
 
-    oLiveFileRepo.Add("CFG", FS.Scripts.."\\".._tFileSpecCFG.Full, _nUserFileRepoInterval, NotifyCFGChanged);
+    oLiveFileRepo.Add("CFG", FS.Scripts.."\\".._tFileSpecCFG.Full, _nLiveFileRepoTimerInterval, NotifyCFGChanged);
     local tCFGFiles = File.Find(FS.CFG.."\\", "*.lua", false, false, nil, nil);
 
     if (type(tCFGFiles) == "table") then
 
         for nIndex, pFile in pairs(tCFGFiles) do
-            oLiveFileRepo.Add("CFG_"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyCFGChanged);
+            oLiveFileRepo.Add("CFG_"..tostring(nIndex):format("%02d"), pFile, _nLiveFileRepoTimerInterval, NotifyCFGChanged);
         end
 
     end
@@ -599,13 +620,13 @@ local function UpdateGameLiveFileRepo()
         _bENVChanged    = true;
     end
 
-    oLiveFileRepo.Add("ENV", FS.Scripts.."\\".._tFileSpecENV.Full, _nUserFileRepoInterval, NotifyENVChanged);
+    oLiveFileRepo.Add("ENV", FS.Scripts.."\\".._tFileSpecENV.Full, _nLiveFileRepoTimerInterval, NotifyENVChanged);
     local tENVFiles = File.Find(FS.ENV.."\\", "*.lua", false, false, nil, nil);
 
     if (type(tENVFiles) == "table") then
 
         for nIndex, pFile in pairs(tENVFiles) do
-            oLiveFileRepo.Add("ENV_"..tostring(nIndex):format("%02d"), pFile, _nUserFileRepoInterval, NotifyENVChanged);
+            oLiveFileRepo.Add("ENV_"..tostring(nIndex):format("%02d"), pFile, _nLiveFileRepoTimerInterval, NotifyENVChanged);
         end
 
     end
@@ -727,7 +748,26 @@ end
 
 
 
+local function ProcessRow(nRow, bSkipRedraw)
+    --reprocess the row
+    --Grid.SetRedraw(_sBaseDataGrid, false); --TODO this may work to speed things up a bit, check it out
+    for nColumn = 1, _nColumnCount - 1 do
+        ProcessCell(nRow, nColumn);
+    end
+    --Grid.SetRedraw(_sBaseDataGrid, true);
 
+    --get the final row
+    local tRow  = Grid.GetRow(_sFinalDataGrid, nRow);
+    --update the final row in the UserEnv
+    UserEnv.ProcSysUpdateRoot {_tRow = tRow};
+    --redraw the card
+    Forge.SetActiveRow(tRow);
+
+    if not (bSkipRedraw) then
+        Forge.RequestCardRedraw();
+    end
+
+end
 
 
 
@@ -839,14 +879,8 @@ return class("ProcSys",
 
             _oActiveGame = oGame;
             _sGameName   = oGame.GetName();
-
-            --load in the user's CFG table
-            local _tCFG = BuildUserTable(_sGameName, _tFileSpecCFG);
-            UserEnv.UserUpdateCFG(_tCFG);
-
-            --load in the user's ENV table
-            local _tEnv = BuildUserTable(_sGameName, _tFileSpecENV);
-            UserEnv.UserUpdateENV(_tEnv);
+            _bCFGChanged = true;
+            _bENVChanged = true;
 
             UpdateGameLiveFileRepo();
         end,
@@ -868,18 +902,6 @@ return class("ProcSys",
             --TODO assert type
             _oActiveCardSet = oCardSet;
 
-            --reset the update status for each row
-            SetReprocRows(_tReprocRows, false);
-
-            local pCardSet = oCardSet.GetPath();
-
-            local fDraw = BuildCardSetFunction("Draw", TextFile.ReadToString(pCardSet.."\\".._tFileSpecDraw.Full));
-            Forge.SetDrawFunction(fDraw);
-
-            _fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(pCardSet.."\\".._tFileSpecRowProc.Full));
-
-            UpdateCardSetLiveFileRepo();
-
             if (_bAllowSave) then
                 local nYesNoCancel = Dialog.Message("Warning!", "You have unsaved changes.\r\nWould you like to save them now?", MB_YESNOCANCEL, MB_ICONEXCLAMATION, MB_DEFBUTTON1);
 
@@ -892,12 +914,20 @@ return class("ProcSys",
 
             end
 
+            --backup the file (if needed)
+            --TryBackupFile(pData); --TODO FIX uncomment and place where appropriate this when ready!!
+
             --set defaults
             _pActiveCSV     = "";
             _bAllowSave     = false;
+            _pActiveCSV     = oCardSet.GetDataPath();
+            _sDrawCode      = TextFile.ReadToString(oCardSet.GetDrawPath());
+            _sRowProcCode   = TextFile.ReadToString(oCardSet.GetRowProcPath());
             _sCardSetName   = oCardSet.GetName();
             _nCardWidth     = oCardSet.GetCardWidth();
             _nCardHeight    = oCardSet.GetCardHeight();
+
+            _bSelectionMade = false;
 
             UserEnv.ProcSysUpdateRoot {
                 --Count     =  TODO
@@ -906,62 +936,16 @@ return class("ProcSys",
             };
 
             --disable the save system
-            MainMenu.SetEnabled("Card Set:>Save", false);
+            MainMenu.SetEnabled("CardSet:>Save", false);
+            MainMenu.SetEnabled("CardSet:>Browse", true);
 
-            local pData = oCardSet.GetDataPath();
+            UpdateCardSetLiveFileRepo();
 
-            if (pData) then
-                --backup the file (if needed)
-                --TryBackupFile(pData); --TODO FIX uncomment this when ready!!
-
-                --store the set name
-                --_sCardSetName = oCardSet.GetName();--String.SplitPath(pData).Filename; --TODO remove/update
-
-                LoadFileToGrid(pData);
-
-                --set the save file variables
-                _pActiveCSV = pData;
-
-                --MainMenu.SetEnabled("Set:>Save", true);
-                MainMenu.SetEnabled("Card Set:>Browse", true);
-            end
+            _bDataChanged    = true;
+            _bRowProcChanged = true;
+            _bDrawChanged    = true;
 
             Forge.SetActiveCardSet(oCardSet);
-
---[[
-            local function LiveFileUpdateCallback(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
-
-                if (tLiveFile.IsActive) then
-                    local nRows = Grid.GetRowCount(_sBaseDataGrid);
-                    _tRowUpdate[tLiveFile.ID] = {};
-                    local tUpdate =_tRowUpdate[tLiveFile.ID];
-
-                    for nRow = 0, nRows - 1 do
-                        tUpdate[nRow] = true;--tLiveFile.HasChanged;
-                    end
-
-                end
-
-            end
-]]
-            --params for callbacks (if needed) -> tLiveFile, sOldText, sNewText, nOldCRC, nCRC
-            --LiveFile.SetCallback("RowProc", function() _bRowProcChanged = true; end);
-            --LiveFile.SetCallback("Draw",     function() _bDrawChanged    = true; end);
-
-            --LiveFile.SetCallback();
-            --tLiveFile, sOldText, sNewText, nOldCRC, nCRC
-
-
-
-            --[[local nRows     = Grid.GetRowCount(_sBaseDataGrid);
-            for nRow = 0, nRows - 1 do
-                _tRowUpdate.RowProc[nRow] = lRowProc.HasChanged;
-                _tRowUpdate.Draw[nRow]     = lDraw.HasChanged;
-            end]]
-
-            --Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
-            --oCardSet.SetActive(true);
-
         end,
 
         --[[!
@@ -1020,28 +1004,34 @@ return class("ProcSys",
                 --process the cell change
                 PrepUpdateGrids();
 
-                local tRow = ProcessCell(nRow, nColumn);
-                UserEnv.ProcSysUpdateRoot {
-                    _tRow = tRow;
-                };
+                ProcessRow(nRow);
 
-                UpdateGrids();
+                UpdateGrids(); --TODO do i still need this?
 
                 --update saveability
                 _bAllowSave = true;
-                MainMenu.SetEnabled("Card Set:>Save", true);
+                MainMenu.SetEnabled("CardSet:>Save", true);
 
                 --update the draw call
                 if (MainMenu.IsChecked("Options:>Draw:>Redraw On Cell Changed")) then
-                    TryDrawCard(tRow);
+                    TryDrawActiveCard();
                 end
 
             end
 
         end,
-
-
-        OnExit = function() --TODO RENAME THIS AN PUT IT I NTHE PROPER PACES TOO...such as OnShutdown
+        --[[!
+            @fqxn CFS.Classes.ProcSys.Methods.OnExit
+            @desc Handles application exit, prompting to save when unsaved changes exist.
+            @note
+                <ul>
+                    <li>Prompts the user to save if edits are pending.</li>
+                    <li>Selecting Yes attempts to save before exiting.</li>
+                    <li>Selecting No exits without saving.</li>
+                    <li>Selecting Cancel aborts the exit.</li>
+                </ul>
+        !]]
+        OnExit = function() --TODO RENAME THIS AND PUT IT IN THE PROPER PAGES TOO...such as OnShutdown
             --TODO FIX kill all global timers!
             if (_bAllowSave) then
                 local nYesNoCancel = Dialog.Message("Warning!", "You have unsaved changes.\r\nWould you like to save them now?", MB_YESNOCANCEL, MB_ICONEXCLAMATION, MB_DEFBUTTON1);
@@ -1077,35 +1067,10 @@ return class("ProcSys",
             --create the game's windows table
             BuildWindows();
 
-            --load last card set if present
-            local sLastCardSetUUID  = INIFile.GetValue(FS.Info, "SESSION", "LastCardSet");
-
-            local oLastCardSet = _oActiveGame.GetCardSet(sLastCardSetUUID);
-
-            if (type(oLastCardSet) == "CardSet") then
-                ProcSys.LoadCardSet(oLastCardSet);
-            end
-
+            --start watchers/timer
             _oGameLiveFileRepo.StartAll();
-
             Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
         end,
-
-
-        --[[!
-            @fqxn CFS.Classes.ProcSys.Methods.OnExit
-            @desc Handles application exit, prompting to save when unsaved changes exist.
-            @note
-                <ul>
-                    <li>Prompts the user to save if edits are pending.</li>
-                    <li>Selecting Yes attempts to save before exiting.</li>
-                    <li>Selecting No exits without saving.</li>
-                    <li>Selecting Cancel aborts the exit.</li>
-                </ul>
-        !]]
-
-
-
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.OnSelectionChanged
             @desc Called whenever one of the girds registers a cell selection change.<br>Draws (or attempts to draw) the card for the given row. Before drawing the card, it calls the row's processor method of the same name, if present, and updates the cell (<em>if text if the sBase and sFinal text values are sent back by the processor</em>).
@@ -1114,39 +1079,31 @@ return class("ProcSys",
             @param number nColumn The column index of the cell selected.
         !]]
         OnSelectionChanged = function(sGrid, nRow, nColumn)
+            _bSelectionMade = true;
+
             --update the current selection
             _nCurrentRow    = nRow;
             _nCurrentColumn = nColumn;
             --local bRedrawn = false;
 
             if (_nLastRow ~= nRow or _tReprocRows[_nCurrentRow]) then
-
-
                 local tRow = Grid.GetRow(_sFinalDataGrid, nRow);
                 UserEnv.ProcSysUpdateRoot {_tRow = tRow};
 
-                if not (_fRowProc) then --first functions load
-                    --UpdateCardSetFunctions();
-                    _fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
-                end
+                _fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
 
-                ProcSys.ProcessActiveRow(not _bReady);
+                --ProcSys.ProcessActiveRow();
                 _nLastRow = nRow;
                 _tReprocRows[_nCurrentRow] = false;
-                _bReady = true;
+                --_bReady = true;
+                ProcessRow(_nCurrentRow);
             end
 
-            --TryDrawCard(tRow);
-
-
---[[
-
-
-            --THIS IS the special column proc section
+            --[[--THIS IS the special column proc section
             --TODO FINISH REMOVE THIS--this should not check if this column is a LuaEditor columns (in the Set ini file) and run the editor on it if so.
             if (cProc and class.haspublicmember(cProc, "OnSelectionChanged")) then
                 local tBaseRow      = Grid.GetRow(_sBaseDataGrid, nRow);
-                local sColumn       = Grid.GetCellText(_sBaseDataGrid, 0, nColumn);
+                local sColumn       = GetCellText(_sBaseDataGrid, 0, nColumn);
                 local sBase, sFinal = cProc.OnSelectionChanged(nRow, nColumn, sColumn, tBaseRow);
 
                 if (rawtype(sBase) == "string" and rawtype(sFinal) == "string") then
@@ -1154,118 +1111,129 @@ return class("ProcSys",
                     Grid.SetCellText(_sFinalDataGrid,   nRow, nColumn, sFinal);
                 end
 
-            end
-
-            --check if the user has updated any relevant files
-            local bRowProcCRCMismatch  = _tRowUpdate.RowProc[nRow];
-            local bDrawCRCMismatch      = _tRowUpdate.Draw[nRow];
-            local bProcessed            = false;
-
-            if (bRowProcCRCMismatch) then
-                ProcSys.ProcessActiveRow();
-                _tRowUpdate.RowProc[nRow] = false;
-                bProcessed = true;
-            end
-
-            --try to draw the card
-            if (_nLastRow ~= nRow or bRowProcCRCMismatch or bDrawCRCMismatch) then
-
-                if not (bProcessed) then
-                    _nLastRow = nRow;
-                    --get the card's row
-                    local tRow  = Grid.GetRow(_sFinalDataGrid, nRow);
-                    UserEnv.ProcSysUpdateRoot {_tRow = tRow};
-                    TryDrawCard(tRow);
-                end
-
-                if (bDrawCRCMismatch) then
-                    _tRowUpdate.Draw[nRow] = false;
-                end
-
             end]]
-            --ELProfiler.format()
         end,
-
         OnTimer = function(nID)
 
-            if (nID == _nFileSyncTimerID and _bReady) then
-                local bResetRows    = _bDataChanged or _bCFGChanged or _bENVChanged or _bRowProcChanged;
-                local bRedraw       = bResetRows or _bDrawChanged;
+            if (nID ~= _nFileSyncTimerID or _bSyncBlocked or _bSyncBusy) then
+                return;
+            end
+
+            _bSyncBusy = true;
+
+            local bOK, sErr = xpcall(function()
+                local bResetRows = _bDataChanged or _bCFGChanged or _bENVChanged or _bRowProcChanged;
+                local bRedraw    = bResetRows or _bDrawChanged;
 
                 if (_bDataChanged) then
                     _bDataChanged = false;
-                    MainMenu.SetEnabled("Card Set:>Save", false);
-                    LoadFileToGrid(pData); --TODO BUG FIX this...get the proper data path, this is nil here
-                    --TODO Reselect row
+                    MainMenu.SetEnabled("CardSet:>Save", false);
+
+                    --disable Forge draw while the file is reloaded
+                    Forge.SetDrawEnabled(false);
+
+                    local bLoadGridOK, sLoadGridErr = xpcall(function()
+                        --reload the file
+                        LoadFileToGrid(_oActiveCardSet.GetDataPath());
+
+                        --update the current row and column if needed
+                        if (_nCurrentRow >= _nRowCount) then
+                            _nCurrentRow = _nRowCount - 1;
+                        end
+
+                        if (_nCurrentColumn >= _nColumnCount) then
+                            _nCurrentColumn = _nColumnCount - 1;
+                        end
+
+                    end, XPCallError);
+
+                    --always reenable Forge draw
+                    Forge.SetDrawEnabled(true);
+
+                    if not (bLoadGridOK) then
+                        error(sLoadGridErr, 0);
+                    end
+
                 end
 
                 if (_bCFGChanged) then
                     _bCFGChanged = false;
-                    UserEnv.UserUpdateCFG(BuildUserTable(_sGameName, _tFileSpecCFG));
+                    local tCFGOrErr;
+
+                    local bOK, sErr = xpcall(function()
+                        tCFGOrErr = BuildUserTable(_sGameName, _tFileSpecCFG);
+                    end, XPCallError);
+
+                    if (type(tCFGOrErr) == "table") then
+                        UserEnv.UserUpdateCFG(tCFGOrErr);
+                    end
+
+                    if not (bOK) then
+                        error(sErr, 0);
+                    end
+
                 end
 
                 if (_bENVChanged) then
                     _bENVChanged = false;
-                    UserEnv.UserUpdateENV(BuildUserTable(_sGameName, _tFileSpecENV));
+                    local tENVOrErr;
+
+                    local bOK, sErr = xpcall(function()
+                        tENVOrErr = BuildUserTable(_sGameName, _tFileSpecENV);
+                    end, XPCallError);
+
+                    if (type(tENVOrErr) == "table") then
+                        UserEnv.UserUpdateENV(tENVOrErr);
+                    end
+
+                    if not (bOK) then
+                        error(sErr, 0);
+                    end
                 end
 
                 if (_bRowProcChanged) then
                     _bRowProcChanged = false;
-                    _fRowProc = BuildCardSetFunction("RowProc", _sRowProcCode);
-                end
+                    local fProcOrErr = BuildCardSetFunction("RowProc", _sRowProcCode);
 
-                if (bResetRows) then
-                    SetReprocRows(true);
-                    ProcSys.ProcessActiveRow(true);
-                    _tReprocRows[_nCurrentRow] = false;
-                end
-
-                if (_bDrawChanged) then
-                    _bDrawChanged = false;
-                    local fDraw = BuildCardSetFunction("Draw", _sDrawCode);
-                    Forge.SetDrawFunction(fDraw);
-                end
-
-                if (bRedraw) then
-                    _bDrawChanged = false;
-                    TryDrawCard(Grid.GetRow(_sFinalDataGrid, _nCurrentRow));
-                end
-
-                --[[
-                if (_oActiveCardSet) then
-                    local nRowProcCRC  = _oActiveCardSet.GetLiveFile("RowProc").CRC;
-                    local nDrawCRC      = _oActiveCardSet.GetLiveFile("Draw").CRC;
-                    local bProcessed    = false;
-
-                    if (nRowProcCRC ~= _nRowProcCRC) then
-                        _nRowProcCRC = nRowProcCRC;
-
-                        if (_nCurrentRow ~= -1) then
-                            ProcSys.ProcessActiveRow();
-                            _tRowCRC.RowProc[_nCurrentRow] = _nRowProcCRC;
-                            --_tRowCRC.RowProc[_nCurrentRow] = false;
-                            _tRowCRC.Draw[_nCurrentRow]     = nDrawCRC;
-                            bProcessed = true;
-                        end
-
+                    if (rawtype(fProcOrErr) == "function") then
+                        _fRowProc = fProcOrErr;
                     end
 
-                    if (nDrawCRC ~= _nDrawCRC) then
-                        _nDrawCRC = nDrawCRC;
+                end
 
-                        if (not bProcessed and _nCurrentRow ~= -1) then
-                            _tRowCRC.Draw[_nCurrentRow] = _nDrawCRC;
-                            TryDrawCard(Grid.GetRow(_sFinalDataGrid, _nCurrentRow));
-                        end
+                if (_bSelectionMade) then
 
+                    if (bResetRows) then
+                        SetReprocRows(true);
+                        _tReprocRows[_nCurrentRow] = false;
+                        ProcessRow(_nCurrentRow, true);
                     end
 
-                end]]
+                    if (_bDrawChanged) then
+                        _bDrawChanged = false;
 
+                        local fDraw = BuildCardSetFunction("Draw", _sDrawCode);
+
+                        if (rawtype(fDraw) == "function") then
+                            Forge.SetDrawFunction(fDraw);
+                        end
+                    end
+
+                    if (bRedraw) then
+                        _bDrawChanged = false;
+                        TryDrawCard(Grid.GetRow(_sFinalDataGrid, _nCurrentRow));
+                    end
+
+                end
+            end, XPCallError);
+
+            _bSyncBusy = false;
+
+            if not (bOK) then
+                error(sErr, 1);
             end
 
         end,
-
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.ProcessActiveRow
             @desc Reprocesses all editable cells in the currently selected row and redraws its card.
@@ -1277,27 +1245,7 @@ return class("ProcSys",
                 </ul>
         !]]
         ProcessActiveRow = function(bSkipRedraw)
-            local nRow = _nCurrentRow;
-
-            --reprocess the row
-            --Grid.SetRedraw(_sBaseDataGrid, false); --TODO this may work, check it out
-            for nColumn = 1, Grid.GetColumnCount(_sBaseDataGrid) - 1 do
-                ProcessCell(nRow, nColumn);
-            end
-            --Grid.SetRedraw(_sBaseDataGrid, true);
-
-            --get the final row
-            local tRow  = Grid.GetRow(_sFinalDataGrid, nRow);
-            --update the final row in the UserEnv
-            UserEnv.ProcSysUpdateRoot {_tRow = tRow};
-            --redraw the card
-            Forge.SetActiveRow(tRow);
-
-            if not (bSkipRedraw) then
-                Forge.RequestCardRedraw();
-            end
-
-            --TryDrawCard(tRow);--TODO QUESTION...should this be drawing here? Seems like it's doing more than the name suggests.
+            ProcessRow(_nCurrentRow, bSkipRedraw);
         end,
 
         --TODO put in examplke and show the args for the callback
@@ -1343,74 +1291,16 @@ return class("ProcSys",
                 --Grid.SaveToFile(_sFinalDataGrid, _pExportCSV);
 
                 _bAllowSave = false;
-                MainMenu.SetEnabled("Card Set:>Save", false);
+                MainMenu.SetEnabled("CardSet:>Save", false);
             end
 
         end,
 
 
-        --[[SaveDraft = function(sID, sCode)--TODO FIX and FINISH
-            local wEnv = setmetatable({
-                sID     = sID,
-                string  = string,
-            }, { __index = _G });
-
-            local fChunk, sError = load(TextFile.ReadToString(FS.Drafts), "Drafts.lua", "t", wEnv); --TODO QUESTION IS THIS EVEN BEING USED ANYMORE???
-
-            if not (fChunk) then
-                --error(sError, 3);
-            end
-
-            local bOk, vDraftsOrErr = pcall(fChunk);
-            local tDrafts = vDraftsOrErr;
-
-            if not (bOk) then
-                --error(sChunkName..": "..tostring(vDraftsOrErr), 3);
-                tDrafts = nil;
-            end
-
-            --Process here
-            if type.istable(tDrafts) then
-                tDrafts[sID] = base64.enc(sCode);
-                TextFile.WriteFromString(_pDrafts, serialize(tDrafts), false);
-            end
-
-        end,]]
-
-
-        --[[!
-            @fqxn CFS.Classes.ProcSys.Methods.PrepActiveGame
-            @desc Ensures the exporter and processor registries exist for the active game.
-        !]]
-        --[[PrepActiveGame = function()
-            --ensure the processor and exporter tables exist for the current game and clear them
-            _tExporters[_sGame]         = {};
-             _tProcResolvers[_sGame]    = nil;
-        end,]]
-
-
-        --[[SetIsValid = function(pFolder)
-            local function CheckFile(sFile)
-                return File.DoesExist((pFolder.."\\"..sFile):gsub("\\\\", "\\"));
-            end
---TODO check other things as needed
-            local bFilesAreValid =
-                rawtype(pFolder) == "string"        and
-                Folder.DoesExist(pFolder)           and
-                Path.GetEndFolder(pFolder):isuuid() and
-                CheckFile("Data.csv")               and
-                CheckFile("Draw.lua")               and
-                CheckFile("Info.cfg")               and
-                CheckFile("Proc.lua")
-
-            local pSetID = bFilesAreValid and Path.GetEndFolder(pFolder) or "NO_SET_FOUND";
-            return bFilesAreValid, pSetID;
-        end,]]
-
         --[[!
             @fqxn CFS.Classes.ProcSys.Methods.SetWindowVisible
             @desc Shows or hides a ProcSys tool window.
-            @param number eTool Tool/window identifier.
+            @param number eTool Tool/window identifier (<a href="#CFS.Enums.PANE">Window/Tool Enum</a>).
             @param boolean vFlag Visibility state.
         !]]
         SetWindowVisible = function(eTool, vFlag)

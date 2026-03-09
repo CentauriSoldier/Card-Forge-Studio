@@ -20,7 +20,7 @@ constant("APP_PATREON", "https://www.patreon.com/CentauriSoldier");
 constant("APP_WEBSITE", "https://www.cardforge.studio/");
 
 
-constant("FOLDER_CARD_SETS", "Card Sets"); --this must be here since it needs to be accessed before the game is prepped
+constant("FOLDER_CARD_SETS", "CardSets"); --this must be here since it needs to be accessed before the game is prepped
 
 --constant("TIMER_HTML_PROCESS_INTERVAL", 3200);
 --constant("TIMER_HTML_PROCESS_ID",       97);
@@ -29,21 +29,21 @@ constant("LICENSE", TextFile.ReadToString(_Docs.."\\Licenses\\licenses.txt"));
 
 constant("FORGE_CANVAS_NAME",               "cvs card");
 constant("FORGE_REDRAW_TIMER_ID",           100);
-constant("FORGE_REDRAW_TIMER_INTERVAL",     50);
+constant("FORGE_REDRAW_TIMER_INTERVAL",     10);
 constant("FORGE_REDRAW_SIZING_INTERVAL",    300);
 constant("FORGE_STATUS_NAME",               "par status");
 constant("FORGE_STATUS_MOUSE_NAME",         "par status mouse");
 constant("FORGE_STATUS_MOUSE_NEG_NAME",     "par status mouse neg");
 
-constant("PROCSYS_FILE_SYNC_TIMER_ID",        101);
-constant("PROCSYS_FILE_SYNC_TIMER_INTERVAL",  400);
-constant("PROCSYS_TO_TABLE",    1);
-constant("PROCSYS_TO_NUMBER",   2);
-constant("PROCSYS_GRID_BASE",   "grd base data");
-constant("PROCSYS_GRID_FINAL",  "grd final data");
+constant("PROCSYS_LIVE_FILE_REPO_TIMER_INTERVAL",   250);
+constant("PROCSYS_SYNC_TIMER_ID",                   101);
+constant("PROCSYS_SYNC_TIMER_INTERVAL",             10);
+constant("PROCSYS_TO_TABLE",                        1);
+constant("PROCSYS_TO_NUMBER",                       2);
+constant("PROCSYS_GRID_BASE",                       "grd base data");
+constant("PROCSYS_GRID_FINAL",                      "grd final data");
 
 
-constant("USER_FILE_REPO_TIMER_INTERVAL",  400);
 
 
 
@@ -52,10 +52,11 @@ constant("USER_FILE_REPO_TIMER_INTERVAL",  400);
 
 --[[!
     @fqxn CFS.Enums.PANE
-    @desc Identifiers for common window panes.
+    @desc Identifiers for common window panes/tools.
     <ul>
-        <li>DATA_EDIT – Base data editor pane.</li>
-        <li>DATA_VIEW – Final data viewer pane.</li>
+        <li><p><strong>MAIN</strong>        – The main app window.</p></li>
+        <li><p><strong>DATA_EDIT</strong>   – Base data editor pane.</p></li>
+        <li><p><strong>DATA_VIEW</strong>   – Final data viewer pane.</p></li>
     </ul>
 !]]
 enum("PANE", {"MAIN", "DATA_EDIT", "DATA_VIEW"});

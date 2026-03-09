@@ -11,24 +11,40 @@ local type              = type;
     isstring            = type.istring;
 local floor             = math.floor;
 local clamp             = math.clamp;
-local GetActiveCardSet  = ProcSys.GetActiveCardSet;
 local SanitizePath      = SanitizePath;
 
 local _pAppCFG      = FS.AppCFG;
 
+local File          = File;
+    local FileDoesExist         = File.DoesExist;
 local Color         = Color;
+local Canvas        = Canvas;
+local Clipboard     = Clipboard
+    local ClipboardCopyText     = Clipboard.CopyText;
+local Color         = Color;
+    local ColorRGBA             = Color.RGBA;
 local Drawing       = Drawing;
 local DrawingFont   = DrawingFont;
+local DrawingImage  = DrawingImage;
+    local DrawingImageNew       = DrawingImage.New;
+    local DrawingImageGetID     = DrawingImage.GetID
 local INIFile       = INIFile;
+local Paragraph     = Paragraph;
+    local ParagraphGetText      = Paragraph.GetText;
+    local ParagraphSetText      = Paragraph.SetText;
+
+
+
 
 local FontStyle   = require("Forge.FontStyle");
 -------------------------------------------------------------------
 --TODO move all these settings to file AND add a LiveFileRepo...long after Beta, not critical
-local _oWhite               = Color.RGBA(255, 255, 255, 255); --TODO Fix names!!! _
-local _oBlack               = Color.RGBA(0, 0, 0, 255);
-local _oClear               = Color.RGBA(0, 0, 0, 0)
-local _nRulerColor          = Color.RGBA(240, 100, 100, 255); --TODO change these values from INI file
-local _nRulerBGColor        = Color.RGBA(255, 255, 255, 0)
+local _nColorWhite      = ColorRGBA(255, 255, 255, 255);
+local _nColorBlack      = ColorRGBA(0, 0, 0, 255);
+local _nColorClear      = ColorRGBA(0, 0, 0, 0)
+local _nColorRuler      = ColorRGBA(240, 100, 100, 255);
+local _nColorRulerBG    = ColorRGBA(255, 255, 255, 0)
+local _nColorForgeBG    = ColorRGBA(51, 51, 51, 255)
 
 local _tHorRuler            = {--TODO static functions and variables to change these values
     Y           = 0,
@@ -37,7 +53,7 @@ local _tHorRuler            = {--TODO static functions and variables to change t
     MinorStep   = 25,
     MajorHeight = 16,
     MinorHeight = 10,
-    Color       = _nRulerColor,
+    Color       = _nColorRuler,
 };
 local _tVerRuler            = {--TODO static functions and variables to change these values
     X           = 0,
@@ -46,21 +62,21 @@ local _tVerRuler            = {--TODO static functions and variables to change t
     MinorStep   = 25,
     MajorWidth  = 16,
     MinorWidth  = 10,
-    Color       = _nRulerColor,
+    Color       = _nColorRuler,
 };
 local _tCenterLines = {
-    Color       = Color.RGBA(50, 50, 255, 255),
+    Color       = ColorRGBA(50, 50, 255, 255),
 };
 local _tHorGuide = {
-    Color       = Color.RGBA(0, 255, 48, 255),
+    Color       = ColorRGBA(0, 255, 48, 255),
 };
 local _tVerGuide = {
-    Color       = Color.RGBA(0, 255, 48, 255),
+    Color       = ColorRGBA(0, 255, 48, 255),
 };
 
 
-
-local _fDraw;
+--NOTE: DO NOT REMOVE: dead function in case initial user function is bad
+local _fDraw = function() end;
 
 -------------------------------------------------------------------
 local _nPageWidth           = -1;
@@ -113,12 +129,15 @@ local _nCardHeight    = 100;
 local _sCardSetName   = "";
 ------------------------------------------------------------------- Redraw & Filesync
 local _bRedrawUtil              = true; --set to true so the Util redraws on first pass by default
-local _bRedrawCard              = false;
+local _bRedrawCard              = true;
 local _bRedrawCanvas            = false;
+local _bUtilVisible             = true;
 local _tActiveRow               = false;
 local _bIsResizing              = false;
 local _bForgeAutoSizing         = false;
 local _nTimeDelta               = 0;
+local _bDrawBlocked             = false;
+local _bDrawTimerBusy           = false;
 local _nSizingDelta             = FORGE_REDRAW_SIZING_INTERVAL;
 local _nRedrawTimerID           = FORGE_REDRAW_TIMER_ID;
 local _nRedrawTimerInterval     = FORGE_REDRAW_TIMER_INTERVAL;
@@ -135,7 +154,7 @@ end
 
 local function LoadImage(sPath, sName)
     --TODO assertions
-    if not (File.DoesExist(sPath)) then
+    if not (FileDoesExist(sPath)) then
         local sLastError = _tblErrorMessages[Application.GetLastError()];
         local sError = sLastError ~= "Success." and sLastError or "Image could not be found."..sLastError --TODO QUESTION is this correct?
         ImageLoadError(sPath, sName or "UNKNOWN", sError);
@@ -153,7 +172,7 @@ local function LoadImage(sPath, sName)
             ImageLoadError(sPath, sName, "Image could not be loaded with DrawingImage.Load().");
         end
 
-        local nID = DrawingImage.GetID(hImage);
+        local nID = DrawingImageGetID(hImage);
 
         if not (nID) then
             ImageLoadError(sPath, sName, "Image ID not retrieved DrawingImage.GetID().");
@@ -167,9 +186,9 @@ local function LoadImage(sPath, sName)
 end
 
 
-local function ClearToTransparent(D)
+local function ClearCanvas(D)
     D.SetFilteringMode(DRAW_BLEND_ALLCHANNELS);
-    D.DrawRectangle(0, 0, _nCardWidth, _nCardHeight, Color.RGBA(0, 0, 0, 0));
+    D.DrawRectangle(0, 0, _nCardWidth, _nCardHeight, _nColorClear);
     D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
 end
 
@@ -182,12 +201,12 @@ local function CreateImage(hImage, nImageID)
     --create the image only if it's not already been created
     if (hImage == null and nImageID == null) then
         --create, check, and store the image handle
-        hRet        = DrawingImage.New(_nCardWidth, _nCardHeight, BIT_DEPTH_32, DRAW_IMAGE_TRANSPARENT);
+        hRet        = DrawingImageNew(_nCardWidth, _nCardHeight, BIT_DEPTH_32, DRAW_IMAGE_TRANSPARENT);
         sMessage    = sBaseError.." create image for canvas object, \"${canvas}\".";
         assert(hRet, sMessage % {canvas = _sCanvas});
 
         --get, check, and store the image ID
-        nRet        = DrawingImage.GetID(hRet);
+        nRet        = DrawingImageGetID(hRet);
         sMessage    = sBaseError.." get image ID for canvas object, \"${canvas}\" having image handle, ${handle}.";
         assert(nRet, sMessage % {canvas = _sCanvas, handle = tostring(hRet) or "nil"});
     end
@@ -215,7 +234,6 @@ local function DrawCenterLineHor(sObject, D, hInternalDC)
     local nMidPointY = floor(_nCardHeight / 2);
     D.DrawLineEx(0, nMidPointY, _nCardWidth, nMidPointY, _tCenterLines.Color);
 end
-
 
 local function DrawCenterLineVer(sObject, D, hInternalDC)
     local nMidPointX = floor(_nCardWidth / 2);
@@ -254,7 +272,6 @@ local function DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC)
 end
 
 local function DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC) --TODO minor issue, realign first minor step when HOR ruler is drawing to be in line with both minor ticks
-
     local nX             = _tVerRuler.X;
     local nMajorStep     = _tVerRuler.MajorStep;
     local nMinorStep     = _tVerRuler.MinorStep;
@@ -290,7 +307,7 @@ end
 
 
 local function DrawUtilObjects(sObject, D, hInternalDC)
-    ClearToTransparent(D);
+    ClearCanvas(D);
 
     --draw utility objects
     local bDrawRulerHor = MainMenu.IsChecked("Options:>Draw:>Horizontal Ruler");
@@ -338,59 +355,99 @@ local function CanvasInputCallback(tEvent)
     _bIsShiftDown   = tEvent.Keyboard.Modifiers.Shift;
 
     if (nEventCode == CANVAS_MOUSE_MOVE) then
-        Paragraph.SetText(_sStatusMouseObject,      nX..", "..nY);
-        Paragraph.SetText(_sStatusMouseNegObject,   nNegX..", "..nNegY);
+        ParagraphSetText(_sStatusMouseObject,      nX..", "..nY);
+        ParagraphSetText(_sStatusMouseNegObject,   nNegX..", "..nNegY);
 
+    --[[!
+        @fqxn CFS.Bindings.Left-Click
+        @desc Left-clicking the canvas copies the X and Y coordinates to the clipboard as "X, Y".
+    !]]
     elseif (nEventCode == CANVAS_MOUSE_LEFT_CLICK) then
 
+        --[[!
+            @fqxn CFS.Bindings.Left-Click_+_Control
+            @desc Holding Control and Left-clicking the canvas places a horizontal guide at clicked location and copies the Y coordinate and -Y (Y − CardHeight) to the clipboard as "Y, -Y".
+        !]]
         if _bIsControlDown and not _bIsShiftDown then
             _nGuideHorY         = floor(tEvent.Mouse.y * _CoVYH);
             _bRedrawUtil        = true;
             _bRedrawCanvas      = true;
-            Clipboard.CopyText(nY..", "..nNegY);
+            ClipboardCopyText(nY..", "..nNegY);
 
+        --[[!
+            @fqxn CFS.Bindings.Left-Click_+_Control_+_Shift
+            @desc Holding Control and Shift and Left-clicking the canvas removes the horizontal guide and copies the X and Y coordinates to the clipboard as "X, Y".
+        !]]
         elseif _bIsControlDown and _bIsShiftDown and _nGuideHorY > -1 then
             _nGuideHorY         = -100;
             _bRedrawUtil        = true;
             _bRedrawCanvas      = true;
+            ClipboardCopyText(ParagraphGetText(_sStatusMouseObject));
 
         else
-            Clipboard.CopyText(Paragraph.GetText(_sStatusMouseObject));
+            ClipboardCopyText(ParagraphGetText(_sStatusMouseObject));
         end
 
+    --[[!
+        @fqxn CFS.Bindings.Right-Click
+        @desc Left-clicking the canvas copies the -X (X - CardWidth) and -Y (Y - CardHeight) coordinates to the clipboard as "-X, -Y".
+    !]]
     elseif (nEventCode == CANVAS_MOUSE_RIGHT_CLICK) then
 
+        --[[!
+            @fqxn CFS.Bindings.Right-Click_+_Control
+            @desc Holding Control and Right-clicking the canvas places a vertical guide at clicked location and copies the X coordinate and -X (X − CardWidth) to the clipboard as "X, -X".
+        !]]
         if _bIsControlDown and not _bIsShiftDown then
             _nGuideVerX         = floor(tEvent.Mouse.x * _CoVXW);
             _bRedrawUtil        = true;
             _bRedrawCanvas      = true;
-            Clipboard.CopyText(nX..", "..nNegX);
+            ClipboardCopyText(nX..", "..nNegX);
 
+        --[[!
+            @fqxn CFS.Bindings.Right-Click_+_Control_+_Shift
+            @desc Holding Control and Shift and Right-clicking the canvas removes the vertical guide and copies the X and Y coordinates to the clipboard as "X, Y".
+        !]]
         elseif _bIsControlDown and _bIsShiftDown and _nGuideVerX > -1 then
             _nGuideVerX         = -100;
             _bRedrawUtil        = true;
             _bRedrawCanvas      = true;
+            ClipboardCopyText(ParagraphGetText(_sStatusMouseNegObject));
+
         else
-            Clipboard.CopyText(Paragraph.GetText(_sStatusMouseNegObject));
+            ClipboardCopyText(ParagraphGetText(_sStatusMouseNegObject));
         end
 
+    --[[!
+        @fqxn CFS.Bindings.Middle-Click
+        @desc Middle-clicking the canvas copies the X and Y coordinates to the clipboard as "X, Y".
+    !]]
     elseif (nEventCode == CANVAS_MOUSE_MIDDLE_DOWN) then
 
+        --[[!
+            @fqxn CFS.Bindings.Middle-Click_+_Control
+            @desc Holding Control and Middle-clicking the canvas places a both a vertical and horizontal guide at clicked location and copies the X and Y coordinates to the clipboard as "X, Y".
+        !]]
         if _bIsControlDown and not _bIsShiftDown then
             _nGuideVerX         = floor(tEvent.Mouse.x * _CoVXW);
             _nGuideHorY         = floor(tEvent.Mouse.y * _CoVYH);
             _bRedrawUtil        = true;
             _bRedrawCanvas      = true;
-            Clipboard.CopyText(nX..", "..nY);
+            ClipboardCopyText(nX..", "..nY);
 
+        --[[!
+            @fqxn CFS.Bindings.Middle-Click_+_Control_+_Shift
+            @desc Holding Control and Shift and Middle-clicking the canvas removes both the vertical and horizontal guide and copies the X and Y coordinates to the clipboard as "X, Y".
+        !]]
         elseif _bIsControlDown and _bIsShiftDown and _nGuideVerX > -1 and _nGuideHorY > -1 then
             _nGuideVerX         = -100;
             _nGuideHorY         = -100;
             _bRedrawUtil        = true;
             _bRedrawCanvas      = true;
+            ClipboardCopyText(nX..", "..nY);
 
         else
-            Clipboard.CopyText(Paragraph.GetText(_sStatusMouseObject));
+            ClipboardCopyText(ParagraphGetText(_sStatusMouseObject));
         end
 
     end
@@ -438,7 +495,7 @@ local function Draw()--, bExport, fExport) --TODO move this out to private stati
         _D           = D;
         _InternalDC  = hInternalDC;
 
-        ClearToTransparent(D);
+        --ClearCanvas(D);
 
         --execute the proc's draw method
         _fDraw(sObject, D, hInternalDC);
@@ -448,18 +505,18 @@ local function Draw()--, bExport, fExport) --TODO move this out to private stati
     --hImage:Resize(nWidth, nHeight, DRAW_RESIZE_RAW);
 
     --clear the canvas
-    Canvas.Clear(_sCanvas, _oClear);
+    Canvas.Clear(_sCanvas, _nColorClear);
 
     --draw on the card image
     if (_bRedrawCard) then
-        _hImage:Draw(ProcDraw);
         _bRedrawCard = false;
+        _hImage:Draw(ProcDraw);
     end
 
     --draw on the util image
     if (_bRedrawUtil) then
-        _hImageUtil:Draw(DrawUtilObjects);
         _bRedrawUtil = false;
+        _hImageUtil:Draw(DrawUtilObjects);
     end
 
     --draw the card and util images onto the canvas (since drawing directly on the canvas is no bueno)
@@ -490,6 +547,67 @@ end
 
 
 
+local function UpdatePageLayout()
+
+    --build the rects
+    local tStatusMouseRect = {
+        x       = 0,
+        y       = 0,
+        width   = _nStatusMouseWidth,
+        height  = _nStatusHeight,
+    };
+
+    local tStatusMouseNegRect = {
+        x       = tStatusMouseRect.x + tStatusMouseRect.width,
+        y       = 0,
+        width   = _nStatusMouseWidth,
+        height  = _nStatusHeight,
+    };
+
+    local tStatusRect = {
+        x       = tStatusMouseNegRect.x + tStatusMouseNegRect.width,
+        y       = 0,
+        width   = _nPageWidth - tStatusMouseRect.width - tStatusMouseNegRect.width,
+        height  = _nStatusHeight,
+    };
+
+    local tOuter = {
+        x       = 0,
+        y       = _nStatusHeight,
+        width   = _nPageWidth,
+        height  = _nPageHeight - _nStatusHeight,
+    };
+
+    local tInner = {
+        x       = 0,
+        y       = 0,
+        width   = _nCardWidth,
+        height  = _nCardHeight,
+    };
+
+    local tRect = math.geometry.fitrect(tOuter, tInner, true);
+    Input.SetSize(      _sCanvas,               tRect.width,                tRect.height);
+    Input.SetPos(       _sCanvas,               tRect.x,                    tRect.y);
+    Paragraph.SetSize(  _sStatusMouseObject,    tStatusMouseRect.width,     tStatusMouseRect.height);
+    Paragraph.SetPos(   _sStatusMouseObject,    tStatusMouseRect.x,         tStatusMouseRect.y);
+    Paragraph.SetSize(  _sStatusMouseNegObject, tStatusMouseNegRect.width,  tStatusMouseNegRect.height);
+    Paragraph.SetPos(   _sStatusMouseNegObject, tStatusMouseNegRect.x,      tStatusMouseNegRect.y);
+    Paragraph.SetSize(  _sStatusObject,         tStatusRect.width,          tStatusRect.height);
+    Paragraph.SetPos(   _sStatusObject,         tStatusRect.x,              tStatusRect.y);
+
+    --store (and locally update) the canvas size info
+    local tSize     = Input.GetSize(_sCanvas);
+    _nCanvasWidth   = tSize.Width;
+    _nCanvasHeight  = tSize.Height;
+
+    --update the CoVs
+    _CoVXW = _nCardWidth    /   _nCanvasWidth;
+    _CoVYH = _nCardHeight   /   _nCanvasHeight;
+end
+
+local function XPCallError(vErr)
+    return debug.traceback(tostring(vErr), 2);
+end
 
 --[[tUserEnv.S = {}; --TODO INTEGRATE THIS INTO A FUNCTION!
 --local tStyles = INIFile.GetSectionNames(FS.Styles); --_TODO load this from forge, not from INI...too slow
@@ -578,7 +696,7 @@ return class("Forge",
             nRet = nVal - nTextHeight / 2;
             return nRet;
         end,
-        CenterOn = function(nX, nY)
+        CenterOn = function(nX, nY) --TODO FINISH
 
         end,
         --[[!
@@ -1013,7 +1131,7 @@ return class("Forge",
 
                     --TEST (keep it, but make it match the real ink-box)
                     --local R = math.random;
-                    --D.DrawRectangle(floor(nX), floor(nY), floor(nTotalW), floor(nTotalH), Color.RGBA(R(1, 255),R(1, 255),R(1, 255),60));
+                    --D.DrawRectangle(floor(nX), floor(nY), floor(nTotalW), floor(nTotalH), ColorRGBA(R(1, 255),R(1, 255),R(1, 255),60));
                     --TEST
 
                     oStyle.Draw(_Object, _D, _InternalDC, floor(nDrawX), floor(nDrawY), sPart, vAngle);
@@ -1181,62 +1299,9 @@ return class("Forge",
                 INIFile.SetValue(_pAppCFG, sSection, "Y", tostring(tPos.Y));
             end
 
-            local nStatusYStart = nPageHeight - _nStatusHeight;
+            --local nStatusYStart = nPageHeight - _nStatusHeight;
 
-            --build the rects
-            local tStatusMouseRect = {
-                x       = 0,
-                y       = 0,
-                width   = _nStatusMouseWidth,
-                height  = _nStatusHeight,
-            };
-
-            local tStatusMouseNegRect = {
-                x       = tStatusMouseRect.x + tStatusMouseRect.width,
-                y       = 0,
-                width   = _nStatusMouseWidth,
-                height  = _nStatusHeight,
-            };
-
-            local tStatusRect = {
-                x       = tStatusMouseNegRect.x + tStatusMouseNegRect.width,
-                y       = 0,
-                width   = nPageWidth - tStatusMouseRect.width - tStatusMouseNegRect.width,
-                height  = _nStatusHeight,
-            };
-
-            local tOuter = {
-                x       = 0,
-                y       = _nStatusHeight,
-                width   = nPageWidth,
-                height  = nPageHeight - _nStatusHeight,
-            };
-
-            local tInner = {
-                x       = 0,
-                y       = 0,
-                width   = _nCardWidth,
-                height  = _nCardHeight,
-            };
-
-            local tRect = math.geometry.fitrect(tOuter, tInner, true);
-            Input.SetSize(      _sCanvas,               tRect.width,                tRect.height);
-            Input.SetPos(       _sCanvas,               tRect.x,                    tRect.y);
-            Paragraph.SetSize(  _sStatusMouseObject,    tStatusMouseRect.width,     tStatusMouseRect.height);
-            Paragraph.SetPos(   _sStatusMouseObject,    tStatusMouseRect.x,         tStatusMouseRect.y);
-            Paragraph.SetSize(  _sStatusMouseNegObject, tStatusMouseNegRect.width,  tStatusMouseNegRect.height);
-            Paragraph.SetPos(   _sStatusMouseNegObject, tStatusMouseNegRect.x,      tStatusMouseNegRect.y);
-            Paragraph.SetSize(  _sStatusObject,         tStatusRect.width,          tStatusRect.height);
-            Paragraph.SetPos(   _sStatusObject,         tStatusRect.x,              tStatusRect.y);
-
-            --store (and locally update) the canvas size info
-            local tSize     = Input.GetSize(_sCanvas);
-            _nCanvasWidth   = tSize.Width;
-            _nCanvasHeight  = tSize.Height;
-
-            --update the CoVs
-            _CoVXW = _nCardWidth    /   _nCanvasWidth;
-            _CoVYH = _nCardHeight   /   _nCanvasHeight;
+            UpdatePageLayout();
 
             if (_tActiveRow) then
                 _bRedrawCanvas = true;
@@ -1244,8 +1309,8 @@ return class("Forge",
             end
 
         end,
-        STYLE = null, --public enum
-        OnTimer = function(nID)
+        STYLE = null, --public enum --TODO Does it need to be public still? It gets injected into the userenv so why make it public?
+        OnTimerOLD = function(nID)
 
             if (nID == _nRedrawTimerID) then
                 --increment the delta time
@@ -1270,13 +1335,85 @@ return class("Forge",
             end
 
         end,
+        OnTimerNEWER = function(nID)
+
+            if (nID ~= _nRedrawTimerID or _bDrawBlocked or _bDrawTimerBusy or not _tActiveRow) then
+                return;
+            end
+
+            _bDrawTimerBusy = true;
+
+            local bOK, sErr = pcall(function()
+                --increment the delta time
+                _nTimeDelta = _nTimeDelta + _nRedrawTimerInterval;
+
+                --check if a redraw request was made and that we're done resizing
+                if (_bRedrawCanvas and not _bIsResizing) then
+                    --redraw the card
+                    Draw();
+                    --fulfill the request
+                    _bRedrawCanvas = false;
+                end
+
+                --if enough time has passed...
+                if (_nTimeDelta >= _nSizingDelta) then
+                    --...indicate resizing has stopped
+                    _bIsResizing = false;
+                    --...and reset the time delta
+                    _nTimeDelta = 0;
+                end
+            end);
+
+            _bDrawTimerBusy = false;
+
+            if not (bOK) then
+                error(sErr, 0);
+            end
+
+        end,
+        OnTimer = function(nID)
+
+            if (nID ~= _nRedrawTimerID or _bDrawBlocked or _bDrawTimerBusy) then
+                return;
+            end
+
+            _bDrawTimerBusy = true;
+
+            local bOK, sErr = xpcall(function()
+                --increment the delta time
+                _nTimeDelta = _nTimeDelta + _nRedrawTimerInterval;
+
+                --check if a redraw request was made and that we're done resizing
+                if (_bRedrawCanvas and not _bIsResizing) then
+                    --redraw the card
+                    Draw();
+                    --fulfill the request
+                    _bRedrawCanvas = false;
+                end
+
+                --if enough time has passed...
+                if (_nTimeDelta >= _nSizingDelta) then
+                    --...indicate resizing has stopped
+                    _bIsResizing = false;
+                    --...and reset the time delta
+                    _nTimeDelta = 0;
+                end
+            end, XPCallError);
+
+            _bDrawTimerBusy = false;
+
+            if not (bOK) then
+                error(sErr, 0);
+            end
+
+        end,
         RequestCardRedraw = function()
             _bRedrawCard    = true;
             _bRedrawCanvas  = true;
         end,
         RequestUtilRedraw = function()
             _bRedrawUtil    = true;
-            _bRedrawCanvas  = true;
+            _bRedrawCanvas  = _bUtilVisible;
         end,
         SetDrawFunction = function(fDraw)
 
@@ -1287,7 +1424,7 @@ return class("Forge",
             _fDraw = fDraw;
         end,
         SetActiveRow = function(tRow)
-
+            --TODO ASSERTIONS
             if (type(tRow) == "table") then
                 _tActiveRow = tRow;
             end
@@ -1296,7 +1433,7 @@ return class("Forge",
         SetActiveCardSet = function(oCardSet)
 
             if not (type(oCardSet) == "CardSet") then
-                --TODO THROW ERROR
+                error("Forge.SetActiveCardSet: Expected type CardSet. Got "..type(oCardSet)..'.');
             end
 
             _oActiveCardSet = oCardSet;
@@ -1320,6 +1457,15 @@ return class("Forge",
             _hImage,        _nImageID       = CreateImage(_hImage,         _nImageID);
             _hImageExport,  _nImageExportID = CreateImage(_hImageExport,   _nImageExportID);
             _hImageUtil,    _nImageUtilID   = CreateImage(_hImageUtil,     _nImageUtilID);
+
+            UpdatePageLayout();
+        end,
+        SetDrawEnabled = function(vFlag)
+            _bDrawBlocked = not (rawtype(vFlag) == "boolean" and vFlag or false);
+        end,
+        SetUtilVisible = function(vFlag)
+            _bUtilVisible = rawtype(vFlag) == "boolean" and vFlag or false;
+            _bRedrawCanvas  = true;
         end,
         UpdateStyles = function()
 

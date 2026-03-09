@@ -2269,7 +2269,7 @@ end</Script>
 <Text>
 <Body/>
 <TextColor>0</TextColor>
-<BackgroundColor>0</BackgroundColor>
+<BackgroundColor>3355443</BackgroundColor>
 <FontData>
 <FontName>Segoe UI</FontName>
 <CharacterSet>0</CharacterSet>
@@ -3113,29 +3113,29 @@ end</Script>
 <Event>
 <Name>On Show</Name>
 <Args/>
-<Script>StyleEditor.UpdateStyles();
-StyleEditor.OnShow();</Script>
+<Script>StyleEditor.OnShow();
+StyleEditor.UpdateStyles();</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>1</DesignCodeLine>
-<DesignCodeCol>21</DesignCodeCol>
+<DesignCodeCol>27</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
 <Event>
 <Name>On Close</Name>
 <Args/>
-<Script>ProcSys.GetForge().UpdateStyles();</Script>
+<Script>Forge().UpdateStyles();</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>34</DesignCodeCol>
+<DesignCodeCol>0</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>

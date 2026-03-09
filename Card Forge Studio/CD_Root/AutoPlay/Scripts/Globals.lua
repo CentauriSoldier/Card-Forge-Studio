@@ -158,7 +158,16 @@ function OnStartUp()--TODO move to its own module if it gets too big
         Tutorial.Init();
     end
 
-    CustomRuntimeErrorHandler = Log.Error; --TODO add option to show log on error if window is hidden!!
+    local sLastError = "";
+    CustomRuntimeErrorHandler = function(sError)--TODO add option to show log on error if window is hidden!!
+
+        if not (sError == sLastError) then
+            Log.Error(sError);
+            sLastError = sError;
+        end
+
+    end
+
     _DisableRuntimeErrorDialog = true;--bIsCompiled;
     --ScalerX.OnStartup(1400, 1200);
 end

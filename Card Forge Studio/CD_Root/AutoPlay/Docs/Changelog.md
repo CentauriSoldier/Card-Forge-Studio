@@ -3,87 +3,59 @@
 ---
 
 <details open>
-<summary><strong>v2026.65.22</strong></summary>
+<summary><strong>Alpha (Current)</strong></summary>
 
 ### Added
-- Veritcal and horizontal guides to the canvas
-
-### Changed
-- ***CellProc*** system renamed to ***RowProc***
-- ***RowProc*** function now cached
-- ***Draw*** function now cached
-- Cleaned up **ProcSys** module
-- All **LiveFileRepo**s moved out of their respective classes (e.g., **CardSet**) and into **ProcSys**.
-- Forge's utility image is now redrawn only on changes.
-
-</details>
-
----
-
-<details>
-<summary><strong>v2026.60.19</strong></summary>
-
-### Added
+- Vertical and horizontal guides on the canvas
+- CSV Data LiveFileRepo
 - Live file monitoring system enabling a real-time editor workflow
-- Copy card coordinates to clipboard
 - Log system with Log window
-
-### Changed
-- Custom draw, cell processor, and other functions are now stored within a LiveFileRepo (held by CardSet)
-- Class system removed in relation to basic, custom card data. Now purely CSV-drive
-- Custom functions are now at the CardSet level rather than the class level
-- Refactored Forge to be a Singelton helper class
-- Removed draw overlay/border functions and options from utility. These are CardSet-specific and user-defined.
-
-### Fixed
-- Ruler drawing improperly
-
-</details>
-
----
-
-<details>
-<summary><strong>v2026.53.19</strong></summary>
-
-### Added
-- Tutorial System and several turtorials
-- File path system (**FS**) that updates with active game
-
-### Changed
-- Display card is now resizable
-- Custom draw function is now retrieved from the active CardSet
-- Menu system now uses AMS Menu plugin
-
-### Fixed
-- Grid window callbacks not set or operating correctly
-- Menu not being configured correctly
-- Window system not sizing, loading, or saving properly
-
-</details>
-
----
-
-<details>
-<summary><strong>v2025.306.14</strong></summary>
-
-### Added
-
+- Copy card coordinates to clipboard
+- Tutorial system and several tutorials
+- File path system (**FS**) that updates automatically when the active game changes
 - Lua- and CSV-based desktop workflow for card game development
 - Two-grid editing pipeline:
    - Base Grid (source data)
    - Final Grid (processed, export-ready data)
-- Per-row processor resolution, enabling game-specific logic
+- Per-row processors
 - Optional per-cell processing hooks for fine-grained transformations
-- Immediate synchronization between Base and Final grids on edit
-- Selection-driven card preview, using Final grid values only
-- Exporter hook system, allowing custom export logic per target file
-- Deterministic output paths to ensure stable asset generation
-- Local-only execution — all data, rules, and output remain on the user’s machine
-- Configurable grid theming, including alternate row coloring and tooltip styling
-- Automatic CSV backup system with retention and minimum-interval rules
-- Manual row reprocessing for user-initiated rebuilds
-- INI-driven configuration for UI state, layout, and preferences
-- Style Editor
-- Line-by-line code editor access with customizable environment
+- Immediate synchronization between Base and Final grids when Base data is edited
+- Selection-driven card preview using the processed Final grid row
+- Automatic CSV backup system with configurable retention count and minimum time interval
+- Optional manual row reprocessing
+- INI-based configuration system for storing window layout, UI state, and preferences
+- Style Editor for fancy card text
+- Safe fallback handling when user `Draw`, `RowProc`, `CFG`, or `ENV` scripts fail during load or live reload
+
+### Changed
+- **CellProc** system renamed to **RowProc**
+- **RowProc** function now cached
+- **Draw** function now cached
+- Custom draw, cell processor, and other functions are now stored within a LiveFileRepo (held by CardSet)
+- Custom functions are now at the CardSet level rather than the class level
+- Class system removed in relation to basic, custom card data; system is now purely CSV-driven
+- All **LiveFileRepo**s moved out of their respective classes (e.g., **CardSet**) and into **ProcSys**
+- Cleaned up **ProcSys** and **Forge** modules
+- Refactored Forge to be a Singleton helper class
+- Custom draw function is now retrieved from the active CardSet
+- Forge's utility image now redraws only when changes occur
+- Display card is now resizable
+- Menu system now uses AMS Menu plugin
+- Stabilized and streamlined timer systems
+- Dirty user code now logs errors without interrupting loading or configuration
+- Systems relying on dirty user code now recover automatically and gracefully after the user fixes the code
+- Removed draw overlay/border functions and options from utility (these are now CardSet-specific and user-defined)
+
+### Fixed
+- Ruler drawing improperly
+- Grid window callbacks not set or operating correctly
+- Menu not being configured correctly
+- Window system not sizing, loading, or saving properly
+- Invalid user `RowProc`, `Draw`, `CFG`, or `ENV` code could previously break loading
+- Editor could become unstable when loading a CardSet containing invalid user scripts
+- Live reload could enter unstable states when user code failed during rebuild
+- Timer execution could become stuck or repeatedly retry failing user code
+- Log window could spam repeated identical runtime errors
+- Draw system could execute before row data was available
 
 </details>

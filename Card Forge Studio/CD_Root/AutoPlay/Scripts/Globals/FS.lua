@@ -2,7 +2,7 @@ local _sOriginalPackagePath = package.path;
 
 --preset values, constant throughout program flow
 local pTemplates   = _Docs.."\\Templates";
-local pAppDir      = _AppDataLocal.."\\Card Forge";
+local pAppDir      = _AppDataLocal.."\\"..APP_NAME;
 local pGames       = pAppDir.."\\Games";
 local pAppCFG_T    = pTemplates.."\\"..APP_CFG; --template
 local pAppCFG      = pAppDir.."\\"..APP_CFG;

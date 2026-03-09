@@ -36,8 +36,6 @@ TheMenu.SetAutoUpdate(false);
 local _nIconID                          = -1;
 local _bEnabled, _bChecked, _bCheckable = true, true, true;
 local _tNoCallbacks                     = nil;
-local _bSkipRedrawCard                  = true;
-local _bRedrawUtil                      = true;
 --------------------------------------------------------------
 
 --[[
@@ -77,13 +75,13 @@ TheMenu.Add("Game",           _nIconID,   _bEnabled,      -_bChecked,     -_bChe
 ╚════██║██╔══╝     ██║
 ███████║███████╗   ██║
 ╚══════╝╚══════╝   ╚═╝   ]]
-TheMenu.Add("Card Set",           _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Card Set:>New",      _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Card Set:>---",      _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Card Set:>Load",     _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Card Set:>Save",     _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   {[eMenu.OnSelected] = function() ProcSys.SaveCSVs(); end}).
-        Add("Card Set:>---",      _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("Card Set:>Browse",   _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks);
+TheMenu.Add("CardSet",           _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
+        Add("CardSet:>New",      _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
+        Add("CardSet:>---",      _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks).
+        Add("CardSet:>Load",     _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
+        Add("CardSet:>Save",     _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   {[eMenu.OnSelected] = function() ProcSys.SaveCSVs(); end}).
+        Add("CardSet:>---",      _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks).
+        Add("CardSet:>Browse",   _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks);
 
 --[[
  ██████╗ ██████╗ ████████╗██╗ ██████╗ ███╗   ██╗███████╗
@@ -113,7 +111,7 @@ local sRCC = "Redraw On Cell Changed";
 local sDSP = "---";
 
 TheMenu.Add(sOD,                 _nIconID,       _bEnabled,     -_bChecked,                      -_bCheckable,   _tNoCallbacks).
-        Add(sOD.._sSub..sUO,     _nIconID,       _bEnabled,     LoadB(sUO:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sUO:collapse(),  tItem.IsChecked); Forge.RequestUtilRedraw(); end}).
+        Add(sOD.._sSub..sUO,     _nIconID,       _bEnabled,     LoadB(sUO:collapse()),           _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sUO:collapse(),  tItem.IsChecked); Forge.SetUtilVisible(tItem.IsChecked); end}).
         Add(sOD.._sSub..sDSP,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks).
         Add(sOD.._sSub..sUOO,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks).
         Add(sOD.._sSub..sDSP,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks).
@@ -135,8 +133,9 @@ TheMenu.Add(sOD,                 _nIconID,       _bEnabled,     -_bChecked,     
    ██║   ██║   ██║██║   ██║██║     ╚════██║
    ██║   ╚██████╔╝╚██████╔╝███████╗███████║
    ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚══════╝]]
-TheMenu.Add("Tools:>Rebuild Dox",        _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) Log.ClearWindow(); ProcessDox(Game.GetActive().GetName()) end});
-
+TheMenu.Add("Tools:>Rebuild Dox",      _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) Log.ClearWindow(); ProcessDox(Game.GetActive().GetName()) end}).
+        Add("Tools:>Style Editor",     _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Style Editor",       false, nil, nil); end}).  --TODO save coords
+        Add("Tools:>Mechanics Viewer", _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Mechanics Viewer",   false, nil, nil); end});   --TODO save coords
 
 --[[
 ██╗    ██╗██╗███╗   ██╗██████╗  ██████╗ ██╗    ██╗
@@ -160,9 +159,7 @@ TheMenu.Add("Window",                   _nIconID,       _bEnabled,      -_bCheck
         end}).
         Add("Window:>---",              _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
         Add("Window:>Log",              _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) Log.Show(); end}).  --TODO save coords
-        Add("Window:>---",              _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
-        Add("Window:>Style Editor",     _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Style Editor",       false, nil, nil); end}).  --TODO save coords
-        Add("Window:>Mechanics Viewer", _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Mechanics Viewer",   false, nil, nil); end})   --TODO save coords
+        Add("Window:>Clear Log Window", _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) Log.ClearWindow(); end});
 
 --TODO ADD game website and author stuff...
 --[[
@@ -211,14 +208,14 @@ tSupport = {
     end,
     RereshCardSetsList = function(sPage)
         --clear the cards list
-        TheMenu.ClearChildren("Card Set:>Load");
+        TheMenu.ClearChildren("CardSet:>Load");
 
         --get all the CardSet folders
         local tCardSets = Game.GetActive().GetAllCardSets();
 
         for _, oCardSet in ipairs(tCardSets) do
             local sCardSet      = oCardSet.GetName();
-            local sMenuPath = "Card Set:>Load:>"..sCardSet;
+            local sMenuPath = "CardSet:>Load:>"..sCardSet;
             TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, _tNoCallbacks);
 
 
@@ -247,17 +244,17 @@ tSupport = {
             --Game items
             TheMenu.SetEnabled("Game:>Browse",              false);
             --card set items
-            TheMenu.SetEnabled("Card Set:>New",             false);
-            TheMenu.SetEnabled("Card Set:>Load",            false);
+            TheMenu.SetEnabled("CardSet:>New",             false);
+            TheMenu.SetEnabled("CardSet:>Load",            false);
             --tools items
             TheMenu.SetEnabled("Tools:>Rebuild Dox",        false);
+            TheMenu.SetEnabled("Tools:>Style Editor",       false);
+            TheMenu.SetEnabled("Tools:>Mechanics Viewer",   false);
             --help items
             TheMenu.SetEnabled("Help:>Game Documentation",  false);
             --window items
             TheMenu.SetEnabled(sWindow.."Base Data",        false);
             TheMenu.SetEnabled(sWindow.."Final Data",       false);
-            TheMenu.SetEnabled(sWindow.."Style Editor",     false);
-            TheMenu.SetEnabled(sWindow.."Mechanics Viewer", false);
             --TheMenu.Refresh();
 
         elseif (sPage == "Forge") then
@@ -275,18 +272,18 @@ tSupport = {
             TheMenu.SetEnabled("Game:>Browse",              true);
             TheMenu.SetCallback("Game:>Browse", eMenu.OnSelected, function(tItem) Shell.Execute(FS.Game, "open", "", "", SW_SHOWNORMAL); end);
             --card set items
-            TheMenu.SetEnabled("Card Set:>New",             true);
-            TheMenu.SetEnabled("Card Set:>Load",            true);
-            TheMenu.SetCallback("Card Set:>Browse", eMenu.OnSelected, function(tItem) Shell.Execute(FS.CardSets.."\\"..INIFile.GetValue(FS.Info, "SESSION", "LastCardSet"), "open", "", "", SW_SHOWNORMAL); end); --TODO GET ACTIVE SET
+            TheMenu.SetEnabled("CardSet:>New",             true);
+            TheMenu.SetEnabled("CardSet:>Load",            true);
+            TheMenu.SetCallback("CardSet:>Browse", eMenu.OnSelected, function(tItem) Shell.Execute(FS.CardSets.."\\"..INIFile.GetValue(FS.Info, "SESSION", "LastCardSet"), "open", "", "", SW_SHOWNORMAL); end); --TODO GET ACTIVE SET
             --tools items
             TheMenu.SetEnabled("Tools:>Rebuild Dox",        true);
+            TheMenu.SetEnabled("Tools:>Style Editor",       true);
+            TheMenu.SetEnabled("Tools:>Mechanics Viewer",   true);
             --help items
             TheMenu.SetEnabled("Help:>Game Documentation",  true);
             --window items
             TheMenu.SetEnabled(sWindow.."Base Data",        true);
             TheMenu.SetEnabled(sWindow.."Final Data",       true);
-            TheMenu.SetEnabled(sWindow.."Style Editor",     true);
-            TheMenu.SetEnabled(sWindow.."Mechanics Viewer", true);
 
             tSupport.RereshCardSetsList();
             --TheMenu.Refresh();
