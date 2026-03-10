@@ -135,8 +135,10 @@ TheMenu.Add(sOD,                 _nIconID,       _bEnabled,     -_bChecked,     
    ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚══════╝]]
 TheMenu.Add("Tools:>Rebuild Dox",      _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) Log.ClearWindow(); ProcessDox(Game.GetActive().GetName()) end}).
         Add("Tools:>Style Editor",     _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Style Editor",       false, nil, nil); end}).  --TODO save coords
-        Add("Tools:>Mechanics Viewer", _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Mechanics Viewer",   false, nil, nil); end});   --TODO save coords
-
+        Add("Tools:>Mechanics Viewer", _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Mechanics Viewer",   false, nil, nil); end}).  --TODO save coords
+        Add("Tools:>---",              _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
+        Add("Tools:>Modern CSV",       _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks); --TODO HOOK THIS UP SO if the prog exists, the user can tell the app , app will open instead of GET
+                                                                                                                                    --TODO add link
 --[[
 ██╗    ██╗██╗███╗   ██╗██████╗  ██████╗ ██╗    ██╗
 ██║    ██║██║████╗  ██║██╔══██╗██╔═══██╗██║    ██║

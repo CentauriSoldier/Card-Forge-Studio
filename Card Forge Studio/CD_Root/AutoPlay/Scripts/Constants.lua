@@ -64,10 +64,6 @@ enum("PANE", {"MAIN", "DATA_EDIT", "DATA_VIEW"});
 
 constant("DOX_EXPORT_FILENAME",     "API Documentation");
 
-constant("LOG_OBJECT", "inp log");
-
-
-
 
 local function BuildFileSpecTable(sName, sExt)
     local tActual   = {

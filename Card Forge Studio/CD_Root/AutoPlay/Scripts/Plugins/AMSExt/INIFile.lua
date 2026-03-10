@@ -29,18 +29,16 @@ function INIFile.GetValueBoolean(pFile, sSection, sValue)
     return bRet;
 end
 
-function INIFile.GetValueNumber(pFile, sSection, sValue)
-	local nRet = 0;
+function INIFile.GetValueNumber(pFile, sSection, sValue, nDefault)
+	local nRet = rawtype(nDefault) == "number" and nDefault or 0;
 
-    local bRet = false;
-
-    local bFileIsString     = type(pFile) =="string";
-    local bSectionIsString  = type(sSection) == "string";
-    local bValueIsString    = type(sValue) == "string";
+    local bFileIsString     = type(pFile)       =="string";
+    local bSectionIsString  = type(sSection)    == "string";
+    local bValueIsString    = type(sValue)      == "string";
 
 	if (bFileIsString and bSectionIsString and bValueIsString) then
         local nValue    = tonumber(INIFile.GetValue(pFile, sSection, sValue));
-        local nRet      = nValue and nValue or nRet;
+        nRet            = nValue and nValue or nRet;
 	end
 
 	return nRet;

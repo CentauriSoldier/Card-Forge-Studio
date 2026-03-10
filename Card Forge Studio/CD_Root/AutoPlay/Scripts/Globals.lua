@@ -131,7 +131,10 @@ function OnStartUp()--TODO move to its own module if it gets too big
         constant("APP_VERSION", INIFile.GetValue(FS.AppCFG, "Settings", "Version"));
     end
 
-    constant("HWND_APP", Application.GetWndHandle());
+    constant("HWND_APP",    Application.GetWndHandle());
+    constant("HWND_DEBUG",  Debug.GetWndHandle());
+
+    Log.OnStartup();
 
     --load all games
     local bOK, sError = pcall(Game.Refresh);
@@ -158,7 +161,7 @@ function OnStartUp()--TODO move to its own module if it gets too big
         Tutorial.Init();
     end
 
-    local sLastError = "";
+    local sLastError = ""; --TODO move this to the log file and setup warning the same way...maybe use  anumber ot indicate amount of the same errors
     CustomRuntimeErrorHandler = function(sError)--TODO add option to show log on error if window is hidden!!
 
         if not (sError == sLastError) then

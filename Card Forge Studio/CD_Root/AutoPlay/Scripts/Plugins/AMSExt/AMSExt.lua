@@ -84,3 +84,6 @@ LiveFileRepo    = require("Plugins.AMSExt.LiveFileRepo");
 Menu            = require("Plugins.AMSExt.Menu");
 WinSys          = require("Plugins.AMSExt.WinSys");
 WinAMS          = require("Plugins.AMSExt.WinSys.WinAMS");
+
+require("Plugins.AMSExt.Window");
+require("Plugins.AMSExt.Debug");

@@ -178,14 +178,15 @@ INIFile.SetValue(_pAppCFG, sSection, "Height", tostring(tSize.Height));
 INIFile.SetValue(_pAppCFG, sSection, "X", tostring(tPos.X));
 INIFile.SetValue(_pAppCFG, sSection, "Y", tostring(tPos.Y));
 ]]
+Log.OnShutdown();
 WinSys.OnShutdown();</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>9</DesignCodeLine>
-<DesignCodeCol>2</DesignCodeCol>
+<DesignCodeLine>10</DesignCodeLine>
+<DesignCodeCol>17</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -198,8 +199,8 @@ WinSys.OnShutdown();</Script>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>4079394</DesignCodeLine>
-<DesignCodeCol>-8323072</DesignCodeCol>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -301,8 +302,7 @@ MainMenu.OnPreload(this);
 <Event>
 <Name>On Show</Name>
 <Args/>
-<Script>Log.OnShow(this);
-local bAllowHTMLProcessing = not Application.IsCompiled();
+<Script>local bAllowHTMLProcessing = not Application.IsCompiled();
 CheckBox.SetVisible("chk process html", bAllowHTMLProcessing);
 CheckBox.SetEnabled("chk process html", bAllowHTMLProcessing);</Script>
 <TreeStates>
@@ -311,21 +311,21 @@ CheckBox.SetEnabled("chk process html", bAllowHTMLProcessing);</Script>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>17</DesignCodeCol>
+<DesignCodeCol>0</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
 <Event>
 <Name>On Close</Name>
 <Args/>
-<Script>Log.OnClose(this);</Script>
+<Script/>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>11</DesignCodeCol>
+<DesignCodeCol>0</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -930,259 +930,6 @@ end</Script>
 <MouseClickSndMode>0</MouseClickSndMode>
 <MouseClickSound/>
 </Text>
-</Object>
-<Object>
-<Type>0</Type>
-<Name>btn Window Test</Name>
-<VisibleAtDesignTime>1</VisibleAtDesignTime>
-<VisibleAtRunTime>1</VisibleAtRunTime>
-<Locked>0</Locked>
-<Enabled>1</Enabled>
-<ToolTip/>
-<Cursor>1</Cursor>
-<Group>0</Group>
-<MaintainAspectRatio>0</MaintainAspectRatio>
-<Pin>0</Pin>
-<TabIndex>-1</TabIndex>
-<AutoResize>0</AutoResize>
-<Coordinates>
-<Top>83</Top>
-<Bottom>138</Bottom>
-<Left>116</Left>
-<Right>366</Right>
-</Coordinates>
-<Ratios>
-<WidthRatio>-1.000000</WidthRatio>
-<HeightRatio>-1.000000</HeightRatio>
-</Ratios>
-<Event>
-<Name>On Click</Name>
-<Args/>
-<Script>local S = Windows.WINDOW_STYLE
-
-
-hWND_TEST = WindowWizard.CreateTopWindowEx(
-    "WindowWizard Test",
-    100, 100,
-    800, 600,
-    S.WS_OVERLAPPED | S.WS_SYSMENU | S.WS_MINIMIZEBOX | S.WS_THICKFRAME,
-    S.CW_USEDEFAULT, S.CW_USEDEFAULT, 0,
-    nil, nil
-)
-
--- Helper to log to UI
-local function log(msg)
-    Paragraph.SetText("par 1", msg)
-end
-
-local function log2(msg)
-    Paragraph.SetText("par 2", msg)
-end
-
--- ======================
--- LIFECYCLE
--- ======================
-
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnReady", function(hwnd)
-    log(hwnd .. " Ready")
-end)
-
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnClose", function(hwnd)
-    log(hwnd .. " Close requested")
-    return true -- allow close
-end)
-
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnDestroy", function(hwnd)
-    log(hwnd .. " Destroyed")
-end)
-
--- ======================
--- RESIZE
--- ======================
-
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnResize", function(hwnd, w, h)
-    log(hwnd .. " Resize: " .. w .. "x" .. h)
-end)
-
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnResizeStart", function(hwnd, w, h)
-    log(hwnd .. " Resize START @ " .. w .. "x" .. h)
-end)
-
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnResizeStop", function(hwnd, w, h)
-    log(hwnd .. " Resize STOP @ " .. w .. "x" .. h)
-end)
-
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnMinimize", function(hwnd)
-    log(hwnd .. " Minimized")
-end)
-
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnRestore", function(hwnd)
-    log(hwnd .. " Restored")
-end)
-
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnMaximize", function(hwnd)
-    log(hwnd .. " Maximized")
-end)
-
--- ======================
--- KEYBOARD
--- ======================
-
--- OnKey(hwnd, vk, down, ctrl, shift, alt)
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnKey", function(
-    hwnd, vk, down, ctrl, shift, alt
-)
-    log(
-        hwnd ..
-        " Key vk=" .. vk ..
-        " down=" .. down ..
-        " ctrl=" .. ctrl ..
-        " shift=" .. shift ..
-        " alt=" .. alt
-    )
-end)
-
--- ======================
--- MOUSE
--- ======================
-
--- OnMouseButton(
---   hwnd, button, down, x, y,
---   ctrl, shift, alt,
---   lDown, rDown, mDown, x1Down, x2Down
--- )
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnMouseButton", function(
-    hwnd, btn, down, x, y,
-    ctrl, shift, alt,
-    l, r, m, x1, x2
-)
-    log(
-        hwnd ..
-        " Mouse " .. btn ..
-        " down=" .. down ..
-        " @ " .. x .. "," .. y
-    )
-end)
-
--- OnMouseWheel(hwnd, delta, x, y, ctrl, shift, alt, lDown, rDown, mDown, x1Down, x2Down)
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnMouseWheel", function(
-    hwnd, delta, x, y,
-    ctrl, shift, alt,
-    l, r, m, x1, x2
-)
-    log(
-        hwnd ..
-        " Wheel delta=" .. delta ..
-        " @ " .. x .. "," .. y
-    )
-end)
-
--- OnEnter(hwnd, x, y, lDown, rDown, mDown, x1Down, x2Down)
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnEnter", function(
-    hwnd, x, y, l, r, m, x1, x2
-)
-    log(hwnd .. " Mouse ENTER @ " .. x .. "," .. y)
-end)
-
--- OnLeave(hwnd, lDown, rDown, mDown, x1Down, x2Down)
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnLeave", function(
-    hwnd, l, r, m, x1, x2
-)
-    log(hwnd .. " Mouse LEAVE")
-end)
-
--- OnLeave(hwnd, lDown, rDown, mDown, x1Down, x2Down)
-WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnMouseMOve", function(
-    hwnd, x, y
-)
-    log2(hwnd .. "X: "..x.." | Y: "..y)
-end) 
-
-
-local hBtn = WindowWizard.CreateChildWindowEx(hWND_TEST, "sdf", "BUTTON", 20, 20, 120, 28, nil, S.WS_CHILD | S.WS_VISIBLE | S.WS_TABSTOP | 0x00000000, 1001)
-</Script>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Event>
-<Name>On Right-Click</Name>
-<Args/>
-<Script>Log.Note("This is a test of the log system.");</Script>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>46</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Event>
-<Name>On Enter</Name>
-<Args/>
-<Script/>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Event>
-<Name>On Leave</Name>
-<Args/>
-<Script/>
-<TreeStates>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-<TreeState>0</TreeState>
-</TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
-<BookMarks count="0">
-</BookMarks>
-</Event>
-<Actions/>
-<BUTTON>
-<Filename>AutoPlay\Buttons\0001-windows-7.btn</Filename>
-<Style>0</Style>
-<State>0</State>
-<Caption>Window Test</Caption>
-<Align>1</Align>
-<UpColor>0</UpColor>
-<HighlightColor>0</HighlightColor>
-<DownColor>0</DownColor>
-<DisabledColor>0</DisabledColor>
-<FontData>
-<FontName>Microsoft Sans Serif</FontName>
-<CharacterSet>0</CharacterSet>
-<Height>-12</Height>
-<Weight>700</Weight>
-<Italic>0</Italic>
-<Underline>0</Underline>
-<StrikeOut>0</StrikeOut>
-<AntiAlias>1</AntiAlias>
-</FontData>
-<CapXOff>0</CapXOff>
-<CapYOff>0</CapYOff>
-<LeftMargin>0</LeftMargin>
-<RightMargin>0</RightMargin>
-<MouseOverSndMode>0</MouseOverSndMode>
-<MouseOverSound/>
-<MouseClickSndMode>0</MouseClickSndMode>
-<MouseClickSound/>
-</BUTTON>
 </Object>
 <Object>
 <Type>2</Type>
@@ -1839,6 +1586,259 @@ end</Script>
 <MouseClickSound/>
 </BUTTON>
 </Object>
+<Object>
+<Type>0</Type>
+<Name>btn Window Test</Name>
+<VisibleAtDesignTime>1</VisibleAtDesignTime>
+<VisibleAtRunTime>1</VisibleAtRunTime>
+<Locked>0</Locked>
+<Enabled>1</Enabled>
+<ToolTip/>
+<Cursor>1</Cursor>
+<Group>0</Group>
+<MaintainAspectRatio>0</MaintainAspectRatio>
+<Pin>0</Pin>
+<TabIndex>-1</TabIndex>
+<AutoResize>0</AutoResize>
+<Coordinates>
+<Top>83</Top>
+<Bottom>138</Bottom>
+<Left>116</Left>
+<Right>366</Right>
+</Coordinates>
+<Ratios>
+<WidthRatio>-1.000000</WidthRatio>
+<HeightRatio>-1.000000</HeightRatio>
+</Ratios>
+<Event>
+<Name>On Click</Name>
+<Args/>
+<Script>local S = Windows.WINDOW_STYLE
+
+
+hWND_TEST = WindowWizard.CreateTopWindowEx(
+    "WindowWizard Test",
+    100, 100,
+    800, 600,
+    S.WS_OVERLAPPED | S.WS_SYSMENU | S.WS_MINIMIZEBOX | S.WS_THICKFRAME,
+    S.CW_USEDEFAULT, S.CW_USEDEFAULT, 0,
+    nil, nil
+)
+
+-- Helper to log to UI
+local function log(msg)
+    Paragraph.SetText("par 1", msg)
+end
+
+local function log2(msg)
+    Paragraph.SetText("par 2", msg)
+end
+
+-- ======================
+-- LIFECYCLE
+-- ======================
+
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnReady", function(hwnd)
+    log(hwnd .. " Ready")
+end)
+
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnClose", function(hwnd)
+    log(hwnd .. " Close requested")
+    return true -- allow close
+end)
+
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnDestroy", function(hwnd)
+    log(hwnd .. " Destroyed")
+end)
+
+-- ======================
+-- RESIZE
+-- ======================
+
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnResize", function(hwnd, w, h)
+    log(hwnd .. " Resize: " .. w .. "x" .. h)
+end)
+
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnResizeStart", function(hwnd, w, h)
+    log(hwnd .. " Resize START @ " .. w .. "x" .. h)
+end)
+
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnResizeStop", function(hwnd, w, h)
+    log(hwnd .. " Resize STOP @ " .. w .. "x" .. h)
+end)
+
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnMinimize", function(hwnd)
+    log(hwnd .. " Minimized")
+end)
+
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnRestore", function(hwnd)
+    log(hwnd .. " Restored")
+end)
+
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnMaximize", function(hwnd)
+    log(hwnd .. " Maximized")
+end)
+
+-- ======================
+-- KEYBOARD
+-- ======================
+
+-- OnKey(hwnd, vk, down, ctrl, shift, alt)
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnKey", function(
+    hwnd, vk, down, ctrl, shift, alt
+)
+    log(
+        hwnd ..
+        " Key vk=" .. vk ..
+        " down=" .. down ..
+        " ctrl=" .. ctrl ..
+        " shift=" .. shift ..
+        " alt=" .. alt
+    )
+end)
+
+-- ======================
+-- MOUSE
+-- ======================
+
+-- OnMouseButton(
+--   hwnd, button, down, x, y,
+--   ctrl, shift, alt,
+--   lDown, rDown, mDown, x1Down, x2Down
+-- )
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnMouseButton", function(
+    hwnd, btn, down, x, y,
+    ctrl, shift, alt,
+    l, r, m, x1, x2
+)
+    log(
+        hwnd ..
+        " Mouse " .. btn ..
+        " down=" .. down ..
+        " @ " .. x .. "," .. y
+    )
+end)
+
+-- OnMouseWheel(hwnd, delta, x, y, ctrl, shift, alt, lDown, rDown, mDown, x1Down, x2Down)
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnMouseWheel", function(
+    hwnd, delta, x, y,
+    ctrl, shift, alt,
+    l, r, m, x1, x2
+)
+    log(
+        hwnd ..
+        " Wheel delta=" .. delta ..
+        " @ " .. x .. "," .. y
+    )
+end)
+
+-- OnEnter(hwnd, x, y, lDown, rDown, mDown, x1Down, x2Down)
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnEnter", function(
+    hwnd, x, y, l, r, m, x1, x2
+)
+    log(hwnd .. " Mouse ENTER @ " .. x .. "," .. y)
+end)
+
+-- OnLeave(hwnd, lDown, rDown, mDown, x1Down, x2Down)
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnLeave", function(
+    hwnd, l, r, m, x1, x2
+)
+    log(hwnd .. " Mouse LEAVE")
+end)
+
+-- OnLeave(hwnd, lDown, rDown, mDown, x1Down, x2Down)
+WindowWizard.SetTopEventHandlerFor(hWND_TEST, "OnMouseMOve", function(
+    hwnd, x, y
+)
+    log2(hwnd .. "X: "..x.." | Y: "..y)
+end) 
+
+
+local hBtn = WindowWizard.CreateChildWindowEx(hWND_TEST, "sdf", "BUTTON", 20, 20, 120, 28, nil, S.WS_CHILD | S.WS_VISIBLE | S.WS_TABSTOP | 0x00000000, 1001)
+</Script>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Right-Click</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Enter</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Event>
+<Name>On Leave</Name>
+<Args/>
+<Script/>
+<TreeStates>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+<TreeState>0</TreeState>
+</TreeStates>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
+<BookMarks count="0">
+</BookMarks>
+</Event>
+<Actions/>
+<BUTTON>
+<Filename>AutoPlay\Buttons\0001-windows-7.btn</Filename>
+<Style>0</Style>
+<State>0</State>
+<Caption>Window Test</Caption>
+<Align>1</Align>
+<UpColor>0</UpColor>
+<HighlightColor>0</HighlightColor>
+<DownColor>0</DownColor>
+<DisabledColor>0</DisabledColor>
+<FontData>
+<FontName>Microsoft Sans Serif</FontName>
+<CharacterSet>0</CharacterSet>
+<Height>-12</Height>
+<Weight>700</Weight>
+<Italic>0</Italic>
+<Underline>0</Underline>
+<StrikeOut>0</StrikeOut>
+<AntiAlias>1</AntiAlias>
+</FontData>
+<CapXOff>0</CapXOff>
+<CapYOff>0</CapYOff>
+<LeftMargin>0</LeftMargin>
+<RightMargin>0</RightMargin>
+<MouseOverSndMode>0</MouseOverSndMode>
+<MouseOverSound/>
+<MouseClickSndMode>0</MouseClickSndMode>
+<MouseClickSound/>
+</BUTTON>
+</Object>
 <HGuidelines/>
 <VGuidelines/>
 </Page>
@@ -1878,30 +1878,29 @@ MainMenu.OnPreload(this);</Script>
 <Event>
 <Name>On Show</Name>
 <Args/>
-<Script>Log.OnShow(this);
-ProcSys.OnShow(this);
+<Script>ProcSys.OnShow(this);
 Forge.OnShow(this);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>2</DesignCodeLine>
-<DesignCodeCol>17</DesignCodeCol>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>0</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
 <Event>
 <Name>On Close</Name>
 <Args/>
-<Script>Log.OnClose(this);</Script>
+<Script/>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>11</DesignCodeCol>
+<DesignCodeCol>0</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
