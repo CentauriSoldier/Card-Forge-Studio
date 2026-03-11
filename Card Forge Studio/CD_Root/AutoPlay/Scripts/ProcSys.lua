@@ -1,8 +1,15 @@
 ------------------------------------- Localization
 local Grid                          = Grid;
+    local GetColumnIDByName         = Grid.GetColumnIDByName;
     local GetCellText               = Grid.GetCellText;
     local SetCellText               = Grid.SetCellText;
+
 local class                         = class;
+local base64                        = base64;
+    local enc                       = base64.enc;
+    local dec                       = base64.dec;
+
+--TODO FINISH LOCALIZATION
 ------------------------------------- General
 local _pAppCFG                      = FS.AppCFG;
 --local _bReady                       = false; --prevents timer executions until a selection has been made
@@ -58,6 +65,11 @@ local _oActiveCardSet               = false;
 local _sCardSetName                 = "";
 local _nCardWidth                   = 0;
 local _nCardHeight                  = 0;
+local _sInfo                        = "";       --TODO FINISH THIS SYSTEM!!
+local _bInfoChanged                 = false;    --TODO FINISH THIS SYSTEM!!
+local _sCodeColumns                 = "";
+local _tCodeColumns                 = {};
+local _bCodeColumnsChanged          = false;
 ------------------------------------- Timer Stuff
 local _nFileSyncTimerID             = PROCSYS_SYNC_TIMER_ID;
 local _nFileSyncTimerInterval       = PROCSYS_SYNC_TIMER_INTERVAL;
@@ -395,8 +407,11 @@ ProcessCell = function(nRow, nColumn)
     local sColumn       = GetCellText(_sBaseDataGrid, 0, nColumn);
     local sText         = GetCellText(_sBaseDataGrid, nRow, nColumn);
 
+    --LEFT OFF HERE
+
+
     local function fGetFinalValue(sColumn, vCoerce)
-        local vRet = GetCellText(_sFinalDataGrid, nRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
+        local vRet = GetCellText(_sFinalDataGrid, nRow, GetColumnIDByName(_sFinalDataGrid, sColumn));
         local nCoerce = rawtype(vCoerce) == "number" and vCoerce or nil;
 
         if (nCoerce == PROCSYS_TO_NUMBER) then
@@ -423,12 +438,6 @@ ProcessCell = function(nRow, nColumn)
     end
 
     --TODO Also, be sure to add function to the env that indicates if a given column as been processed (basically if Column_A.index Column_< B.index)
-
-    --get the row after modifications
-    --local tFinalRow = Grid.GetRow(_sFinalDataGrid, nRow);
-
-    --send back info for the card redraw attempt
-    --return tFinalRow;
 end
 
 
@@ -568,15 +577,24 @@ local function UpdateCardSetLiveFileRepo() --TODO FINISH
     end);
 
     --watch the Info file
+    oLiveFileRepo.Add("Info", oCardSet.GetInfoPath(), _nLiveFileRepoTimerInterval,
+    function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _sInfo          = sNewText;
+        _bInfoChanged   = true;
+    end);
+
+    --watch the Code Columns file
+    oLiveFileRepo.Add("CodeColumns", oCardSet.GetCodeColumnsPath(), _nLiveFileRepoTimerInterval,
+    function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _sCodeColumns           = sNewText;
+        _bCodeColumnsChanged    = true;
+    end);
 
     --watch the Data file
     oLiveFileRepo.Add("Data", oCardSet.GetDataPath(), _nLiveFileRepoTimerInterval,
     function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
         _bDataChanged = true;
     end);
-
-    --TODO all the special procs, as well as info and
-
 
     oLiveFileRepo.StartAll();
 end
@@ -722,8 +740,8 @@ UpdateGrids = function ()--TODO FINISH MOVE Color stuff out to a theme system
 
     end
 
-    --local nColumnID             = Grid.GetColumnIDByName(_sBaseDataGrid, "ID");
-    local nColumnDescription    = Grid.GetColumnIDByName(_sBaseDataGrid, "Description");
+    --local nColumnID             = GetColumnIDByName(_sBaseDataGrid, "ID");
+    local nColumnDescription    = GetColumnIDByName(_sBaseDataGrid, "Description");
 
     --Grid.AutoSizeColumns(_sBaseDataGrid, GVS_DEFAULT, false);
     --Grid.AutoSizeColumns(_sFinalDataGrid, GVS_DEFAULT, false);
@@ -764,9 +782,75 @@ local function ProcessRow(nRow, bSkipRedraw)
 
 end
 
+--TODO MAKE SURE NAME IS UNIQUE BEFORE ALLOWING CHANGE IN TABLE!!!!!!!!!!!!!!!!!!!!! FINISH CODE RELIES ON UNIQUNESS!!!!!!
 
+local function UpdateCodeColumns()
+    local tFileColumns = _sCodeColumns:totable("\r\n");
 
+    if (rawtype(tFileColumns) == "table" and #tFileColumns > 0) then
+        local tReferenced = {};
 
+        -- build reference set from new table
+        for _, sKey in pairs(tFileColumns) do
+
+            if (rawtype(sKey) == "string") then
+                tReferenced[sKey] = true;
+            end
+
+        end
+
+        -- remove old keys not referenced
+        for sKey in pairs(_tCodeColumns) do
+
+            if not (tReferenced[sKey]) then
+                _tCodeColumns[sKey] = nil;
+            end
+
+        end
+
+        -- add missing keys
+        local nNameID = GetColumnIDByName(_sBaseDataGrid, "Name");
+
+        for _, sKey in pairs(tFileColumns) do
+
+            if (rawtype(sKey) == "string" and _tCodeColumns[sKey] == nil) then
+                local tColumnCode       = {};
+                local tColumnCodeDecoy  = {};
+                local tColumnCodeMeta   = {
+                    __index = tColumnCode,
+                    __newindex = function(t, k, v) --assumes that k is the name of the card and is correct and exists, and that v is the base64 code from the cell
+                        local fChunk, sError = load(dec(v), "CodeColumn '"..k.."'", 't', UserEnv.Get())
+                        tColumnCode[k] = {
+                            Error       = sError,
+                            Function    = fChunk,
+                            IsValid     = rawtype(fChunk) == "function",
+                        };
+                    end,
+                };
+
+                setmetatable(tColumnCodeDecoy, tColumnCodeMeta);
+                _tCodeColumns[sKey] = tColumnCodeDecoy;
+            end
+
+            local nKeyID  = GetColumnIDByName(_sBaseDataGrid, sKey);
+
+            for nRow = 1, _nRowCount do
+                local sCode = GetCellText(_sBaseDataGrid, nRow, nKeyID);
+
+                if not (sCode:isempty()) then
+                    local sName = GetCellText(_sBaseDataGrid, nRow, nNameID);
+                    _tCodeColumns[sKey][sName] = sCode;
+                else
+                    _tCodeColumns[sKey][sName] = nil;
+                end
+
+            end
+
+        end
+
+    end
+
+end
 
 
 
@@ -936,9 +1020,10 @@ return class("ProcSys",
 
             UpdateCardSetLiveFileRepo();
 
-            _bDataChanged    = true;
-            _bRowProcChanged = true;
-            _bDrawChanged    = true;
+            _bDataChanged           = true;
+            _bRowProcChanged        = true;
+            _bDrawChanged           = true;
+            _bCodeColumnsChanged    = true;
 
             Forge.SetActiveCardSet(oCardSet);
         end,
@@ -1085,7 +1170,8 @@ return class("ProcSys",
                 local tRow = Grid.GetRow(_sFinalDataGrid, nRow);
                 UserEnv.ProcSysUpdateRoot {_tRow = tRow};
 
-                _fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
+
+                --_fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
 
                 --ProcSys.ProcessActiveRow();
                 _nLastRow = nRow;
@@ -1117,8 +1203,18 @@ return class("ProcSys",
             _bSyncBusy = true;
 
             local bOK, sErr = xpcall(function()
-                local bResetRows = _bDataChanged or _bCFGChanged or _bENVChanged or _bRowProcChanged;
-                local bRedraw    = bResetRows or _bDrawChanged;
+                local bResetRows = _bDataChanged    or _bCFGChanged     or _bENVChanged     or _bRowProcChanged;
+                local bRedraw    = bResetRows       or _bDrawChanged;
+
+                if (_bInfoChanged) then
+                    _bInfoChanged = false;
+                    --TODO FINISH
+                end
+
+                if (_bCodeColumnsChanged) then
+                    _bCodeColumnsChanged = false;
+                    UpdateCodeColumns();
+                end
 
                 if (_bDataChanged) then
                     _bDataChanged = false;

@@ -55,11 +55,11 @@ return class("Log",
             INIFile.SetValue(_pAppCFG, _sINISection, "Visible", tostring(WindowWizard.IsVisible(HWND_DEBUG)));
         end,
         OnStartup = function()
-            --restore the Debug window to previous state
+            --restore the Debug window to its previous state
             local nX        = INIFile.GetValueNumber(_pAppCFG, _sINISection, "X");
             local nY        = INIFile.GetValueNumber(_pAppCFG, _sINISection, "Y");
-            local nWidth    = INIFile.GetValueNumber(_pAppCFG, _sINISection, "Width", 300);--TODO MAGIC NUMBERS use defaults?
-            local nHeight   = INIFile.GetValueNumber(_pAppCFG, _sINISection, "Height", 300);--TODO MAGIC NUMBERS use defaults?
+            local nWidth    = INIFile.GetValueNumber(_pAppCFG, _sINISection, "Width", 300);--TODO MAGIC NUMBERS... use defaults?
+            local nHeight   = INIFile.GetValueNumber(_pAppCFG, _sINISection, "Height", 300);--TODO MAGIC NUMBERS... use defaults?
             local bLogVisible  = INIFile.GetValueBoolean(_pAppCFG, _sINISection, "Visible");
 
             Window.SetRect(HWND_DEBUG, nX, nY, nWidth, nHeight);

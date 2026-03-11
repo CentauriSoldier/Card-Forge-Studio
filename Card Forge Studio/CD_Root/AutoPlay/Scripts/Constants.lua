@@ -86,9 +86,10 @@ local function BuildFileSpecTable(sName, sExt)
 end
 
 --filenames/extensions
-constant("FILESPEC_CARDSET_DATA",       BuildFileSpecTable("Data",      "csv"));
-constant("FILESPEC_CARDSET_DRAW",       BuildFileSpecTable("Draw",      "lua"));
-constant("FILESPEC_CARDSET_INFO",       BuildFileSpecTable("Info",      "ini"));
-constant("FILESPEC_CARDSET_ROWPROC",    BuildFileSpecTable("RowProc",  "lua"));
-constant("FILESPEC_GAME_CFG",           BuildFileSpecTable("CFG",       "lua"));
-constant("FILESPEC_GAME_ENV",           BuildFileSpecTable("ENV",       "lua"));
+constant("FILESPEC_CARDSET_DATA",           BuildFileSpecTable("Data",          "csv"));
+constant("FILESPEC_CARDSET_DRAW",           BuildFileSpecTable("Draw",          "lua"));
+constant("FILESPEC_CARDSET_INFO",           BuildFileSpecTable("Info",          "ini"));
+constant("FILESPEC_CARDSET_ROWPROC",        BuildFileSpecTable("RowProc",       "lua"));
+constant("FILESPEC_CARDSET_CODECOLUMMS",    BuildFileSpecTable("CodeColumns",   "txt"));
+constant("FILESPEC_GAME_CFG",               BuildFileSpecTable("CFG",           "lua"));
+constant("FILESPEC_GAME_ENV",               BuildFileSpecTable("ENV",           "lua"));

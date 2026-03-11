@@ -19,15 +19,16 @@ return class("CardSet",
         --CardSet = function(this, sAuthCode) end, --static constructor (runs after class object creation)
     },
     {--PRIVATE
-        CardWidth__AUTOR_   = null,
-        CardHeight__AUTOR_  = null,
-        DataPath__AUTOR_    = null,
-        DrawPath__AUTOR_    = null,
-        InfoPath__AUTOR_    = null,
-        RowProcPath__AUTOR_ = null,
-        Name__AUTOA_        = '',
-        Path__AUTOR_        = null,
-        UUID__AUTOR_        = null,
+        CardWidth__AUTOR_       = null,
+        CardHeight__AUTOR_      = null,
+        DataPath__AUTOR_        = null,
+        DrawPath__AUTOR_        = null,
+        InfoPath__AUTOR_        = null,
+        RowProcPath__AUTOR_     = null,
+        CodeColumnsPath__AUTOR_ = null,
+        Name__AUTOA_            = '',
+        Path__AUTOR_            = null,
+        UUID__AUTOR_            = null,
     },
     {--PROTECTED
 
@@ -45,8 +46,9 @@ return class("CardSet",
             local pDrawPath     = pFolder.."\\"..FILESPEC_CARDSET_DRAW.Full;
             local pInfo         = pFolder.."\\"..FILESPEC_CARDSET_INFO.Full;
             local pRowProcPath  = pFolder.."\\"..FILESPEC_CARDSET_ROWPROC.Full;
+            local pCodeColumns  = pFolder.."\\"..FILESPEC_CARDSET_CODECOLUMMS.Full;
 
-            local tCheckFiles = {pDrawPath, pData, pInfo, pRowProcPath};
+            local tCheckFiles = {pDrawPath, pData, pInfo, pRowProcPath, pCodeColumns};
 
             for _, pFile in pairs(tCheckFiles) do
 
@@ -71,15 +73,16 @@ return class("CardSet",
             end
 
             --set the game's info
-            pri.DataPath    = pData;
-            pri.DrawPath    = pDrawPath;
-            pri.InfoPath    = pInfo;
-            pri.RowProcPath = pRowProcPath;
-            pri.Name        = sName;
-            pri.Path        = pFolder;
-            pri.UUID        = sUUID;
-            pri.CardWidth   = abs(nCardWidth);
-            pri.CardHeight  = abs(nCardHeight);
+            pri.DataPath        = pData;
+            pri.DrawPath        = pDrawPath;
+            pri.InfoPath        = pInfo;
+            pri.RowProcPath     = pRowProcPath;
+            pri.CodeColumnsPath = pCodeColumns;
+            pri.Name            = sName;
+            pri.Path            = pFolder;
+            pri.UUID            = sUUID;
+            pri.CardWidth       = abs(nCardWidth);
+            pri.CardHeight      = abs(nCardHeight);
         end,
         GetCardSize = function(this, cdat)
             local pri = cdat.pri;

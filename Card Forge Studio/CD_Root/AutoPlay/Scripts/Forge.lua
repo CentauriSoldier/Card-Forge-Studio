@@ -531,7 +531,7 @@ local function Draw()--, bExport, fExport) --TODO move this out to private stati
 
         end
     );
-
+    --Page.Redraw();
     --if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..Teach export should not be displayed first
     --    fExport(D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
     --end
