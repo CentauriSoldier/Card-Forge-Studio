@@ -8,12 +8,10 @@ local tonumber          = tonumber;
 local tostring          = tostring;
 local type              = type;
     isnumber            = type.isnumber;
-    isstring            = type.istring;
+    isstring            = type.isstring;
 local floor             = math.floor;
 local clamp             = math.clamp;
 local SanitizePath      = SanitizePath;
-
-local _pAppCFG      = FS.AppCFG;
 
 local File          = File;
     local FileDoesExist         = File.DoesExist;
@@ -32,12 +30,10 @@ local INIFile       = INIFile;
 local Paragraph     = Paragraph;
     local ParagraphGetText      = Paragraph.GetText;
     local ParagraphSetText      = Paragraph.SetText;
-
-
-
-
-local FontStyle   = require("Forge.FontStyle");
--------------------------------------------------------------------
+local FontStyle     = require("Forge.FontStyle");
+local _pAppCFG      = FS.AppCFG;
+--TODO FINISH
+------------------------------------------------------------------- Colors
 --TODO move all these settings to file AND add a LiveFileRepo...long after Beta, not critical
 local _nColorWhite      = ColorRGBA(255, 255, 255, 255);
 local _nColorBlack      = ColorRGBA(0, 0, 0, 255);
@@ -45,7 +41,7 @@ local _nColorClear      = ColorRGBA(0, 0, 0, 0)
 local _nColorRuler      = ColorRGBA(240, 100, 100, 255);
 local _nColorRulerBG    = ColorRGBA(255, 255, 255, 0)
 local _nColorForgeBG    = ColorRGBA(51, 51, 51, 255)
-
+------------------------------------------------------------------- Rulers
 local _tHorRuler            = {--TODO static functions and variables to change these values
     Y           = 0,
     Width       = 825,
@@ -64,6 +60,7 @@ local _tVerRuler            = {--TODO static functions and variables to change t
     MinorWidth  = 10,
     Color       = _nColorRuler,
 };
+------------------------------------------------------------------- Lines and Guides
 local _tCenterLines = {
     Color       = ColorRGBA(50, 50, 255, 255),
 };
@@ -73,11 +70,9 @@ local _tHorGuide = {
 local _tVerGuide = {
     Color       = ColorRGBA(0, 255, 48, 255),
 };
-
-
---NOTE: DO NOT REMOVE: dead function in case initial user function is bad
-local _fDraw = function() end;
-
+------------------------------------------------------------------- Deadcalls
+local _fDraw        = function() end;      --NOTE: DO NOT REMOVE: dead functions in case initial user function is bad
+local _fDrawBack    = function() end;
 -------------------------------------------------------------------
 local _nPageWidth           = -1;
 local _nPageHeight          = -1;
@@ -87,7 +82,6 @@ local _Object       = null;
 local _D            = null;
 local _InternalDC   = null;
 -------------------------------------------------------------------
-local _tStyles          = {};
 local _bAutoUpdateStyle = false;
 ------------------------------------------------------------------- Canvas Guides
 local _nGuideHorY = -1; --start off canvas
@@ -97,11 +91,12 @@ local _bIsAltDown       = false;
 local _bIsControlDown   = false;
 local _bIsShiftDown     = false;
 ------------------------------------------------------------------- Canvas Related
-local _sCanvas          = FORGE_CANVAS_NAME;
-local _bCanvasCreated   = false;
-local _nCanvasWidth     = 100;
-local _nCanvasHeight    = 100;
-local _hWndCard         = false;
+local _sCanvas              = FORGE_CANVAS_NAME;
+local _bCanvasCreated       = false;
+local _nCanvasWidth         = 100;
+local _nCanvasHeight        = 100;
+local _hWndCard             = false;
+--local _bClearCanvasEachDraw = true; --TODO GET FROM INI OR MENU?!!!
 ------------------------------------------------------------------- Mouse & Status
 local _sStatusObject            = FORGE_STATUS_NAME;
 local _sStatusMouseObject       = FORGE_STATUS_MOUSE_NAME;
@@ -115,12 +110,13 @@ local _CoVYH = 1;
 ------------------------------------------------------------------- Draw Plugin Images
 local _hImage           = null;
 local _nImageID         = null;
+--local _hImageBack       = null;
+--local _nImageBackID     = null;
 local _hImageExport     = null;
 local _nImageExportID   = null;
 local _hImageUtil       = null;
 local _nImageUtilID     = null;
--------------------------------------------------------------------
-local _tImageCache      = {};
+------------------------------------------------------------------- user Images
 local _tUserImageCache  = {};
 ------------------------------------------------------------------- Card Info
 local _oActiveCardSet = false;
@@ -128,8 +124,9 @@ local _nCardWidth     = 100;
 local _nCardHeight    = 100;
 local _sCardSetName   = "";
 ------------------------------------------------------------------- Redraw & Filesync
-local _bRedrawUtil              = true; --set to true so the Util redraws on first pass by default
+local _bRedrawUtil              = true; --is set to true so the Util redraws on first pass by default
 local _bRedrawCard              = true;
+local _bDrawBack                = false;
 local _bRedrawCanvas            = false;
 local _bUtilVisible             = true;
 local _tActiveRow               = false;
@@ -142,11 +139,51 @@ local _nSizingDelta             = FORGE_REDRAW_SIZING_INTERVAL;
 local _nRedrawTimerID           = FORGE_REDRAW_TIMER_ID;
 local _nRedrawTimerInterval     = FORGE_REDRAW_TIMER_INTERVAL;
 -------------------------------------------------------------------
-
+local _tStyles = {};
 --local Styles           = ""; --TODO FINISH STYLE NAMES MUST BE VARIABLE COMPLIANT
 
 local function sink() end
 
+local function BuildFontStyleProxy()
+    local tMeta = {
+        __index = function(t, k)
+            local oRet = nil;
+
+            if (rawtype(k) == "string") then
+                oRet = FontStyle.Get(k);
+            end
+
+            return oRet;
+        end,
+
+        __newindex = function(t, k, v)
+            error("Forge.STYLE is read-only.", 2);
+        end,
+
+        __pairs = function()
+            local tNames = FontStyle.GetNames();
+            local nIndex = 0;
+            local nMax = #tNames;
+
+            return function()
+                local sName;
+                local oStyle;
+
+                nIndex = nIndex + 1;
+
+                if (nIndex <= nMax) then
+                    sName = tNames[nIndex];
+                    oStyle = FontStyle.Get(sName);
+                    return nIndex, sName, oStyle;
+                end
+
+            end
+
+        end,
+    };
+
+    setmetatable(_tStyles, tMeta);
+end
 
 local function ImageLoadError(sPath, sName, sMsg)
     error("Error in Forge.LoadImage:\r\nError loading card image at path: \""..sPath.."\" with name, \""..sName.."\"."..#sName.."\r\n"..sMsg, 4);
@@ -185,11 +222,10 @@ local function LoadImage(sPath, sName)
 
 end
 
-
-local function ClearCanvas(D)
+local function ClearImage(D)
     D.SetFilteringMode(DRAW_BLEND_ALLCHANNELS);
     D.DrawRectangle(0, 0, _nCardWidth, _nCardHeight, _nColorClear);
-    D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+    --D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
 end
 
 local function CreateImage(hImage, nImageID)
@@ -307,7 +343,7 @@ end
 
 
 local function DrawUtilObjects(sObject, D, hInternalDC)
-    ClearCanvas(D);
+    ClearImage(D);
 
     --draw utility objects
     local bDrawRulerHor = MainMenu.IsChecked("Options:>Draw:>Horizontal Ruler");
@@ -439,7 +475,7 @@ local function CanvasInputCallback(tEvent)
             @fqxn CFS.Bindings.Middle-Click_+_Control_+_Shift
             @desc Holding Control and Shift and Middle-clicking the canvas removes both the vertical and horizontal guide and copies the X and Y coordinates to the clipboard as "X, Y".
         !]]
-        elseif _bIsControlDown and _bIsShiftDown and _nGuideVerX > -1 and _nGuideHorY > -1 then
+        elseif _bIsControlDown and _bIsShiftDown and (_nGuideVerX > -1 or _nGuideHorY > -1) then
             _nGuideVerX         = -100;
             _nGuideHorY         = -100;
             _bRedrawUtil        = true;
@@ -450,13 +486,32 @@ local function CanvasInputCallback(tEvent)
             ClipboardCopyText(ParagraphGetText(_sStatusMouseObject));
         end
 
+    elseif (nEventCode == CANVAS_KEYBOARD_KEY_DOWN) then
+
+        if (tEvent.Keyboard.Key == KEY_CODES.left.dec) then
+
+            if (_bDrawBack) then
+                _bDrawBack      = false;
+                _bRedrawCard    = true;
+                _bRedrawCanvas  = true;
+            end
+
+        elseif (tEvent.Keyboard.Key == KEY_CODES.right.dec) then
+
+            if not (_bDrawBack) then
+                _bDrawBack      = true;
+                _bRedrawCard    = true;
+                _bRedrawCanvas  = true;
+            end
+
+        end
+
     end
 
-
 end
-
+--TODO FINISH ADD Convas.Focus on mouse over window
 --[[!
-    @fqxn CFS.Classes.Forge.Methods.DrawCard
+    @fqxn CFS.Classes.Forge.Methods.Draw
     @desc Draws the currently selected card into the Forge canvas.
 
     <p>
@@ -490,22 +545,31 @@ local function Draw()--, bExport, fExport) --TODO move this out to private stati
 
     --draw the card
     local function ProcDraw(sObject, D, hInternalDC)
+        ClearImage(D);
+
+        D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+
         --update private vars for use in DrawText and other functions
         _Object      = sObject;
         _D           = D;
         _InternalDC  = hInternalDC;
 
-        --ClearCanvas(D);
-
         --execute the proc's draw method
-        _fDraw(sObject, D, hInternalDC);
+        if (_bDrawBack) then
+            _fDrawBack(sObject, D, hInternalDC);
+        else
+            _fDraw(sObject, D, hInternalDC);
+        end
+
     end
 
     --reset the image size to its original size
     --hImage:Resize(nWidth, nHeight, DRAW_RESIZE_RAW);
 
     --clear the canvas
-    Canvas.Clear(_sCanvas, _nColorClear);
+    --if (_bClearCanvasEachDraw) then
+        Canvas.Clear(_sCanvas, _nColorClear); --TODO MOVE TO UTIL ON/OFF
+    --end
 
     --draw on the card image
     if (_bRedrawCard) then
@@ -523,16 +587,16 @@ local function Draw()--, bExport, fExport) --TODO move this out to private stati
     Canvas.Draw(_sCanvas,
         function(sObject, D, hInternalDC)
             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
-            D.DrawImage(_nImageID,      0, 0, _nCanvasWidth, _nCanvasHeight);
+            D.DrawImage(_nImageID, 0, 0, _nCanvasWidth, _nCanvasHeight);
 
             if MainMenu.IsChecked("Options:>Draw:>Utility Overlay") then--TODO FINISH Break this OUt of here so util and card can be drawn seperately and composited in a nother function...this will fix having to redraw the card whenever the util changes
-                D.DrawImage(_nImageUtilID,  0, 0, _nCanvasWidth, _nCanvasHeight);
+                D.DrawImage(_nImageUtilID, 0, 0, _nCanvasWidth, _nCanvasHeight);
             end
 
         end
     );
     --Page.Redraw();
-    --if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..Teach export should not be displayed first
+    --if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..each export should not be displayed first
     --    fExport(D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
     --end
 
@@ -685,7 +749,7 @@ return class("Forge",
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
         --Forge = function(cForge, sAuthCode) end, --static constructor (runs after class object creation)
         LoadImage = LoadImage,
-        STYLE__RO = _tStyleDecoy,
+        STYLE__RO = _tStyles,
         CenterOnX = function(nVal, nTextWidth) --TODO BUG FIX FINISH These functions NOT working properly on angled text
             local nRet = nVal or 0;
             nRet = nVal - nTextWidth / 2;
@@ -735,10 +799,10 @@ return class("Forge",
             local pOgre = "Images/Ogre.png";
             Forge.DrawImage(pOgre, 100, 100, 32, 32);
         !]]
-        DrawImage = function(pImage, nX, nY, nWidth, nHeight, sName)
+        DrawImage = function(pImage, nX, nY, nWidth, nHeight, sName)--TODO REMOVE THIS....user can load image as needed this is merely a shortcut and a problematic
             --TODO assertions
             local hImage, nImage = LoadImage(FS.Game.."\\"..SanitizePath(pImage, pImage), sName);
-            _D.SetFilteringMode(DRAW_BLEND_ALPHABLEND);
+            --_D.SetFilteringMode(DRAW_BLEND_ALPHABLEND);
             _D.DrawImage(nImage, nX, nY, nWidth, nHeight);
         end,
         --[[!
@@ -1143,114 +1207,10 @@ return class("Forge",
             end
 
             return nBaseX, nBaseY, nBlockW, nBlockH;
-        end,
-        --[[!
-            @fqxn CFS.Classes.Forge.Methods.LoadStyles
-            @desc Loads and initializes all FontStyle definitions for the active game.
-
-            <p>
-              Rebuilds the Forge style registry by loading FontStyle definitions from the
-              game’s styles configuration. This method is invoked by the IDE during game
-              or CardSet initialization and is <strong>not exposed to the UserEnv</strong>.
-            </p>
-
-            <h3>Behavior</h3>
-            <ul>
-              <li>Clears all previously loaded FontStyle entries.</li>
-              <li>Enumerates style definitions from the styles configuration source.</li>
-              <li>Creates and initializes FontStyle objects for each style.</li>
-              <li>Performs an initial update pass to prepare fonts and metrics.</li>
-              <li>Installs a controlled lookup table for style resolution at draw time.</li>
-            </ul>
-
-            <h3>Notes</h3>
-            <ul>
-              <li>This method is intended for IDE use only.</li>
-              <li>It is not available to CardSet <code>Draw</code> scripts or other UserEnv code.</li>
-              <li>Style lookup during drawing is performed via <code>Forge.STYLE</code>.</li>
-            </ul>
-        !]]
-        PrepGame = function() --called when a game is loaded
-            --purge the styles
-            setmetatable(_tStyles, {});
-
-            for k, v in pairs(_tStyles) do
-                _tStyles[k] = nil;
-            end
-
-            --import the styles
-            local pStyles = FS.Styles;
-
-            --TODO check for file and other things...do error checsk later --THROW ERROR if not
-            local tSections     = INIFile.GetSectionNames(pStyles);
-            local tStyles       = {};
-
-            table.sort(tSections);
-
-            for nIndex, sStyleRaw in ipairs(tSections) do
-                local sStyle = sStyleRaw:upper();
-                tStyles[sStyle] = FontStyle.FromINI(pStyles, sStyle);
-                --run the initial update --TODO BUG fix the FontStyle so it does this upon and creation so it doesn't need done here
-                tStyles[sStyle]:Update();--TODO QUESTION WHY : and not . ?
-            end
-
-            --create and store the STYLE table
-            local sErrorPrefix = "Error assigning new FontStyle in Forge.STYLE: ";
-
-            local tStylesMeta = {
-                __index = function(t, k)
-
-                    if rawtype(k) == "string" then
-                        return tStyles[k:upper()] or nil;
-                    end
-
-                end,
-                __newindex = function(t, k, v)
-
-                    if (type(k) ~= "string") then
-                        error(sErrorPrefix.."index must be variable-compliant string. Got "..type(k)..'.');
-                    end
-
-                    if not (k:variabalcompliant()) then
-                        error(sErrorPrefix.."index must be variable-compliant string. Got "..k..'.');
-                    end
-
-                    if not (type(v) == "FontStyle") then
-                        error(sErrorPrefix.."value must be FontStyle. Got "..type(v)..'.');
-                    end
-
-                    tStyles[k] = v;
-                end,
-                __pairs = function()
-                    local nIndex    = 0;
-                    local nMax      = 0;
-                    local tKeys     = {};
-
-                    for vKey in pairs(tStyles) do
-                        nMax = nMax + 1;
-                        tKeys[nMax] = vKey;
-                    end
-
-                    table.sort(tKeys, fComp);
-
-                    return function()
-                        nIndex = nIndex + 1;
-
-                        if (nIndex <= nMax) then
-                            local sIndex = tKeys[nIndex];
-                            return nIndex, sIndex, tStyles[sIndex];
-                        end
-
-                    end
-
-                end,
-            };
-
-            setmetatable(_tStyles, tStylesMeta);
-        end,
+        end,    
         OnShow = function()
-            local nV = KEY_CODES.v.dec;
-            local nH = KEY_CODES.h.dec;
+            --local nV = KEY_CODES.v.dec;
+            --local nH = KEY_CODES.h.dec;
 
             --create the canvas
             if not (_bCanvasCreated) then
@@ -1283,6 +1243,10 @@ return class("Forge",
 
             _bForgeAutoSizing = false;
 
+            BuildFontStyleProxy();
+
+            FontStyle.OnShow();
+
             Page.StartTimer(_nRedrawTimerInterval, _nRedrawTimerID);
         end,
         OnSize = function(nWindowWidth, nWindowHeight, nPageWidth, nPageHeight, nType)
@@ -1309,69 +1273,10 @@ return class("Forge",
             end
 
         end,
-        STYLE = null, --public enum --TODO Does it need to be public still? It gets injected into the userenv so why make it public?
-        OnTimerOLD = function(nID)
-
-            if (nID == _nRedrawTimerID) then
-                --increment the delta time
-                _nTimeDelta = _nTimeDelta + _nRedrawTimerInterval;
-
-                --check if a redraw request was made and that we're done resizing
-                if (_bRedrawCanvas and not _bIsResizing) then
-                    --redraw the card
-                    Draw();
-                    --fulfill the request
-                    _bRedrawCanvas = false;
-                end
-
-                --if enough time has passed...
-                if (_nTimeDelta >= _nSizingDelta) then
-                    --...indicate resizing has stopped
-                    _bIsResizing    = false;
-                    --...and reset the time delta
-                    _nTimeDelta     = 0;
-                end
-
-            end
-
-        end,
-        OnTimerNEWER = function(nID)
-
-            if (nID ~= _nRedrawTimerID or _bDrawBlocked or _bDrawTimerBusy or not _tActiveRow) then
-                return;
-            end
-
-            _bDrawTimerBusy = true;
-
-            local bOK, sErr = pcall(function()
-                --increment the delta time
-                _nTimeDelta = _nTimeDelta + _nRedrawTimerInterval;
-
-                --check if a redraw request was made and that we're done resizing
-                if (_bRedrawCanvas and not _bIsResizing) then
-                    --redraw the card
-                    Draw();
-                    --fulfill the request
-                    _bRedrawCanvas = false;
-                end
-
-                --if enough time has passed...
-                if (_nTimeDelta >= _nSizingDelta) then
-                    --...indicate resizing has stopped
-                    _bIsResizing = false;
-                    --...and reset the time delta
-                    _nTimeDelta = 0;
-                end
-            end);
-
-            _bDrawTimerBusy = false;
-
-            if not (bOK) then
-                error(sErr, 0);
-            end
-
-        end,
+        --STYLE = null, --public enum --TODO Does it need to be public still? It gets injected into the userenv so why make it public?
         OnTimer = function(nID)
+
+            FontStyle.OnTimer(nID);--TODO Check for timer ID before calling
 
             if (nID ~= _nRedrawTimerID or _bDrawBlocked or _bDrawTimerBusy) then
                 return;
@@ -1388,7 +1293,7 @@ return class("Forge",
                     --redraw the card
                     Draw();
                     --fulfill the request
-                    _bRedrawCanvas = false;
+                    _bRedrawCanvas = false;--TODO QUESTION should this be above?
                 end
 
                 --if enough time has passed...
@@ -1423,6 +1328,14 @@ return class("Forge",
 
             _fDraw = fDraw;
         end,
+            SetDrawBackFunction = function(fDrawBack)
+
+            if not (rawtype(fDrawBack) == "function") then
+                error("Forge.SetDrawBackFunction: expected function at argument 1. Got "..rawtype(fDrawBack), 3);
+            end
+
+            _fDrawBack = fDrawBack;
+        end,
         SetActiveRow = function(tRow)
             --TODO ASSERTIONS
             if (type(tRow) == "table") then
@@ -1444,14 +1357,20 @@ return class("Forge",
             --(re)create the Forge images
             if (_hImage ~= null) then
                 _hImage:Free();
+                _hImage = null;
+                _nImageID = null;
             end
 
             if (_hImageExport ~= null) then
                 _hImageExport:Free();
+                _hImageExport = null;
+                _nImageExportID = null;
             end
 
             if (_hImageUtil ~= null) then
                 _hImageUtil:Free();
+                _hImageUtil = null;
+                _nImageUtilID = null;
             end
 
             _hImage,        _nImageID       = CreateImage(_hImage,         _nImageID);
@@ -1460,18 +1379,25 @@ return class("Forge",
 
             UpdatePageLayout();
         end,
+        --[[SetClearCanvasEachDraw = function(vFlag)
+            _bClearCanvasEachDraw = rawtype(vFlag) == "boolean" and vFlag or false;
+        end,]]
         SetDrawEnabled = function(vFlag)
             _bDrawBlocked = not (rawtype(vFlag) == "boolean" and vFlag or false);
         end,
+        --[[SetDrawSide = function(nDrawside)
+            type.assert.number(nDrawside, true, false, false, true, false, 0, 1);
+            _bDrawBack = #nDrawside; --draws front on 0, back on 1
+        end,]]
         SetUtilVisible = function(vFlag)
             _bUtilVisible = rawtype(vFlag) == "boolean" and vFlag or false;
             _bRedrawCanvas  = true;
         end,
         UpdateStyles = function()
 
-            for oStyle in pairs(_tStyles) do
-                oStyle.Update();
-            end
+            --for nIndex, sIndex, oStyle in pairs(_tStyles) do
+                --oStyle.Update();
+            --end
 
         end,
     },

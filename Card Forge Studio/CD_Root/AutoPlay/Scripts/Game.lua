@@ -137,6 +137,9 @@ return class("Game",
 
             _oActiveGame = oGame;
 
+            StatusDlg.Show(MB_ICONNONE, false);
+            StatusDlg.SetTitle("Loading Game: "..oGame.GetName());
+
             FS.PrepGame(oGame); --set the filepaths for the current game
 
             --reset the BuildMechanics var (it gets reloaded in Init.lua if present)
@@ -152,11 +155,12 @@ return class("Game",
 
             end
 
+            StatusDlg.SetMessage("Processing Game Dox...");
             ProcessDox();--TODO get this boolean from INI file before running Dox
 
-            Forge.PrepGame();
-
             ProcSys.PrepGame(oGame);
+
+            StatusDlg.Hide();
         end,
         --rebuilds all game objects and refreshes the private static info
         Refresh = function()

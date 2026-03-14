@@ -1,3 +1,9 @@
+local nTimerID = 99;
+local function GetNextTimerID()
+    nTimerID = nTimerID + 1;
+    return nTimerID;
+end
+
 constant("APP_NAME",            "Card Forge Studio");
 constant("APP_MAJOR_VERSION",   "v0.");
 constant("APP_BUILD_VERSION",   ".alpha");
@@ -23,12 +29,12 @@ constant("APP_WEBSITE", "https://www.cardforge.studio/");
 constant("FOLDER_CARD_SETS", "CardSets"); --this must be here since it needs to be accessed before the game is prepped
 
 --constant("TIMER_HTML_PROCESS_INTERVAL", 3200);
---constant("TIMER_HTML_PROCESS_ID",       97);
+--constant("TIMER_HTML_PROCESS_ID",       GetNextTimerID());
 
 constant("LICENSE", TextFile.ReadToString(_Docs.."\\Licenses\\licenses.txt"));
 
 constant("FORGE_CANVAS_NAME",               "cvs card");
-constant("FORGE_REDRAW_TIMER_ID",           100);
+constant("FORGE_REDRAW_TIMER_ID",           GetNextTimerID());
 constant("FORGE_REDRAW_TIMER_INTERVAL",     10);
 constant("FORGE_REDRAW_SIZING_INTERVAL",    300);
 constant("FORGE_STATUS_NAME",               "par status");
@@ -36,14 +42,15 @@ constant("FORGE_STATUS_MOUSE_NAME",         "par status mouse");
 constant("FORGE_STATUS_MOUSE_NEG_NAME",     "par status mouse neg");
 
 constant("PROCSYS_LIVE_FILE_REPO_TIMER_INTERVAL",   250);
-constant("PROCSYS_SYNC_TIMER_ID",                   101);
+constant("PROCSYS_SYNC_TIMER_ID",                   GetNextTimerID());
 constant("PROCSYS_SYNC_TIMER_INTERVAL",             10);
 constant("PROCSYS_TO_TABLE",                        1);
 constant("PROCSYS_TO_NUMBER",                       2);
 constant("PROCSYS_GRID_BASE",                       "grd base data");
 constant("PROCSYS_GRID_FINAL",                      "grd final data");
 
-
+constant("FONTSTYLE_TIMER_ID",           GetNextTimerID());
+constant("FONTSTYLE_TIMER_INTERVAL",     10);
 
 
 
@@ -88,6 +95,7 @@ end
 --filenames/extensions
 constant("FILESPEC_CARDSET_DATA",           BuildFileSpecTable("Data",          "csv"));
 constant("FILESPEC_CARDSET_DRAW",           BuildFileSpecTable("Draw",          "lua"));
+constant("FILESPEC_CARDSET_DRAWBACK",       BuildFileSpecTable("DrawBack",      "lua"));
 constant("FILESPEC_CARDSET_INFO",           BuildFileSpecTable("Info",          "ini"));
 constant("FILESPEC_CARDSET_ROWPROC",        BuildFileSpecTable("RowProc",       "lua"));
 constant("FILESPEC_CARDSET_CODECOLUMMS",    BuildFileSpecTable("CodeColumns",   "txt"));

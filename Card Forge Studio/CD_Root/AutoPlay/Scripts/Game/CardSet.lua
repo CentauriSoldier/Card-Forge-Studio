@@ -23,6 +23,7 @@ return class("CardSet",
         CardHeight__AUTOR_      = null,
         DataPath__AUTOR_        = null,
         DrawPath__AUTOR_        = null,
+        DrawBackPath__AUTOR_    = null,
         InfoPath__AUTOR_        = null,
         RowProcPath__AUTOR_     = null,
         CodeColumnsPath__AUTOR_ = null,
@@ -44,6 +45,7 @@ return class("CardSet",
 
             local pData         = pFolder.."\\"..FILESPEC_CARDSET_DATA.Full;
             local pDrawPath     = pFolder.."\\"..FILESPEC_CARDSET_DRAW.Full;
+            local pDrawBackPath = pFolder.."\\"..FILESPEC_CARDSET_DRAWBACK.Full;
             local pInfo         = pFolder.."\\"..FILESPEC_CARDSET_INFO.Full;
             local pRowProcPath  = pFolder.."\\"..FILESPEC_CARDSET_ROWPROC.Full;
             local pCodeColumns  = pFolder.."\\"..FILESPEC_CARDSET_CODECOLUMMS.Full;
@@ -75,6 +77,7 @@ return class("CardSet",
             --set the game's info
             pri.DataPath        = pData;
             pri.DrawPath        = pDrawPath;
+            pri.DrawBackPath    = pDrawBackPath;
             pri.InfoPath        = pInfo;
             pri.RowProcPath     = pRowProcPath;
             pri.CodeColumnsPath = pCodeColumns;

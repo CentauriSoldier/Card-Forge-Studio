@@ -30,6 +30,7 @@ local _nCurrentColumn               = false;
 local _nLastRow                     = -1;
 local _nRowCount                    = -1;
 local _nColumnCount                 = -1;
+local _tColumnNameIDMap             = {};
 ------------------------------------- Export
 local _tExporters                   = {};
 ------------------------------------- CSV
@@ -42,13 +43,14 @@ local _tReprocRows                  = {};
 local _oRowProcLiveFileRepo         = LiveFileRepo();
 local _bRowProcChanged              = false;
 local _sRowProcCode                 = "";
- --NOTE: DO NOT REMOVE: dead function in case initial user function is bad
-local _fRowProc                     = function() end;
+local _fRowProc                     = function() end; --NOTE: DO NOT REMOVE: dead function in case initial user function is bad
 local _bRowProcChanged              = false;
 ------------------------------------- Draw (Draw function doesn't get stored here as it's sent to Forge upon creation)
 local _oDrawLiveFileRepo            = LiveFileRepo(); --QUESTION SHOULD THIS BE IN THE FORGE MODULE?
 local _bDrawChanged                 = false;
 local _sDrawCode                    = "";
+local _bDrawBackChanged             = false;
+local _sDrawBackCode                = "";
 ------------------------------------- Game Including CGF & ENV
 local _oGameLiveFileRepo            = LiveFileRepo();
 local _oActiveGame                  = null;
@@ -364,6 +366,8 @@ local function LoadFileToGrid(pFile)
     _nCurrentRow    = 1;
     _nCurrentColumn = 1;
 
+    StatusDlg.SetMeterRange(1, _nRowCount);
+
     for nRow = 1, _nRowCount - 1 do
 
         for nColumn = 1, _nColumnCount - 1 do
@@ -373,6 +377,14 @@ local function LoadFileToGrid(pFile)
     end
 
     UpdateGrids();
+
+
+    --(re)build the column name/id map
+    _tColumnNameIDMap = {};
+
+    for nColumnID = 0, _nColumnCount - 1 do
+        _tColumnNameIDMap[GetCellText(_sBaseDataGrid, 0, nColumnID)] = nColumnID;
+    end
 
     --set loading to finished
     _bAllowSave = false;
@@ -406,35 +418,36 @@ end
 ProcessCell = function(nRow, nColumn)
     local sColumn       = GetCellText(_sBaseDataGrid, 0, nColumn);
     local sText         = GetCellText(_sBaseDataGrid, nRow, nColumn);
+    local tCodeColumn   = _tCodeColumns[sColumn];
 
-    --LEFT OFF HERE
 
+    if (tCodeColumn and tColumnCode[nRow]) then
+        local tCodeCell = tColumnCode[nRow];
+        p(type(tCodeCell.Function))
+    else
+        local function fGetFinalValue(sColumn, vCoerce)
+            local vRet = GetCellText(_sFinalDataGrid, nRow, GetColumnIDByName(_sFinalDataGrid, sColumn));
+            local nCoerce = rawtype(vCoerce) == "number" and vCoerce or nil;
 
-    local function fGetFinalValue(sColumn, vCoerce)
-        local vRet = GetCellText(_sFinalDataGrid, nRow, GetColumnIDByName(_sFinalDataGrid, sColumn));
-        local nCoerce = rawtype(vCoerce) == "number" and vCoerce or nil;
+            if (nCoerce == PROCSYS_TO_NUMBER) then
+                local vRetCollapsed = vRet:collapse();
+                vRet = tonumber(vRetCollapsed) or vRet; --TODO QUESTION SHOULD THIS FAIL with error msg INSTEAD???
+            --elseif (nCoerce == PROCSYS_TO_TABLE) then TODO
 
-        if (nCoerce == PROCSYS_TO_NUMBER) then
-            local vRetCollapsed = vRet:collapse();
-            vRet = tonumber(vRetCollapsed) or vRet; --TODO QUESTION SHOULD THIS FAIL with error msg INSTEAD???
-        --elseif (nCoerce == PROCSYS_TO_TABLE) then TODO
+            end
 
+            return vRet;
         end
 
-        return vRet;
-    end
+        local vProcRet = _fRowProc(nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
 
-    --call the row processor
-    --if
-    --_fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
+        if (rawtype(vProcRet) == "string") then
+            ---update the cell's text
+            Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, vProcRet);
+        else
+            Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, sText);
+        end
 
-    local vProcRet = _fRowProc(nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
-
-    if (rawtype(vProcRet) == "string") then
-        ---update the cell's text
-        Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, vProcRet);
-    else
-        Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, sText);
     end
 
     --TODO Also, be sure to add function to the env that indicates if a given column as been processed (basically if Column_A.index Column_< B.index)
@@ -574,6 +587,13 @@ local function UpdateCardSetLiveFileRepo() --TODO FINISH
     function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
         _sDrawCode      = sNewText;
         _bDrawChanged   = true;
+    end);
+
+    --watch the DrawBack file
+    oLiveFileRepo.Add("DrawBack", oCardSet.GetDrawBackPath(), _nLiveFileRepoTimerInterval,
+    function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _sDrawBackCode      = sNewText;
+        _bDrawBackChanged   = true;
     end);
 
     --watch the Info file
@@ -786,6 +806,7 @@ end
 
 local function UpdateCodeColumns()
     local tFileColumns = _sCodeColumns:totable("\r\n");
+    --local sSalt        = --prevents writing by obfuscation from other functions
 
     if (rawtype(tFileColumns) == "table" and #tFileColumns > 0) then
         local tReferenced = {};
@@ -813,18 +834,39 @@ local function UpdateCodeColumns()
 
         for _, sKey in pairs(tFileColumns) do
 
-            if (rawtype(sKey) == "string" and _tCodeColumns[sKey] == nil) then
+            if (rawtype(sKey) == "string" and _tCodeColumns[sKey] == nil and _tColumnNameIDMap[sKey]) then  --TODO FINISH QUESTION What about case sensitivity? Isn't the system insensitive elsewhere?
                 local tColumnCode       = {};
                 local tColumnCodeDecoy  = {};
                 local tColumnCodeMeta   = {
                     __index = tColumnCode,
                     __newindex = function(t, k, v) --assumes that k is the name of the card and is correct and exists, and that v is the base64 code from the cell
-                        local fChunk, sError = load(dec(v), "CodeColumn '"..k.."'", 't', UserEnv.Get())
-                        tColumnCode[k] = {
-                            Error       = sError,
-                            Function    = fChunk,
-                            IsValid     = rawtype(fChunk) == "function",
-                        };
+                        local zK = rawtype(k);
+
+                        if not (tColumnCode[k]) then
+                            tColumnCode[k] = {
+                                Column      = "",
+                                Error       = "",
+                                Function    = false,
+                                IsValid     = false,
+                                Row         = -1,
+                            };
+                        end
+
+                        if (zK == "string") then
+                            local tCC = tColumnCode[k];
+                            local fChunk, sError = load(dec(v), "CodeColumn '"..k.."'", 't', UserEnv.Get())
+
+                            tCC.Column      = sKey;
+                            tCC.Error       = sError;
+                            tCC.Function    = fChunk;
+                            tCC.IsValid     = rawtype(fChunk) == "function";
+                            tCC.Row         = -1;
+
+                        elseif (zK == "number") then
+                            tColumnCode[k].Row = v;
+                        end
+
+
                     end,
                 };
 
@@ -832,22 +874,28 @@ local function UpdateCodeColumns()
                 _tCodeColumns[sKey] = tColumnCodeDecoy;
             end
 
-            local nKeyID  = GetColumnIDByName(_sBaseDataGrid, sKey);
+            local nKeyColumnID  = GetColumnIDByName(_sBaseDataGrid, sKey);
 
             for nRow = 1, _nRowCount do
-                local sCode = GetCellText(_sBaseDataGrid, nRow, nKeyID);
+                local sCode = GetCellText(_sBaseDataGrid, nRow, nKeyColumnID);
 
                 if not (sCode:isempty()) then
-                    local sName = GetCellText(_sBaseDataGrid, nRow, nNameID);
-                    _tCodeColumns[sKey][sName] = sCode;
+                    --local sName = GetCellText(_sBaseDataGrid, nRow, nNameID);
+                    --_tCodeColumns[sKey][sName] = sCode;
+                    _tCodeColumns[sKey][nRow] = sCode;
+                    _tCodeColumns[sKey][nRow] = nRow;
                 else
-                    _tCodeColumns[sKey][sName] = nil;
+                    --_tCodeColumns[sKey][sName] = nil;
+                    _tCodeColumns[sKey][nRow] = nil;
                 end
 
             end
 
         end
 
+    else
+        --if no code columns were listed...reset the table
+        _tCodeColumns = {};
     end
 
 end
@@ -956,12 +1004,14 @@ return class("ProcSys",
                 error("ProcSys.PrepGame: Error prepping game. Expected Game object. Got "..type(oGame)..'.');
             end
 
+            StatusDlg.SetMessage("Updating User Environment...");
             _oActiveGame = oGame;
             _sGameName   = oGame.GetName();
             _bCFGChanged = true;
             _bENVChanged = true;
 
-            UpdateGameLiveFileRepo();
+            StatusDlg.SetMessage("Updating Life File Repository...");
+            UpdateGameLiveFileRepo();            
         end,
         --[[! TODO FIX REDO
             @fqxn CFS.Classes.ProcSys.Methods.GetSetName
@@ -1001,11 +1051,11 @@ return class("ProcSys",
             _bAllowSave     = false;
             _pActiveCSV     = oCardSet.GetDataPath();
             _sDrawCode      = TextFile.ReadToString(oCardSet.GetDrawPath());
+            _sDrawBackCode  = TextFile.ReadToString(oCardSet.GetDrawBackPath());
             _sRowProcCode   = TextFile.ReadToString(oCardSet.GetRowProcPath());
             _sCardSetName   = oCardSet.GetName();
             _nCardWidth     = oCardSet.GetCardWidth();
             _nCardHeight    = oCardSet.GetCardHeight();
-
             _bSelectionMade = false;
 
             UserEnv.ProcSysUpdateRoot {
@@ -1023,6 +1073,7 @@ return class("ProcSys",
             _bDataChanged           = true;
             _bRowProcChanged        = true;
             _bDrawChanged           = true;
+            _bDrawBackChanged       = true;
             _bCodeColumnsChanged    = true;
 
             Forge.SetActiveCardSet(oCardSet);
@@ -1204,7 +1255,7 @@ return class("ProcSys",
 
             local bOK, sErr = xpcall(function()
                 local bResetRows = _bDataChanged    or _bCFGChanged     or _bENVChanged     or _bRowProcChanged;
-                local bRedraw    = bResetRows       or _bDrawChanged;
+                local bRedraw    = bResetRows       or _bDrawChanged    or _bDrawBackChanged;
 
                 if (_bInfoChanged) then
                     _bInfoChanged = false;
@@ -1235,6 +1286,9 @@ return class("ProcSys",
                         if (_nCurrentColumn >= _nColumnCount) then
                             _nCurrentColumn = _nColumnCount - 1;
                         end
+
+                        --update the code columns
+                        UpdateCodeColumns();
 
                     end, XPCallError);
 
@@ -1310,12 +1364,24 @@ return class("ProcSys",
                         end
                     end
 
+                    if (_bDrawBackChanged) then
+                        _bDrawBackChanged = false;
+
+                        local fDrawBack = BuildCardSetFunction("DrawBack", _sDrawBackCode);
+
+                        if (rawtype(fDrawBack) == "function") then
+                            Forge.SetDrawBackFunction(fDrawBack);
+                        end
+                    end
+
                     if (bRedraw) then
-                        _bDrawChanged = false;
+                        _bDrawChanged       = false;
+                        _bDrawBackChanged   = false;
                         TryDrawCard(Grid.GetRow(_sFinalDataGrid, _nCurrentRow));
                     end
 
                 end
+
             end, XPCallError);
 
             _bSyncBusy = false;

@@ -9,80 +9,34 @@ local type          = type;
     local clamp         = math.clamp;
     local floor         = math.floor;
     local isnumber      = type.isnumber;
-    local isstring      = type.istring;
+    local isstring      = type.isstring;
     local istable       = type.istable;
 local Color         = Color;
 local Drawing       = Drawing;
 local DrawingFont   = DrawingFont;
-local INIFile       = INIFile;
-
-local _tblErrorMessages = _tblErrorMessages;
+local Ini           = Ini;
+local ipairs        = ipairs;
+local pairs         = pairs;
+local table         = table;
+local clone         = clone;
+local io            = io;
 
 local _oBlack       = Color.RGBA(0, 0, 0, 255);
 local _oClear       = Color.RGBA(0, 0, 0, 0);
 
+local _nTimerID             = FONTSTYLE_TIMER_ID;
+local _nTimerInterval       = FONTSTYLE_TIMER_INTERVAL;
+local _bTimerBusy           = false;
+local _oLiveFileRepo        = nil;
+local _bFontStylesChanged   = false;
+local _sFontStyleINI        = "";
+local _oINI                 = nil;
 
+local _tStyles          = {};
+local _tStyleMeta       = {};
+local _tParsedStyles    = {};
 
-local function GetEffectBoundsTEST(nW, nH,
-    bShadow, nShadowX, nShadowY, nShadowBlurRadius,
-    b3D, n3DStepX, n3DStepY, n3DDepth,
-    bOutline, nOutlineThickness,
-    nFudgeX, nFudgeY)
-
-    nW = floor(nW or 0);
-    nH = floor(nH or 0);
-
-    local nMinX = 0;
-    local nMaxX = nW;
-    local nMinY = 0;
-    local nMaxY = nH;
-
-    local function ApplyRect(nDX, nDY, nPadX, nPadY)
-        nDX   = floor(nDX   or 0);
-        nDY   = floor(nDY   or 0);
-        nPadX = floor(nPadX or 0);
-        nPadY = floor(nPadY or 0);
-
-        local nX0 = nDX - nPadX;
-        local nX1 = nW + nDX + nPadX;
-        nMinX = math.min(nMinX, nX0, nX1);
-        nMaxX = math.max(nMaxX, nX0, nX1);
-
-        local nY0 = nDY - nPadY;
-        local nY1 = nH + nDY + nPadY;
-        nMinY = math.min(nMinY, nY0, nY1);
-        nMaxY = math.max(nMaxY, nY0, nY1);
-    end;
-
-    -- base text: add small AA/overhang fudge
-    ApplyRect(0, 0, nFudgeX or 2, nFudgeY or 1);
-
-    -- shadow: offset + blur radius
-    if (bShadow) then
-        ApplyRect(nShadowX or 0, nShadowY or 0, nShadowBlurRadius or 0, nShadowBlurRadius or 0);
-    end
-
-    -- 3D: farthest layer at depth * step
-    if (b3D) then
-        local nDepth = floor(n3DDepth or 0);
-        ApplyRect((n3DStepX or 0) * nDepth, (n3DStepY or 0) * nDepth, 0, 0);
-    end
-
-    -- outline: expands equally in all directions
-    if (bOutline) then
-        local nT = floor(nOutlineThickness or 0);
-        if (nT > 0) then
-            ApplyRect(0, 0, nT, nT);
-        end
-    end
-
-    local nTotalW = nMaxX - nMinX;
-    local nTotalH = nMaxY - nMinY;
-
-    return nMinX, nMinY, nTotalW, nTotalH;
-end
-
-
+local FontStyle;
 
 local function GetEffectBounds(nW, nH,
     bShadow, nShadowX, nShadowY,
@@ -94,487 +48,568 @@ local function GetEffectBounds(nW, nH,
     local nMaxY = nH;
 
     local function ApplyDelta(nDX, nDY)
-        -- X
         local nX0 = nDX;
         local nX1 = nW + nDX;
-        nMinX = math.min(nMinX, nX0, nX1);
-        nMaxX = math.max(nMaxX, nX0, nX1);
-
-        -- Y
         local nY0 = nDY;
         local nY1 = nH + nDY;
+
+        nMinX = math.min(nMinX, nX0, nX1);
+        nMaxX = math.max(nMaxX, nX0, nX1);
         nMinY = math.min(nMinY, nY0, nY1);
         nMaxY = math.max(nMaxY, nY0, nY1);
     end;
 
     if (bShadow) then
-        local nSX = floor(nShadowX or 0);
-        local nSY = floor(nShadowY or 0);
-        ApplyDelta(nSX, nSY);
+        ApplyDelta(floor(nShadowX or 0), floor(nShadowY or 0));
     end
 
     if (b3D) then
         local nDepth = floor(n3DDepth or 0);
-        local nDX    = floor((n3DStepX or 0) * nDepth);
-        local nDY    = floor((n3DStepY or 0) * nDepth);
-        ApplyDelta(nDX, nDY);
+        ApplyDelta(
+            floor((n3DStepX or 0) * nDepth),
+            floor((n3DStepY or 0) * nDepth)
+        );
     end
 
-    local nTotalW = nMaxX - nMinX;
-    local nTotalH = nMaxY - nMinY;
-
-    local nRetMinX = nMinX;
-    local nRetMinY = nMinY;
-    local nRetW    = nTotalW;
-    local nRetH    = nTotalH;
-
-    return nRetMinX, nRetMinY, nRetW, nRetH;
+    return nMinX, nMinY, nMaxX - nMinX, nMaxY - nMinY;
 end
 
+local function ReadStyleFile()
+    local sRet = "";
+    local hFile = nil;
 
+    hFile = io.open(FS.Styles, "rb");
 
+    if (hFile) then
+        sRet = hFile:read("*a");
+        hFile:close();
+    end
 
+    sRet = isstring(sRet) and sRet or "";
+    return sRet;
+end
 
+local function BuildFontSignature(tParsed)
+    local tFontOptions = istable(tParsed.FontOptions) and tParsed.FontOptions or {};
+    local sRet = "";
 
+    sRet = table.concat({
+        tostring(tParsed.FontFamily),
+        tostring(tParsed.FontSize),
+        tostring(tFontOptions.Bold),
+        tostring(tFontOptions.Italic),
+        tostring(tFontOptions.Underline),
+        tostring(tFontOptions.StrikeOut),
+        tostring(tFontOptions.HQ),
+    }, "\31");
 
+    return sRet;
+end
 
+local function BuildEffectSignature(tParsed)
+    local sRet = "";
 
+    sRet = table.concat({
+        tostring(tParsed.FontColor),
 
+        tostring(tParsed.ShadowEnabled),
+        tostring(tParsed.ShadowX),
+        tostring(tParsed.ShadowY),
+        tostring(tParsed.ShadowColor),
 
+        tostring(tParsed.D3Enabled),
+        tostring(tParsed.D3Depth),
+        tostring(tParsed.D3StepX),
+        tostring(tParsed.D3StepY),
+        tostring(tParsed.D3Color),
 
+        tostring(tParsed.GlowEnabled),
+        tostring(tParsed.GlowGradientEnabled),
+        tostring(tParsed.GlowColor),
+        tostring(tParsed.GlowOuterColor),
+        tostring(tParsed.GlowRadius),
+        tostring(tParsed.GlowAlphaMax),
 
+        tostring(tParsed.OutlineEnabled),
+        tostring(tParsed.OutlineThickness),
+        tostring(tParsed.OutlineColor),
+    }, "\31");
 
--- Local parser used by BOTH:
---   1) FontStyle.FromINI(pINI, sName)
---   2) this:Update()
---
--- Returns: tParsed (table) OR nil on failure
--- NOTE: Uses your existing string:trim/trimright functions (no extra helpers)
+    return sRet;
+end
 
-local function ParseFontStyleINI(pINI, sSectionName)
+local function ParseFontStyleINI(sSectionName)
     local tRet = nil;
+    local tValueNames = nil;
 
-    local tValueNames = INIFile.GetValueNames(pINI, sSectionName);
+    if (_oINI and isstring(sSectionName) and not sSectionName:isempty()) then
+        sSectionName = isstring(sSectionName) and sSectionName:upper() or "";
+        tValueNames = _oINI.GetValueNames(sSectionName);
 
-    if (tValueNames) then
+        if (istable(tValueNames) and #tValueNames > 0) then
 
-        local function val(sValName)
-            local sRet = "";
-            local sVal = INIFile.GetValue(pINI, sSectionName, sValName, true);
+            local function val(sValName)
+                local sRet = "";
+                local sVal = _oINI.GetValue(sSectionName, sValName, true);
 
-            if (type.isstring(sVal)) then
-                sRet = sVal;
+                if (isstring(sVal)) then
+                    sRet = sVal;
+                end
+
+                return sRet;
             end
 
-            return sRet;
+            local sFontFamilyRaw    = val("Family");
+            local sFontFamily       = isstring(sFontFamilyRaw) and sFontFamilyRaw:trimright() or "";
+            local nFontSize         = floor(tonumber(val("Size")) or 12);
+            local nFontColor        = Color.TryFromString(val("Color"), true) or _oBlack;
+
+            local tFontOptions = {
+                Bold        = toboolean(val("Bold"))      and true or false,
+                Italic      = toboolean(val("Italic"))    and true or false,
+                Underline   = toboolean(val("Underline")) and true or false,
+                StrikeOut   = toboolean(val("StrikeOut")) and true or false,
+                HQ          = toboolean(val("HQ"))        and true or false,
+            };
+
+            local nShadowX          = tonumber(val("ShadowX"));
+            local nShadowY          = tonumber(val("ShadowY"));
+            local nShadowColor      = Color.TryFromString(val("ShadowColor"), true) or _oClear;
+            local bShadowEnabled    = toboolean(val("ShadowEnabled")) and true or false;
+
+            local nD3Color          = Color.TryFromString(val("3DColor"), true) or _oClear;
+            local nD3Depth          = tonumber(val("3DDepth"));
+            local nD3StepX          = tonumber(val("3DStepX"));
+            local nD3StepY          = tonumber(val("3DStepY"));
+            local b3DEnabled        = toboolean(val("3DEnabled")) and true or false;
+
+            local nGlowColor            = Color.TryFromString(val("GlowColor"), true) or _oClear;
+            local nGlowOuterColor       = Color.TryFromString(val("GlowOuterColor"), true) or _oClear;
+            local nGlowRadius           = tonumber(val("GlowRadius"));
+            local nGlowAlphaMax         = tonumber(val("GlowAlphaMax"));
+            local bGlowEnabled          = toboolean(val("GlowEnabled")) and true or false;
+            local bGlowGradientEnabled  = false;
+
+            local nOutlineThickness  = tonumber(val("OutlineThickness"));
+            local nOutlineColor      = Color.TryFromString(val("OutlineColor"), true) or _oClear;
+            local bOutlineEnabled    = toboolean(val("OutlineEnabled")) and true or false;
+
+            sFontFamily = not (sFontFamily:isempty()) and sFontFamily or "Times New Roman";
+            bGlowEnabled = isnumber(nGlowRadius) and isnumber(nGlowAlphaMax) and bGlowEnabled;
+            bGlowGradientEnabled = bGlowEnabled and nGlowOuterColor ~= _oClear;
+
+            tRet = {
+                Name                = sSectionName,
+
+                FontFamily          = sFontFamily,
+                FontSize            = nFontSize,
+                FontColor           = nFontColor,
+                FontOptions         = tFontOptions,
+
+                ShadowEnabled       = isnumber(nShadowX) and isnumber(nShadowY) and bShadowEnabled,
+                ShadowX             = floor(nShadowX or 0),
+                ShadowY             = floor(nShadowY or 0),
+                ShadowColor         = nShadowColor,
+
+                D3Enabled           = isnumber(nD3Depth) and isnumber(nD3StepX) and isnumber(nD3StepY) and b3DEnabled,
+                D3Color             = nD3Color,
+                D3Depth             = floor(nD3Depth or 0),
+                D3StepX             = floor(nD3StepX or 0),
+                D3StepY             = floor(nD3StepY or 0),
+
+                GlowEnabled         = bGlowEnabled,
+                GlowGradientEnabled = bGlowGradientEnabled,
+                GlowColor           = nGlowColor,
+                GlowOuterColor      = nGlowOuterColor,
+                GlowRadius          = floor(nGlowRadius or 0),
+                GlowAlphaMax        = floor(nGlowAlphaMax or 0),
+
+                OutlineEnabled      = isnumber(nOutlineThickness) and bOutlineEnabled,
+                OutlineThickness    = floor(nOutlineThickness or 0),
+                OutlineColor        = nOutlineColor,
+            };
         end
-
-        -- Font
-        local sFontFamilyRaw    = val("Family");
-        local sFontFamily       = type.isstring(sFontFamilyRaw) and sFontFamilyRaw:trimright() or "";
-        sFontFamily             = (not sFontFamily:isempty()) and sFontFamily or "Times New Roman";
-
-        local nFontSize         = floor(tonumber(val("Size")) or 12);--TODO FIX MAGIC NUMBER
-
-        -- IMPORTANT: force alpha so 3-channel INI colors are opaque
-        local nFontColor        = Color.TryFromString(val("Color"), true) or _oBlack;
-
-        -- Options
-        local tFontOptions = {
-            Bold        = toboolean(val("Bold"))      and true or false;
-            Italic      = toboolean(val("Italic"))    and true or false;
-            Underline   = toboolean(val("Underline")) and true or false;
-            StrikeOut   = toboolean(val("StrikeOut")) and true or false;
-            HQ          = toboolean(val("HQ"))        and true or false;
-        };
-
-        -- Shadow
-        local nShadowX          = tonumber(val("ShadowX"));
-        local nShadowY          = tonumber(val("ShadowY"));
-        local nShadowColor      = Color.TryFromString(val("ShadowColor"), true) or _oClear;
-        local bShadowEnabled    = toboolean(val("ShadowEnabled")) and true or false;
-
-        -- 3D
-        local nD3Color          = Color.TryFromString(val("3DColor"), true) or _oClear;
-        local nD3Depth          = tonumber(val("3DDepth"));
-        local nD3StepX          = tonumber(val("3DStepX"));
-        local nD3StepY          = tonumber(val("3DStepY"));
-        local b3DEnabled        = toboolean(val("3DEnabled")) and true or false;
-
-        -- (Optional) Glow (if you later add these keys)
-        local nGlowColor            = Color.TryFromString(val("GlowColor"),         true) or _oClear;
-        local nGlowOuterColor       = Color.TryFromString(val("GlowOuterColor"),    true) or _oClear;
-        local nGlowRadius           = tonumber(val("GlowRadius"));
-        local nGlowAlphaMax         = tonumber(val("GlowAlphaMax"));
-        local bGlowEnabled          = toboolean(val("GlowEnabled")) and true or false
-        bGlowEnabled                = isnumber(nGlowRadius) and isnumber(nGlowAlphaMax) and bGlowEnabled;
-        local bGlowGradientEnabled  = bGlowEnabled and nGlowOuterColor ~= _oClear;
-
-        -- Outline
-        local nOutlineThickness  = tonumber(val("OutlineThickness"));
-        local nOutlineColor      = Color.TryFromString(val("OutlineColor"), true) or _oClear;
-        local bOutlineEnabled    = toboolean(val("OutlineEnabled")) and true or false;
-
-        tRet = {
-            Name                = sSectionName,
-
-            FontFamily          = sFontFamily,
-            FontSize            = nFontSize,
-            FontColor           = nFontColor,
-            FontOptions         = tFontOptions,
-
-            ShadowEnabled       = isnumber(nShadowX) and isnumber(nShadowY) and bShadowEnabled,
-            ShadowX             = floor(nShadowX    or 0),
-            ShadowY             = floor(nShadowY    or 0),
-            ShadowColor         = nShadowColor,
-
-            D3Enabled           = isnumber(nD3Depth) and isnumber(nD3StepX) and isnumber(nD3StepY) and b3DEnabled,
-            D3Color             = nD3Color,
-            D3Depth             = floor(nD3Depth    or 0),
-            D3StepX             = floor(nD3StepX    or 0),
-            D3StepY             = floor(nD3StepY    or 0),
-
-            GlowEnabled         = bGlowEnabled,
-            GlowGradientEnabled = bGlowGradientEnabled,
-            GlowColor           = nGlowColor,
-            GlowOuterColor      = nGlowOuterColor,
-            GlowRadius          = floor(nGlowRadius       or 0),
-            GlowAlphaMax        = floor(nGlowAlphaMax     or 0),
-
-            OutlineEnabled       = isnumber(nOutlineThickness) and bOutlineEnabled,
-            OutlineThickness     = floor(nOutlineThickness or 0),
-            OutlineColor         = nOutlineColor,
-
-            INI                 = pINI,
-        };
 
     end
 
     return tRet;
 end
 
-local FontStyle;
+local function SyncStyles()
+    local tSectionNames = {};
+    local tSeen = {};
+    local sName = "";
+    local tParsed = nil;
+    local sFontSig = "";
+    local sEffectSig = "";
+    local tMeta = nil;
+    local oStyle = nil;
+    local bFontChanged = false;
+    local bEffectChanged = false;
 
---A helper class for Forge.lua...only used by that class and, as such, it's private static in Forge.
+    if (_oINI) then
+        tSectionNames = _oINI.GetSectionNames();
+
+        for _, sName in ipairs(tSectionNames) do
+            sName = sName:upper();
+            tSeen[sName] = true;
+            tParsed = ParseFontStyleINI(sName);
+
+            if (istable(tParsed)) then
+                sFontSig   = BuildFontSignature(tParsed);
+                sEffectSig = BuildEffectSignature(tParsed);
+                tMeta      = _tStyleMeta[sName];
+                oStyle     = _tStyles[sName];
+
+                if not (oStyle) then
+                    _tStyles[sName] = FontStyle(sName, tParsed);
+                    _tStyleMeta[sName] = {
+                        FontSig   = sFontSig,
+                        EffectSig = sEffectSig,
+                    };
+                    _tParsedStyles[sName] = tParsed;
+                else
+                    bFontChanged   = not (tMeta) or tMeta.FontSig ~= sFontSig;
+                    bEffectChanged = not (tMeta) or tMeta.EffectSig ~= sEffectSig;
+
+                    if (bFontChanged or bEffectChanged) then
+                        oStyle.ApplyParsed(tParsed, bFontChanged);
+                        _tStyleMeta[sName] = {
+                            FontSig   = sFontSig,
+                            EffectSig = sEffectSig,
+                        };
+                        _tParsedStyles[sName] = tParsed;
+                    end
+
+                end
+
+            end
+
+        end
+
+        for sName in pairs(_tStyles) do
+            if not (tSeen[sName]) then
+                _tStyles[sName] = nil;
+                _tStyleMeta[sName] = nil;
+                _tParsedStyles[sName] = nil;
+            end
+        end
+
+    end
+
+end
+
+local function LoadAndSync()--TODO THIS shoul dnot be loading the file...the repo should take care of this...fix
+    _sFontStyleINI = ReadStyleFile();
+
+    if not (_sFontStyleINI:isempty()) then
+        _oINI = Ini(_sFontStyleINI);
+        SyncStyles();
+    end
+end
+
 return class("FontStyle",
     {--METAMETHODS
 
     },
     {--STATIC PUBLIC
-        --__INIT = function(stapub) end, --static initializer (runs before class object creation)
-        --static constructor (runs after class object creation)
         FontStyle = function(cFontStyle, sAuthCode)
-            FontStyle = cFontStyle; --since this is a private, helper class, it can't see itself without this fix.
+            FontStyle = cFontStyle;
         end,
-        FromINI = function(pINI, sName)
-            --TODO assertions
 
-            local tVars = ParseFontStyleINI(pINI, sName);
+        OnShow = function()
 
-            --return the FontStyle
-            return FontStyle(   tVars.Name, tVars.INI,
-                                tVars.FontFamily, tVars.FontSize, tVars.FontColor, tVars.FontOptions,
-                                tVars.ShadowX, tVars.ShadowY, tVars.ShadowColor,
-                                tVars.OutlineThickness, tVars.OutlineColor,
-                                tVars.D3Depth, tVars.D3StepX, tVars.D3StepY, tVars.D3Color,
-                                tVars.GlowRadius, tVars.GlowAlphaMax, tVars.GlowColor, tVars.GlowOuterColor);
+            if (_oLiveFileRepo) then
+                _oLiveFileRepo.Destroy();
+            end
+
+            _oLiveFileRepo = LiveFileRepo();
+            LoadAndSync();
+
+            _oLiveFileRepo.Add("Styles", FS.Styles, _nTimerInterval, function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+                _sFontStyleINI      = sNewText;
+                _bFontStylesChanged = true;
+            end);
+
+            _oLiveFileRepo.StartAll();
+            Page.StartTimer(_nTimerInterval, _nTimerID);
+        end,
+
+        OnTimer = function(nID)
+
+            if (nID == _nTimerID and not _bTimerBusy) then
+
+                if (_bFontStylesChanged) then--TODO put  a count on here in  case an error occurred...let it try again after so many
+                    _bFontStylesChanged = false;
+                    _bTimerBusy = true;
+                    _oINI = Ini(_sFontStyleINI);
+                    SyncStyles();
+                    _bTimerBusy = false;
+                    Forge.RequestCardRedraw();
+                    Forge.RequestUtilRedraw();
+                end
+
+            end
+
+        end,
+
+        Reload = function()
+            LoadAndSync();
+        end,
+
+        Get = function(sName)
+            local oRet = nil;
+
+            if (isstring(sName) and not sName:isempty()) then
+                oRet = _tStyles[sName:upper()];
+            end
+
+            return oRet;
+        end,
+
+        Has = function(sName)
+            local bRet = false;
+
+            if (isstring(sName) and not sName:isempty()) then
+                bRet = _tStyles[sName:upper()] and true or false;
+            end
+
+            return bRet;
+        end,
+
+        GetNames = function()
+            local tRet = {};
+            local sName = "";
+
+            for sName in pairs(_tStyles) do
+                table.insert(tRet, sName);
+            end
+
+            table.sort(tRet);
+
+            return tRet;
         end,
     },
     {--PRIVATE
-        --basic items
-        Name__AUTOR_                = null,
-        INI__AUTOA_                 = null,
-        --font
-        Font__AUTOA_                = null,
-        Color                       = null,
-        --shadow
+        Name__AUTOA_                = "",
+        Font__AUTOA_                = 0,
+        Color                       = _oBlack,
+
         ShadowEnabled__AUTOA_       = false,
-        ShadowColor__AUTOA_         = null,
+        ShadowColor__AUTOA_         = _oClear,
         ShadowX__AUTOA_             = 0,
         ShadowY__AUTOA_             = 0,
-        --3D
-        D3Enabled                   = false, --THESE cannot be AUTO since the variable name is odd here
-        D3Color                     = null, --TODO return these colors by copying them? Do I need to? Aren't they just numbers?
+
+        D3Enabled                   = false,
+        D3Color                     = _oClear,
         D3Depth                     = 0,
         D3StepX                     = 0,
         D3StepY                     = 0,
-        --GLOW/Gradient
+
         GlowEnabled__AUTOA_         = false,
         GlowGradientEnabled__AUTOA_ = false,
-        GlowColor                   = null,
+        GlowColor                   = _oClear,
+        GlowOuterColor              = _oClear,
         GlowRadius__AUTOA_          = 0,
         GlowAlphaMax__AUTOA_        = 0,
-        --outline
-        OutlineEnabled__AUTOA_      = false,
-        OutlineColor__AUTOA_        = null,
-        OutlineThickness__AUTOA_    = 0,
 
+        OutlineEnabled__AUTOA_      = false,
+        OutlineColor__AUTOA_        = _oClear,
+        OutlineThickness__AUTOA_    = 0,
 
         Draw3D = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
             local pri = cdat.pri;
-            local nDepth = pri.D3Depth;  -- tweak: how “thick” the 3D is
-            local nStepX = pri.D3StepX;  -- tweak: direction (x)
-            local nStepY = pri.D3StepY;  -- tweak: direction (y)
-            local nColor = pri.D3Color;
-
-            -- use shadow color as the extrusion color (looks natural)
             local nER = Color.GetRed(pri.D3Color);
             local nEG = Color.GetGreen(pri.D3Color);
             local nEB = Color.GetBlue(pri.D3Color);
+            local nI = 0;
+            local nAlpha = 0;
+            local o3DCol = nil;
 
-            -- farthest layer darkest; near layer lighter (simple falloff)
-            for nI = nDepth, 1, -1 do
-                local nAlpha = clamp(20 + (nI * 12), 0, 255); -- tweak
-                local o3DCol = Color.RGBA(nER, nEG, nEB, nAlpha);
+            for nI = pri.D3Depth, 1, -1 do
+                nAlpha = clamp(20 + (nI * 12), 0, 255);
+                o3DCol = Color.RGBA(nER, nEG, nEB, nAlpha);
 
-                D.DrawText(
-                    floor(nX + (nI * nStepX)),
-                    floor(nY + (nI * nStepY)),
-                    sText,
-                    o3DCol
-                );
+                if (nAngle) then
+                    D.DrawAngledText(
+                        floor(nX + (nI * pri.D3StepX)),
+                        floor(nY + (nI * pri.D3StepY)),
+                        sText,
+                        nAngle,
+                        o3DCol
+                    );
+                else
+                    D.DrawText(
+                        floor(nX + (nI * pri.D3StepX)),
+                        floor(nY + (nI * pri.D3StepY)),
+                        sText,
+                        o3DCol
+                    );
+                end
+
             end
-
         end,
 
-
         DrawOutline = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
-            local pri            = cdat.pri;
-            local nThickness     = pri.OutlineThickness;
-            local nOutlineColor  = pri.OutlineColor;
+            local pri = cdat.pri;
+            local nBaseX = 0;
+            local nBaseY = 0;
+            local nRadius = 0;
+            local nRadius2 = 0;
+            local nDY = 0;
+            local nDX = 0;
+            local nD2 = 0;
 
-            if not (isnumber(nThickness) and nThickness > 0) then
+            if not (isnumber(pri.OutlineThickness) and pri.OutlineThickness > 0) then
                 return;
             end
 
-            local nBaseX     = floor(nX);
-            local nBaseY     = floor(nY);
-            local nRadius    = floor(nThickness);
-            local nRadius2   = nRadius * nRadius;
+            nBaseX = floor(nX);
+            nBaseY = floor(nY);
+            nRadius = floor(pri.OutlineThickness);
+            nRadius2 = nRadius * nRadius;
 
-            -- draw text at every offset within the radius (fills holes)
             for nDY = -nRadius, nRadius do
-
                 for nDX = -nRadius, nRadius do
-                    local nD2 = (nDX * nDX) + (nDY * nDY);
+                    nD2 = (nDX * nDX) + (nDY * nDY);
 
                     if (nD2 > 0 and nD2 <= nRadius2) then
-
                         if (nAngle) then
-                            D.DrawAngledText(nBaseX + nDX, nBaseY + nDY, sText, nAngle, nOutlineColor);
+                            D.DrawAngledText(nBaseX + nDX, nBaseY + nDY, sText, nAngle, pri.OutlineColor);
                         else
-                            D.DrawText(nBaseX + nDX, nBaseY + nDY, sText, nOutlineColor);
+                            D.DrawText(nBaseX + nDX, nBaseY + nDY, sText, pri.OutlineColor);
                         end
-
                     end
-
                 end
-
             end
-
-        end,
-
-        -- GLOW (centered on the text, even in all directions, opaque near text -> fades outward)
-        -- GLOW (filled falloff, centered, fades out)
-        DrawGlow = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
-            local pri = cdat.pri;
-            local nBaseX = floor(nX);
-            local nBaseY = floor(nY);
-
-            local nGlowRadius   = 16;  -- tweak
-            local nGlowAlphaMax = 25;  -- tweak (keep LOW; this accumulates fast)
-            local oGlowBase     = pri.GlowColor; -- dedicated glow color
-
-            local nGR = Color.GetRed(oGlowBase);
-            local nGG = Color.GetGreen(oGlowBase);
-            local nGB = Color.GetBlue(oGlowBase);
-
-            local nStep = 2; -- tweak: 1 = heavier/softer, 2 = faster
-
-            for nDY = -nGlowRadius, nGlowRadius, nStep do
-
-                for nDX = -nGlowRadius, nGlowRadius, nStep do
-                    local nD2 = (nDX * nDX) + (nDY * nDY);
-
-                    if (nD2 > 0 and nD2 <= (nGlowRadius * nGlowRadius)) then
-                        local nDist = math.sqrt(nD2);
-                        local nT    = 1 - (nDist / nGlowRadius);      -- 1 near text -> 0 at edge
-                        local nA    = clamp(floor(nGlowAlphaMax * (nT * nT)), 0, 255);
-
-                        if (nA > 0) then
-
-                            if (nAngle) then
-                                D.DrawAngledText(nBaseX + nDX, nBaseY + nDY, sText, nAngle, Color.RGBA(nGR, nGG, nGB, nA));
-                            else
-                                D.DrawText(nBaseX + nDX, nBaseY + nDY, sText, Color.RGBA(nGR, nGG, nGB, nA));
-                            end
-
-                        end
-
-                    end
-
-                end
-
-            end
-
-        end,
-
-        DrawGlowGradient = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
-            local pri = cdat.pri;
-            local nBaseX = floor(nX);
-            local nBaseY = floor(nY);
-
-            local nGlowRadius   = 17;  -- size
-            local nAlphaMax     = 110; -- opacity near text
-            local nStep         = 2;   -- 1 smoother, 2 faster
-
-            local oInner = pri.GlowInnerColor; -- color near text
-            local oOuter = pri.GlowOuterColor; -- color at edge
-
-            local nIR = Color.GetRed(oInner);
-            local nIG = Color.GetGreen(oInner);
-            local nIB = Color.GetBlue(oInner);
-
-            local nOR = Color.GetRed(oOuter);
-            local nOG = Color.GetGreen(oOuter);
-            local nOB = Color.GetBlue(oOuter);
-
-            local nRadius2 = nGlowRadius * nGlowRadius;
-
-            for nDY = -nGlowRadius, nGlowRadius, nStep do
-
-                for nDX = -nGlowRadius, nGlowRadius, nStep do
-                    local nDist2 = (nDX * nDX) + (nDY * nDY);
-
-                    if (nDist2 > 0 and nDist2 <= nRadius2) then
-                        local nDist = math.sqrt(nDist2);
-
-                        -- t = 0 at text, 1 at edge
-                        local nT = nDist / nGlowRadius;
-
-                        -- COLOR gradient (linear)
-                        local nRed   = floor((nIR * (1 - nT)) + (nOR * nT));
-                        local nGreen = floor((nIG * (1 - nT)) + (nOG * nT));
-                        local nBlue  = floor((nIB * (1 - nT)) + (nOB * nT));
-
-                        -- ALPHA falloff (strong near text -> 0 at edge)
-                        local nA = clamp(floor(nAlphaMax * ((1 - nT) * (1 - nT))), 0, 255);
-
-                        if (nA > 0) then
-
-                            if (nAngle) then
-                                D.DrawAngledText(nBaseX + nDX, nBaseY + nDY, sText, nAngle, Color.RGBA(nRed, nGreen, nBlue, nA));
-                            else
-                                D.DrawText(nBaseX + nDX, nBaseY + nDY, sText, Color.RGBA(nRed, nGreen, nBlue, nA));
-                            end
-
-                        end
-
-                    end
-
-                end
-
-            end
-
         end,
 
         DrawShadow = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
             local pri = cdat.pri;
             local nBaseX = floor(nX + pri.ShadowX);
             local nBaseY = floor(nY + pri.ShadowY);
-
             local nSR = Color.GetRed(pri.ShadowColor);
             local nSG = Color.GetGreen(pri.ShadowColor);
             local nSB = Color.GetBlue(pri.ShadowColor);
-
-            local nRadius     = 2;   -- tweak TODO FINISH ALLOW AS OPTION in INI
-            local nShadowAlpha= Color.GetAlpha(pri.ShadowColor);
-
+            local nRadius = 2;
+            local nShadowAlpha = Color.GetAlpha(pri.ShadowColor);
             local oBlurCol = Color.RGBA(nSR, nSG, nSB, clamp(nShadowAlpha, 0, 255));
+            local nDY = 0;
+            local nDX = 0;
 
             for nDY = -nRadius, nRadius do
-
                 for nDX = -nRadius, nRadius do
-
                     if ((nDX * nDX) + (nDY * nDY)) <= (nRadius * nRadius) then
-
                         if (nAngle) then
                             D.DrawAngledText(nBaseX + nDX, nBaseY + nDY, sText, nAngle, oBlurCol);
                         else
                             D.DrawText(nBaseX + nDX, nBaseY + nDY, sText, oBlurCol);
                         end
-
                     end
-
                 end
-
             end
-
         end,
     },
     {--PROTECTED
 
     },
     {--PUBLIC
-        FontStyle = function(   this, cdat, sName, pINI, sFontFamily, nFontSize, vColor, vFontOptions,
-                                            nShadowX, nShadowY, vShadowColor, vShadowEndColor,
-                                            vOutlineThickness, vOutlineColor,
-                                            vD3Depth, vD3StepX, vD3StepY, vD3Color,
-                                            vGlowRadius, vGlowAlphaMax, vGlowColor, vGlowOuterColor)
+        FontStyle = function(this, cdat, sName, tParsed)
             local pri = cdat.pri;
-            --TODO assertions
 
-            pri.Name            = sName;
-            pri.INI             = pINI; --assert
+            pri.Name = isstring(sName) and sName:upper() or "";
 
-            --shadow
-            local bShadowXIsValid   = rawtype(nShadowX) == "number";
-            local bShadowYIsValid   = rawtype(nShadowY) == "number";
-            pri.ShadowEnabled   = bShadowXIsValid   and bShadowYIsValid;
-            pri.ShadowColor     = vShadowColor      or  _oClear; --TODO CHECK COLOR TYPE THEN SET
-            pri.ShadowX         = bShadowXIsValid   and floor(nShadowX) or 0;
-            pri.ShadowY         = bShadowYIsValid   and floor(nShadowY) or 0;
-
-            --3D
-            local b3DDepthIsValid   = rawtype(vD3Depth) == "number";
-            local b3DStepXIsValid   = rawtype(vD3StepX) == "number";
-            local b3DStepYIsValid   = rawtype(vD3StepY) == "number";
-            pri.D3Enabled           = b3DDepthIsValid and b3DStepXIsValid and b3DStepYIsValid;
-            pri.D3Depth             = b3DDepthIsValid and floor(vD3Depth) or 0;
-            pri.D3StepX             = b3DStepXIsValid and floor(vD3StepX) or 0;
-            pri.D3StepY             = b3DStepYIsValid and floor(vD3StepY) or 0;
-            pri.D3Color             = vD3Color or _oClear;--TODO CHECK COLOR TYPE THEN SET
-
-            --glow TODO FINISH
-
-            --outline
-            local bOutlineIsValid    = rawtype(vOutlineThickness) == "number" and (vOutlineThickness >= 1);
-            pri.OutlineEnabled   = bOutlineIsValid;
-            pri.OutlineColor     = vOutlineColor      or  _oClear; --TODO CHECK COLOR TYPE THEN SET
-            pri.OutlineThickness = bOutlineIsValid    and floor(vOutlineThickness) or 0;
-
-
-
-            --create the font
-            local tFontOptions = type(vFontOptions) == "table" and clone(vFontOptions) or {};
-            pri.Color           = vColor; --TODO CHECK COLOR TYPE THEN SET
-            pri.Font = DrawingFont.Load(sFontFamily, nFontSize, {
-                Bold        = tFontOptions.Bold,
-                Italic      = tFontOptions.Italic,
-                Underline   = tFontOptions.Underline,
-                StrikeOut   = tFontOptions.StrikeOut,
-                HQ          = tFontOptions.HQ
-            });
-
-            --TODO CHECK FONT
-
+            if (istable(tParsed)) then
+                this.ApplyParsed(tParsed, true);
+            end
         end,
-        --ONLY called by forge
-        Draw = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, vAngle)
-            local pri       = cdat.pri;
-            local nAngle    = isnumber(vAngle) and floor(clamp(vAngle, 0, 360)) or nil;
 
-            -- HARD RULE: never rely on Prep() for draw state
+        ApplyParsed = function(this, cdat, tParsed, bRebuildFont)
+            local pri = cdat.pri;
+            local tFontOptions = {};
+            local sFontFamily = "";
+            local nFontSize = 12;
+
+            if (istable(tParsed)) then
+                tFontOptions = istable(tParsed.FontOptions) and clone(tParsed.FontOptions) or {};
+                sFontFamily  = isstring(tParsed.FontFamily) and tParsed.FontFamily or "Times New Roman";
+                nFontSize    = isnumber(tParsed.FontSize) and tParsed.FontSize or 12;
+
+                if (bRebuildFont or not pri.Font) then
+                    pri.Font = DrawingFont.Load(sFontFamily, nFontSize, {
+                        Bold        = tFontOptions.Bold,
+                        Italic      = tFontOptions.Italic,
+                        Underline   = tFontOptions.Underline,
+                        StrikeOut   = tFontOptions.StrikeOut,
+                        HQ          = tFontOptions.HQ,
+                    });
+                end
+
+                pri.Color               = tParsed.FontColor or _oBlack;
+
+                pri.ShadowEnabled       = tParsed.ShadowEnabled and true or false;
+                pri.ShadowX             = floor(tParsed.ShadowX or 0);
+                pri.ShadowY             = floor(tParsed.ShadowY or 0);
+                pri.ShadowColor         = tParsed.ShadowColor or _oClear;
+
+                pri.D3Enabled           = tParsed.D3Enabled and true or false;
+                pri.D3Depth             = floor(tParsed.D3Depth or 0);
+                pri.D3StepX             = floor(tParsed.D3StepX or 0);
+                pri.D3StepY             = floor(tParsed.D3StepY or 0);
+                pri.D3Color             = tParsed.D3Color or _oClear;
+
+                pri.GlowEnabled         = tParsed.GlowEnabled and true or false;
+                pri.GlowGradientEnabled = tParsed.GlowGradientEnabled and true or false;
+                pri.GlowColor           = tParsed.GlowColor or _oClear;
+                pri.GlowOuterColor      = tParsed.GlowOuterColor or _oClear;
+                pri.GlowRadius          = floor(tParsed.GlowRadius or 0);
+                pri.GlowAlphaMax        = floor(tParsed.GlowAlphaMax or 0);
+
+                pri.OutlineEnabled      = tParsed.OutlineEnabled and true or false;
+                pri.OutlineThickness    = floor(tParsed.OutlineThickness or 0);
+                pri.OutlineColor        = tParsed.OutlineColor or _oClear;
+            end
+        end,
+
+        Update = function(this, cdat)
+            local sName = cdat.pri.Name;
+            local tParsed = nil;
+            local sFontSig = "";
+            local sEffectSig = "";
+            local tMeta = nil;
+            local bFontChanged = false;
+            local bEffectChanged = false;
+            local bRet = false;
+
+            tParsed = ParseFontStyleINI(sName);
+
+            if (istable(tParsed)) then
+                sFontSig = BuildFontSignature(tParsed);
+                sEffectSig = BuildEffectSignature(tParsed);
+                tMeta = _tStyleMeta[sName];
+
+                bFontChanged = not (tMeta) or tMeta.FontSig ~= sFontSig;
+                bEffectChanged = not (tMeta) or tMeta.EffectSig ~= sEffectSig;
+
+                if (bFontChanged or bEffectChanged) then
+                    this.ApplyParsed(tParsed, bFontChanged);
+                    _tStyleMeta[sName] = {
+                        FontSig   = sFontSig,
+                        EffectSig = sEffectSig,
+                    };
+                    _tParsedStyles[sName] = tParsed;
+                    bRet = true;
+                end
+
+            end
+
+            return bRet;
+        end,
+
+        Draw = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, vAngle)
+            local pri = cdat.pri;
+            local nAngle = isnumber(vAngle) and floor(clamp(vAngle, 0, 360)) or nil;
+
             D.SetDrawingFont(pri.Font);
             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
 
@@ -597,167 +632,34 @@ return class("FontStyle",
             end
         end,
 
-        DrawOLD = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, vAngle)
-            local pri       = cdat.pri;
-            local nAngle    = isnumber(vAngle) and floor(clamp(vAngle, 0, 360)) or nil;
-
-            if (pri.ShadowEnabled) then --draw the shadow
-                pri.DrawShadow(sObject, D, hInternalDC, nX, nY, sText, nAngle);
-            end
-
-            if (pri.D3Enabled) then --draw 3D
-                pri.Draw3D(sObject, D, hInternalDC, nX, nY, sText, nAngle);
-            end
---[[
-            if (pri.GlowEnabled) then --draw glow
-                pri.DrawGlow(nX, nY, sText, sObject, D, hInternalDC);
-            elseif (pri.GlowGradientEnabled) then --draw gradient glow
-                pri.DrawGlowGradient(nX, nY, sText, sObject, D, hInternalDC);
-            end
-]]
-            if (pri.OutlineEnabled) then --draw the border
-                pri.DrawOutline(sObject, D, hInternalDC, nX, nY, sText, nAngle);
-            end
-
-            --draw the text
-            if (nAngle) then
-                D.DrawAngledText(nX, nY, sText, nAngle, pri.Color);
-            else
-                D.DrawText(nX, nY, sText, pri.Color);
-            end
-
-        end,
-
-        Get3DEnabled = function(this, cdat)
-            return cdat.pri.D3Enabled;
-        end,
-        Get3DDepth = function(this, cdat)
-            return cdat.pri.D3Depth;
-        end,
-        Get3DStepX = function(this, cdat)
-            return cdat.pri.D3StepX;
-        end,
-        Get3DStepY = function(this, cdat)
-            return cdat.pri.D3StepY;
-        end,
-
         Prep = function(this, cdat, D, sText, bSkipSetFont)
             local pri = cdat.pri;
+            local nTextWidth = 0;
+            local nTextHeight = 0;
+            local nMinX = 0;
+            local nMinY = 0;
+            local nTotalW = 0;
+            local nTotalH = 0;
 
-             --set the font and filtering mode(s)
             if not (bSkipSetFont) then
                 D.SetDrawingFont(pri.Font);
                 D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
             end
 
-            local nTextWidth  = D.GetTextWidth(sText);
-            local nTextHeight = D.GetTextHeight(sText);
+            nTextWidth = D.GetTextWidth(sText);
+            nTextHeight = D.GetTextHeight(sText);
 
-            local nMinX, nMinY, nTotalW, nTotalH =
-                GetEffectBounds(    nTextWidth, nTextHeight,
-                                    pri.ShadowEnabled, pri.ShadowX, pri.ShadowY,
-                                    pri.D3Enabled, pri.D3StepX, pri.D3StepY, pri.D3Depth);
-
-            return  nTotalW, nTotalH, nMinX, nMinY;
-        end,
-        PrepTEST = function(this, cdat, D, sText, bSkipSetFont)
-            local pri = cdat.pri;
-
-            --set the font and filtering mode(s)
-            if not (bSkipSetFont) then
-                D.SetDrawingFont(pri.Font);
-                D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
-            end
-
-            local nTextWidth  = D.GetTextWidth(sText);
-            local nTextHeight = D.GetTextHeight(sText);
-
-            -- IMPORTANT: these must match your actual draw implementations
-            local nShadowBlurRadius = pri.ShadowEnabled and 2 or 0; -- DrawShadow uses local nRadius = 2
-            local nOutlineThickness = (pri.OutlineEnabled and pri.OutlineThickness) or 0;
-
-            -- small AA/overhang safety so glyphs like "D" don't get clipped by tight bounds
-            local nFudgeX = 2;
-            local nFudgeY = 1;
-
-            local nMinX, nMinY, nTotalW, nTotalH =
+            nMinX, nMinY, nTotalW, nTotalH =
                 GetEffectBounds(
                     nTextWidth, nTextHeight,
-                    pri.ShadowEnabled, pri.ShadowX, pri.ShadowY, nShadowBlurRadius,
-                    pri.D3Enabled, pri.D3StepX, pri.D3StepY, pri.D3Depth,
-                    pri.OutlineEnabled, nOutlineThickness,
-                    nFudgeX, nFudgeY
+                    pri.ShadowEnabled, pri.ShadowX, pri.ShadowY,
+                    pri.D3Enabled, pri.D3StepX, pri.D3StepY, pri.D3Depth
                 );
 
             return nTotalW, nTotalH, nMinX, nMinY;
         end,
-
-        SetINI = function(this, cdat)
-            --TODO
-            --type.istring(vINI)  and File.DoesExist(vINI) and
-            --
-        end,
-
-        --LOCAL PARSER (assumes it exists in this same file; you said we’d build it)
-        --local function ParseFontStyleINI(pINI, sSectionName)
-        --    ... returns a table or nil ...
-        --end
-        Update = function(this, cdat)
-            --TODO assertions
-            local pri   = cdat.pri;
-            local bRet  = false;
-            local tParsed = ParseFontStyleINI(pri.INI, pri.Name);
-
-            if (type(tParsed) == "table") then
-
-                --font
-                if (tParsed.FontFamily ~= nil) then
-                    pri.Font = DrawingFont.Load(tParsed.FontFamily, tParsed.FontSize, {
-                        Bold        = tParsed.FontOptions.Bold,
-                        Italic      = tParsed.FontOptions.Italic,
-                        Underline   = tParsed.FontOptions.Underline,
-                        StrikeOut   = tParsed.FontOptions.StrikeOut,
-                        HQ          = tParsed.FontOptions.HQ
-                    });
-                end
-
-                if (tParsed.FontColor ~= nil) then
-                    pri.Color = tParsed.FontColor;
-                end
-
-                --shadow / gradient shadow
-                pri.ShadowX         = tParsed.ShadowX;
-                pri.ShadowY         = tParsed.ShadowY;
-                pri.ShadowColor     = tParsed.ShadowColor;
-                pri.ShadowEnabled   = tParsed.ShadowEnabled;
-
-                --3D
-                pri.D3Enabled       = tParsed.D3Enabled;
-                pri.D3Color         = tParsed.D3Color;
-                pri.D3Depth         = tParsed.D3Depth;
-                pri.D3StepX         = tParsed.D3StepX;
-                pri.D3StepY         = tParsed.D3StepY;
-
-                --Glow
-                pri.GlowEnabled             = tParsed.GlowEnabled;
-                pri.GlowGradientEnabled     = tParsed.GlowGradientEnabled;
-                pri.GlowColor               = tParsed.GlowColor;
-                pri.GlowRadius              = tParsed.GlowRadius;
-                pri.GlowAlphaMax            = tParsed.GlowAlphaMax;
-
-                --border
-                pri.OutlineEnabled   = tParsed.OutlineEnabled;
-                pri.OutlineThickness = tParsed.OutlineThickness;
-                pri.OutlineColor     = tParsed.OutlineColor;
-
-                bRet = true;
-            end
-
-
-            return bRet;
-        end,
     },
-    nil,   --extending class
-    false, --if the class is final
-    nil    --interface(s) (either nil, or interface(s))
+    nil,
+    false,
+    nil
 );

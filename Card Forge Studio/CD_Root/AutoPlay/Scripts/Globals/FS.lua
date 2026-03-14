@@ -58,13 +58,15 @@ local tFunctions = {
 
     end,
     --assumes
-    PrepGame = function(oGame) --TODO CHANGE THIS TO USE THE GAME OBJECT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    PrepGame = function(oGame)
         --reset the package path
         package.path = _sOriginalPackagePath;
 
         if not (type(oGame) == "Game") then
             error("FS: Error prepping game paths. Argument 1 must be of type Game. Got "..type(oGame)..'.');
         end
+
+        StatusDlg.SetMessage("Updating Virtual File System...");
 
         local pGame = oGame.GetPath();
 

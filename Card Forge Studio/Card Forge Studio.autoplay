@@ -287,8 +287,7 @@ WinSys.OnShutdown();</Script>
 <Args/>
 <Script>Paragraph.SetText("par version", APP_VERSION);
 ScalerX.OnPreload(this);
-MainMenu.OnPreload(this);
-</Script>
+MainMenu.OnPreload(this);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
@@ -1885,7 +1884,7 @@ Forge.OnShow(this);</Script>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeLine>1</DesignCodeLine>
 <DesignCodeCol>0</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
@@ -1914,8 +1913,8 @@ Forge.OnTimer(e_ID);</Script>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
-<DesignCodeLine>1</DesignCodeLine>
-<DesignCodeCol>5</DesignCodeCol>
+<DesignCodeLine>0</DesignCodeLine>
+<DesignCodeCol>22</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -3127,14 +3126,14 @@ StyleEditor.UpdateStyles();</Script>
 <Event>
 <Name>On Close</Name>
 <Args/>
-<Script>Forge().UpdateStyles();</Script>
+<Script>Forge.UpdateStyles();</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeCol>5</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>

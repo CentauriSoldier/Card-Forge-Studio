@@ -791,6 +791,28 @@ InjectEnv("Drawing",{
     SetGradientColors            = Drawing.SetGradientColors,
     --[[!@fqxn CFS.UserEnv.Drawing.SetSingleGradientColor @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     SetSingleGradientColor       = Drawing.SetSingleGradientColor,
+    DRAW_FORMAT_JPEG             = DRAW_FORMAT_JPEG,
+    DRAW_FORMAT_JPEG2000         = DRAW_FORMAT_JPEG2000,
+    DRAW_FORMAT_BMP              = DRAW_FORMAT_BMP,
+    DRAW_FORMAT_ICON             = DRAW_FORMAT_ICON,
+    DRAW_FORMAT_PNG              = DRAW_FORMAT_PNG,
+    DRAW_FORMAT_TGA              = DRAW_FORMAT_TGA,
+    DRAW_FORMAT_TIFF             = DRAW_FORMAT_TIFF,
+    DRAW_MIRROR_HORIZONTAL       = DRAW_MIRROR_HORIZONTAL,
+    DRAW_MIRROR_VERTICAL         = DRAW_MIRROR_VERTICAL,
+    DRAW_BLEND_DEFAULT           = DRAW_BLEND_DEFAULT,
+    DRAW_BLEND_TEXT_TRANSPARENT  = DRAW_BLEND_TEXT_TRANSPARENT,
+    DRAW_BLEND_XOR               = DRAW_BLEND_XOR,
+    DRAW_BLEND_OUTLINE           = DRAW_BLEND_OUTLINE,
+    DRAW_BLEND_ALPHABLEND        = DRAW_BLEND_ALPHABLEND,
+    DRAW_BLEND_ALPHACLIP         = DRAW_BLEND_ALPHACLIP,
+    DRAW_BLEND_ALPHACHANNEL      = DRAW_BLEND_ALPHACHANNEL,
+    DRAW_BLEND_ALLCHANNELS       = DRAW_BLEND_ALLCHANNELS,
+    DRAW_FILTER_GRADIENT         = DRAW_FILTER_GRADIENT,
+    DRAW_FILTER_COLLIB           = DRAW_FILTER_COLLIB,
+
+
+
 });
 
 

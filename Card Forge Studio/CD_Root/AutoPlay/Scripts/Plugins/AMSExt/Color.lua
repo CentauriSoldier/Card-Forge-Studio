@@ -10,7 +10,7 @@ local type          = type;
     local clamp         = math.clamp;
     local floor         = math.floor;
     local isnumber      = type.isnumber;
-    local isstring      = type.istring;
+    local isstring      = type.isstring;
     local istable       = type.istable;
 
 if type(Color) == "table" then
