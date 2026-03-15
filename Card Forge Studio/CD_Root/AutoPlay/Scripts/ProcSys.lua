@@ -51,6 +51,9 @@ local _bDrawChanged                 = false;
 local _sDrawCode                    = "";
 local _bDrawBackChanged             = false;
 local _sDrawBackCode                = "";
+------------------------------------- Font Styles
+local _bFontStylesChanged           = false;
+local _sFontStyleINI                = "";
 ------------------------------------- Game Including CGF & ENV
 local _oGameLiveFileRepo            = LiveFileRepo();
 local _oActiveGame                  = null;
@@ -383,7 +386,7 @@ local function LoadFileToGrid(pFile)
     _tColumnNameIDMap = {};
 
     for nColumnID = 0, _nColumnCount - 1 do
-        _tColumnNameIDMap[GetCellText(_sBaseDataGrid, 0, nColumnID)] = nColumnID;
+        _tColumnNameIDMap[GetCellText(_sBaseDataGrid, 0, nColumnID):collapse():lower()] = nColumnID;
     end
 
     --set loading to finished
@@ -418,12 +421,36 @@ end
 ProcessCell = function(nRow, nColumn)
     local sColumn       = GetCellText(_sBaseDataGrid, 0, nColumn);
     local sText         = GetCellText(_sBaseDataGrid, nRow, nColumn);
-    local tCodeColumn   = _tCodeColumns[sColumn];
+    --local tCodeColumn   = _tCodeColumns[sColumn];
+    local sColumnKey    = rawtype(sColumn) == "string" and sColumn:collapse():lower() or "";
+    local tCodeColumn   = _tCodeColumns[sColumnKey];
 
+    if (tCodeColumn and tCodeColumn[nRow]) then
+        local tCodeCell = tCodeColumn[nRow];
+        local zCodeCell = type(tCodeCell);
 
-    if (tCodeColumn and tColumnCode[nRow]) then
-        local tCodeCell = tColumnCode[nRow];
-        p(type(tCodeCell.Function))
+        if (zCodeCell == "tablessss") then
+            local fCellProc = tCodeCell.Function;
+--TODO THIS DOE SNOT WORK!!! NEEDS TO OPEN EDITOR
+            if (rawtype(fCellProc) == "function") then
+                --QUESTION how to get this return value back the _tRow[sColumn]
+                --TODO XP call this
+                local tRow = Grid.GetRow(_sBaseDataGrid, nRow);
+                local bOK, vRetOrError = xpcall(function()
+                    fCellProc(nRow, nColumn, sColumn, tRow, sText);
+                end, XPCallError);
+
+                if not (bOK) then
+                    error(vRetOrError, 2);
+                else
+                    Grid.SetCellText(_sFinalDataGrid, nRow, nColumn, serialize(vRetOrError));
+                end
+
+            end
+
+            --TODO THROW ERROR ON BAd code
+        end
+
     else
         local function fGetFinalValue(sColumn, vCoerce)
             local vRet = GetCellText(_sFinalDataGrid, nRow, GetColumnIDByName(_sFinalDataGrid, sColumn));
@@ -619,6 +646,7 @@ local function UpdateCardSetLiveFileRepo() --TODO FINISH
     oLiveFileRepo.StartAll();
 end
 
+
 --[[!
     @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateGameLiveFileRepo
     @desc TODO
@@ -664,7 +692,15 @@ local function UpdateGameLiveFileRepo()
 
     end
 
-    _oGameLiveFileRepo.StartAll();
+    --Styles.ini
+    local function NotifyFontStylesChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _sFontStyleINI      = sNewText;
+        _bFontStylesChanged = true;
+    end
+
+    oLiveFileRepo.Add("Styles", FS.Styles, _nLiveFileRepoTimerInterval, NotifyFontStylesChanged);
+
+    oLiveFileRepo.StartAll();
 end
 
 
@@ -804,8 +840,8 @@ end
 
 --TODO MAKE SURE NAME IS UNIQUE BEFORE ALLOWING CHANGE IN TABLE!!!!!!!!!!!!!!!!!!!!! FINISH CODE RELIES ON UNIQUNESS!!!!!!
 
-local function UpdateCodeColumns()
-    local tFileColumns = _sCodeColumns:totable("\r\n");
+local function UpdateCodeColumnsOLD()
+    local tFileColumns = _sCodeColumns:totable("\n");
     --local sSalt        = --prevents writing by obfuscation from other functions
 
     if (rawtype(tFileColumns) == "table" and #tFileColumns > 0) then
@@ -900,6 +936,90 @@ local function UpdateCodeColumns()
 
 end
 
+
+local function NormalizeColumnKey(sValue)
+    if (rawtype(sValue) ~= "string") then
+        return nil;
+    end
+
+    sValue = sValue:collapse();
+
+    if (sValue:isempty()) then
+        return nil;
+    end
+
+    return sValue:lower();
+end
+
+local function UpdateCodeColumns()
+    local tFileColumns = _sCodeColumns:totable("\n");
+
+    if not (rawtype(tFileColumns) == "table" and #tFileColumns > 0) then
+        _tCodeColumns = {};
+        return;
+    end
+
+    local tReferenced = {};
+
+    -- build normalized reference set from file
+    for _, sKey in pairs(tFileColumns) do
+        local sNorm = NormalizeColumnKey(sKey);
+
+        if (sNorm) then
+            tReferenced[sNorm] = true;
+        end
+    end
+
+    -- remove old keys not referenced
+    for sKey in pairs(_tCodeColumns) do
+
+        if not (tReferenced[sKey]) then
+            _tCodeColumns[sKey] = nil;
+        end
+
+    end
+
+    -- rebuild each referenced code column
+    for _, sKey in pairs(tFileColumns) do
+        local sNorm = NormalizeColumnKey(sKey);
+
+        if (sNorm) then
+            local nKeyColumnID = _tColumnNameIDMap[sKey] or _tColumnNameIDMap[sNorm] or GetColumnIDByName(_sBaseDataGrid, sKey);
+
+            if (nKeyColumnID ~= nil and nKeyColumnID ~= -1) then
+                local tColumnCode = {};
+
+                for nRow = 1, _nRowCount - 1 do
+                    local sCode = GetCellText(_sBaseDataGrid, nRow, nKeyColumnID);
+
+                    if (rawtype(sCode) == "string" and not sCode:isempty()) then
+                        local sDecoded = dec(sCode);
+                        local fChunk, sError = load(sDecoded, "CodeColumn '"..sKey.."' Row "..tostring(nRow), "t", UserEnv.Get());
+
+                        tColumnCode[nRow] = {
+                            Column      = sKey,
+                            ColumnKey   = sNorm,
+                            Error       = sError or "",
+                            Function    = fChunk or false,
+                            IsValid     = rawtype(fChunk) == "function",
+                            Row         = nRow,
+                            Code        = sCode,
+                            Decoded     = sDecoded,
+                        };
+                    else
+                        tColumnCode[nRow] = nil;
+                    end
+
+                end
+
+                _tCodeColumns[sNorm] = tColumnCode;
+            end
+
+        end
+
+    end
+
+end
 
 
 
@@ -1005,13 +1125,17 @@ return class("ProcSys",
             end
 
             StatusDlg.SetMessage("Updating User Environment...");
-            _oActiveGame = oGame;
-            _sGameName   = oGame.GetName();
-            _bCFGChanged = true;
-            _bENVChanged = true;
+            _sFontStyleINI      = TextFile.ReadToString(FS.Styles);
+
+            _oActiveGame        = oGame;
+            _sGameName          = oGame.GetName();
+
+            _bCFGChanged        = true;
+            _bENVChanged        = true;
+            _bFontStylesChanged = true;
 
             StatusDlg.SetMessage("Updating Life File Repository...");
-            UpdateGameLiveFileRepo();            
+            UpdateGameLiveFileRepo();
         end,
         --[[! TODO FIX REDO
             @fqxn CFS.Classes.ProcSys.Methods.GetSetName
@@ -1053,6 +1177,7 @@ return class("ProcSys",
             _sDrawCode      = TextFile.ReadToString(oCardSet.GetDrawPath());
             _sDrawBackCode  = TextFile.ReadToString(oCardSet.GetDrawBackPath());
             _sRowProcCode   = TextFile.ReadToString(oCardSet.GetRowProcPath());
+            _sCodeColumns   = TextFile.ReadToString(oCardSet.GetCodeColumnsPath());
             _sCardSetName   = oCardSet.GetName();
             _nCardWidth     = oCardSet.GetCardWidth();
             _nCardHeight    = oCardSet.GetCardHeight();
@@ -1199,7 +1324,7 @@ return class("ProcSys",
             BuildWindows();
 
             --start watchers/timer
-            _oGameLiveFileRepo.StartAll();
+            _oGameLiveFileRepo.StartAll(); --TODO add counter part to stop all in OnExit/OnClose
             Page.StartTimer(_nFileSyncTimerInterval, _nFileSyncTimerID);
         end,
         --[[!
@@ -1215,13 +1340,10 @@ return class("ProcSys",
             --update the current selection
             _nCurrentRow    = nRow;
             _nCurrentColumn = nColumn;
+
             --local bRedrawn = false;
-
-            if (_nLastRow ~= nRow or _tReprocRows[_nCurrentRow]) then
-                local tRow = Grid.GetRow(_sFinalDataGrid, nRow);
-                UserEnv.ProcSysUpdateRoot {_tRow = tRow};
-
-
+--TODO LEFT OFF HERE
+            if (_nLastRow ~= nRow or _tReprocRows[_nCurrentRow]) then-- or isspecial column) then
                 --_fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
 
                 --ProcSys.ProcessActiveRow();
@@ -1229,6 +1351,9 @@ return class("ProcSys",
                 _tReprocRows[_nCurrentRow] = false;
                 --_bReady = true;
                 ProcessRow(_nCurrentRow);
+
+                local tRow = Grid.GetRow(_sFinalDataGrid, nRow);
+                UserEnv.ProcSysUpdateRoot {_tRow = tRow};
             end
 
             --[[--THIS IS the special column proc section
@@ -1254,17 +1379,14 @@ return class("ProcSys",
             _bSyncBusy = true;
 
             local bOK, sErr = xpcall(function()
-                local bResetRows = _bDataChanged    or _bCFGChanged     or _bENVChanged     or _bRowProcChanged;
-                local bRedraw    = bResetRows       or _bDrawChanged    or _bDrawBackChanged;
+                local bResetRows            = _bDataChanged         or _bCFGChanged     or _bENVChanged         or _bRowProcChanged;
+                local bRedrawCard           = bResetRows            or _bDrawChanged    or _bDrawBackChanged    or _bFontStylesChanged;
+                local bRedrawUtils          = _bFontStylesChanged;
+                local bReloadCodeColumns    = _bCodeColumnsChanged  or _bDataChanged;
 
                 if (_bInfoChanged) then
                     _bInfoChanged = false;
-                    --TODO FINISH
-                end
-
-                if (_bCodeColumnsChanged) then
-                    _bCodeColumnsChanged = false;
-                    UpdateCodeColumns();
+                    --TODO FINISH , also differentiate between game and cardset info
                 end
 
                 if (_bDataChanged) then
@@ -1287,9 +1409,6 @@ return class("ProcSys",
                             _nCurrentColumn = _nColumnCount - 1;
                         end
 
-                        --update the code columns
-                        UpdateCodeColumns();
-
                     end, XPCallError);
 
                     --always reenable Forge draw
@@ -1299,6 +1418,11 @@ return class("ProcSys",
                         error(sLoadGridErr, 0);
                     end
 
+                end
+
+                if (bReloadCodeColumns) then
+                    _bCodeColumnsChanged = false;
+                    UpdateCodeColumns();
                 end
 
                 if (_bCFGChanged) then
@@ -1346,6 +1470,11 @@ return class("ProcSys",
 
                 end
 
+                if (_bFontStylesChanged) then
+                    _bFontStylesChanged = false;
+                    FontStyle.UpdateINI(_sFontStyleINI);
+                end
+
                 if (_bSelectionMade) then
 
                     if (bResetRows) then
@@ -1374,10 +1503,14 @@ return class("ProcSys",
                         end
                     end
 
-                    if (bRedraw) then
+                    if (bRedrawCard) then
                         _bDrawChanged       = false;
                         _bDrawBackChanged   = false;
                         TryDrawCard(Grid.GetRow(_sFinalDataGrid, _nCurrentRow));
+                    end
+
+                    if (bRedrawUtils) then
+                        Forge.RequestUtilRedraw();
                     end
 
                 end

@@ -1862,7 +1862,7 @@ local hBtn = WindowWizard.CreateChildWindowEx(hWND_TEST, "sdf", "BUTTON", 20, 20
 <Event>
 <Name>On Preload</Name>
 <Args/>
-<Script>ScalerX.OnPreload(this);
+<Script>--ScalerX.OnPreload(this);
 MainMenu.OnPreload(this);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
@@ -1870,7 +1870,7 @@ MainMenu.OnPreload(this);</Script>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>0</DesignCodeCol>
+<DesignCodeCol>2</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>
@@ -1935,14 +1935,14 @@ Forge.OnTimer(e_ID);</Script>
 <Event>
 <Name>On Size</Name>
 <Args>number e_WindowWidth, number e_WindowHeight, number e_PageWidth, number e_PageHeight, number e_Type</Args>
-<Script>Forge.OnSize(e_WindowWidth, e_WindowHeight, e_PageWidth, e_PageHeight, e_Type)</Script>
+<Script>Forge.OnSize(e_WindowWidth, e_WindowHeight, e_PageWidth, e_PageHeight, e_Type);</Script>
 <TreeStates>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 <TreeState>0</TreeState>
 </TreeStates>
 <DesignCodeLine>0</DesignCodeLine>
-<DesignCodeCol>5</DesignCodeCol>
+<DesignCodeCol>79</DesignCodeCol>
 <BookMarks count="0">
 </BookMarks>
 </Event>

@@ -29,7 +29,6 @@ local _nTimerInterval       = FONTSTYLE_TIMER_INTERVAL;
 local _bTimerBusy           = false;
 local _oLiveFileRepo        = nil;
 local _bFontStylesChanged   = false;
-local _sFontStyleINI        = "";
 local _oINI                 = nil;
 
 local _tStyles          = {};
@@ -37,6 +36,10 @@ local _tStyleMeta       = {};
 local _tParsedStyles    = {};
 
 local FontStyle;
+
+local function XPCallError(vErr)
+    return debug.traceback(tostring(vErr), 2);
+end
 
 local function GetEffectBounds(nW, nH,
     bShadow, nShadowX, nShadowY,
@@ -236,16 +239,16 @@ local function ParseFontStyleINI(sSectionName)
 end
 
 local function SyncStyles()
-    local tSectionNames = {};
-    local tSeen = {};
-    local sName = "";
-    local tParsed = nil;
-    local sFontSig = "";
-    local sEffectSig = "";
-    local tMeta = nil;
-    local oStyle = nil;
-    local bFontChanged = false;
-    local bEffectChanged = false;
+    local tSectionNames     = {};
+    local tSeen             = {};
+    local sName             = "";
+    local tParsed           = nil;
+    local sFontSig          = "";
+    local sEffectSig        = "";
+    local tMeta             = nil;
+    local oStyle            = nil;
+    local bFontChanged      = false;
+    local bEffectChanged    = false;
 
     if (_oINI) then
         tSectionNames = _oINI.GetSectionNames();
@@ -288,25 +291,20 @@ local function SyncStyles()
         end
 
         for sName in pairs(_tStyles) do
+
             if not (tSeen[sName]) then
                 _tStyles[sName] = nil;
                 _tStyleMeta[sName] = nil;
                 _tParsedStyles[sName] = nil;
             end
+
         end
 
     end
 
 end
 
-local function LoadAndSync()--TODO THIS shoul dnot be loading the file...the repo should take care of this...fix
-    _sFontStyleINI = ReadStyleFile();
-
-    if not (_sFontStyleINI:isempty()) then
-        _oINI = Ini(_sFontStyleINI);
-        SyncStyles();
-    end
-end
+--TODO build style repair/update algorithm that brings old/malformed versions in the ini up to date with the current one.
 
 return class("FontStyle",
     {--METAMETHODS
@@ -317,48 +315,12 @@ return class("FontStyle",
             FontStyle = cFontStyle;
         end,
 
-        OnShow = function()
-
-            if (_oLiveFileRepo) then
-                _oLiveFileRepo.Destroy();
-            end
-
-            _oLiveFileRepo = LiveFileRepo();
+        --[[Reload = function()
             LoadAndSync();
-
-            _oLiveFileRepo.Add("Styles", FS.Styles, _nTimerInterval, function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
-                _sFontStyleINI      = sNewText;
-                _bFontStylesChanged = true;
-            end);
-
-            _oLiveFileRepo.StartAll();
-            Page.StartTimer(_nTimerInterval, _nTimerID);
-        end,
-
-        OnTimer = function(nID)
-
-            if (nID == _nTimerID and not _bTimerBusy) then
-
-                if (_bFontStylesChanged) then--TODO put  a count on here in  case an error occurred...let it try again after so many
-                    _bFontStylesChanged = false;
-                    _bTimerBusy = true;
-                    _oINI = Ini(_sFontStyleINI);
-                    SyncStyles();
-                    _bTimerBusy = false;
-                    Forge.RequestCardRedraw();
-                    Forge.RequestUtilRedraw();
-                end
-
-            end
-
-        end,
-
-        Reload = function()
-            LoadAndSync();
-        end,
+        end,]]
 
         Get = function(sName)
-            local oRet = nil;
+            local oRet;
 
             if (isstring(sName) and not sName:isempty()) then
                 oRet = _tStyles[sName:upper()];
@@ -389,6 +351,15 @@ return class("FontStyle",
 
             return tRet;
         end,
+
+        UpdateINI = function(sINI)
+
+            if (rawtype(sINI) == "string") then
+                _oINI = Ini(sINI);
+                SyncStyles();
+            end
+
+        end
     },
     {--PRIVATE
         Name__AUTOA_                = "",

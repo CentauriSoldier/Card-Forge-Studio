@@ -17,6 +17,7 @@ Import              = tImportSystem.Import;
 SanitizePath        = tImportSystem.SanitizePath;
 ProcessDox          = require("Globals.ProcessDox");
 
+FontStyle   = require("FontStyle");
 ProcSys     = require("ProcSys");
 Forge       = require("Forge");
 StyleEditor = require("StyleEditor");

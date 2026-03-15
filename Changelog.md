@@ -26,18 +26,20 @@
 - INI-based configuration system for storing window layout, UI state, and preferences
 - Style Editor for fancy card text
 - Safe fallback handling when user `Draw`, `RowProc`, `CFG`, or `ENV` scripts fail during load or live reload
+- Ability to draw back of card
 
 ### Changed
 - **CellProc** system renamed to **RowProc**
 - **RowProc** function now cached
 - **Draw** function now cached
-- Custom draw, cell processor, and other functions are now stored within a LiveFileRepo (held by CardSet)
+- Custom draw, cell processor, and other functions are now stored within a LiveFileRepo (managed by ProcSys)
 - Custom functions are now at the CardSet level rather than the class level
 - Class system removed in relation to basic, custom card data; system is now purely CSV-driven
 - All **LiveFileRepo**s moved out of their respective classes (e.g., **CardSet**) and into **ProcSys**
 - Cleaned up **ProcSys** and **Forge** modules
 - Refactored Forge to be a Singleton helper class
-- Custom draw function is now retrieved from the active CardSet
+- Refactored FontStyle to use LiveFileRepo system (managed by ProcSys) and integrated it into the live editor
+- Custom draw function is now retrieved from the active CardSet directory
 - Forge's utility image now redraws only when changes occur
 - Display card is now resizable
 - Menu system now uses AMS Menu plugin

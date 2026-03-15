@@ -355,7 +355,7 @@ return class("StyleEditor",
         OnShow = function()
             _tDrawSystem = {};
             _tStyles = FS.Styles;
-            p(_tStyles)
+
             for x = 1, 2 do
                 _tDrawSystem[x] = {};
                 local tDS = _tDrawSystem[x];

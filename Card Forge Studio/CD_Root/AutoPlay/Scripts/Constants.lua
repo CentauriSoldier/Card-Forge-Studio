@@ -49,8 +49,6 @@ constant("PROCSYS_TO_NUMBER",                       2);
 constant("PROCSYS_GRID_BASE",                       "grd base data");
 constant("PROCSYS_GRID_FINAL",                      "grd final data");
 
-constant("FONTSTYLE_TIMER_ID",           GetNextTimerID());
-constant("FONTSTYLE_TIMER_INTERVAL",     10);
 
 
 

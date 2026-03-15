@@ -724,7 +724,7 @@ The, previously developed by RizlaUK, Canvas plugin will also be a part of Draw.
 
 <p class="mb-0"><strong>Note:</strong> While the official manual occasionally lists the <strong>Drawing.DrawSquare</strong> method in some examples, that method has been deprecated. Use <strong>Drawing.DrawRectangle</strong> instead.</p>
 </section>!]]
-InjectEnv("Drawing",{
+InjectEnv("Drawing",{--TODO add real description to these
     --[[!@fqxn CFS.UserEnv.Drawing.ClearGradientColors @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     ClearGradientColors          = Drawing.ClearGradientColors,
     --[[!@fqxn CFS.UserEnv.Drawing.DrawAlphaImage @see <strong>Help->Drawing</strong> in the application's main menu. !]]
@@ -791,28 +791,44 @@ InjectEnv("Drawing",{
     SetGradientColors            = Drawing.SetGradientColors,
     --[[!@fqxn CFS.UserEnv.Drawing.SetSingleGradientColor @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     SetSingleGradientColor       = Drawing.SetSingleGradientColor,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_JPEG @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_JPEG             = DRAW_FORMAT_JPEG,
+    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_JPEG2000 @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_JPEG2000         = DRAW_FORMAT_JPEG2000,
+    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_BMP @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_BMP              = DRAW_FORMAT_BMP,
+    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_ICON @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_ICON             = DRAW_FORMAT_ICON,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_PNG @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_PNG              = DRAW_FORMAT_PNG,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_TGA @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_TGA              = DRAW_FORMAT_TGA,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_TIFF @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_TIFF             = DRAW_FORMAT_TIFF,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_MIRROR_HORIZONTAL @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_MIRROR_HORIZONTAL       = DRAW_MIRROR_HORIZONTAL,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_MIRROR_VERTICAL @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_MIRROR_VERTICAL         = DRAW_MIRROR_VERTICAL,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_DEFAULT @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_DEFAULT           = DRAW_BLEND_DEFAULT,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_TEXT_TRANSPARENT @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_TEXT_TRANSPARENT  = DRAW_BLEND_TEXT_TRANSPARENT,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_XOR @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_XOR               = DRAW_BLEND_XOR,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_OUTLINE @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_OUTLINE           = DRAW_BLEND_OUTLINE,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHABLEND @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_ALPHABLEND        = DRAW_BLEND_ALPHABLEND,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHACLIP @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_ALPHACLIP         = DRAW_BLEND_ALPHACLIP,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHACHANNEL @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_ALPHACHANNEL      = DRAW_BLEND_ALPHACHANNEL,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALLCHANNELS @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_ALLCHANNELS       = DRAW_BLEND_ALLCHANNELS,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FILTER_GRADIENT @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FILTER_GRADIENT         = DRAW_FILTER_GRADIENT,
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FILTER_COLLIB @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FILTER_COLLIB           = DRAW_FILTER_COLLIB,
-
-
-
 });
 
 
@@ -1561,28 +1577,6 @@ local tUserEnv = {
 
         end
     end,
-    --UpdateGame
-    --[[UpdateCardSet = function(tInput)
-
-        if (rawtype(tInput) == "table") then
-
-            --delete the existing keys
-            for sKey in pairs(tCard) do
-                tCard[sKey] = nil;
-            end
-
-            --import the new keys
-            for sIndex, vItem in pairs(tInput) do
-
-                if (rawtype(sIndex) == "string") then
-                    tCard[sIndex] = vItem;
-                end
-
-            end
-
-        end
-
-    end,]]
 };
 local tUserEnvDecoy = {};
 local tUserEnvMeta  = {

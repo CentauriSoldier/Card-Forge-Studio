@@ -30,7 +30,6 @@ local INIFile       = INIFile;
 local Paragraph     = Paragraph;
     local ParagraphGetText      = Paragraph.GetText;
     local ParagraphSetText      = Paragraph.SetText;
-local FontStyle     = require("Forge.FontStyle");
 local _pAppCFG      = FS.AppCFG;
 --TODO FINISH
 ------------------------------------------------------------------- Colors
@@ -108,14 +107,14 @@ local _sStatus                  = "";
 local _CoVXW = 1;
 local _CoVYH = 1;
 ------------------------------------------------------------------- Draw Plugin Images
-local _hImage           = null;
-local _nImageID         = null;
+local _hImage           = false;
+local _nImageID         = false;
 --local _hImageBack       = null;
 --local _nImageBackID     = null;
-local _hImageExport     = null;
-local _nImageExportID   = null;
-local _hImageUtil       = null;
-local _nImageUtilID     = null;
+local _hImageExport     = false;
+local _nImageExportID   = false;
+local _hImageUtil       = false;
+local _nImageUtilID     = false;
 ------------------------------------------------------------------- user Images
 local _tUserImageCache  = {};
 ------------------------------------------------------------------- Card Info
@@ -140,7 +139,7 @@ local _nRedrawTimerID           = FORGE_REDRAW_TIMER_ID;
 local _nRedrawTimerInterval     = FORGE_REDRAW_TIMER_INTERVAL;
 -------------------------------------------------------------------
 local _tStyles = {};
---local Styles           = ""; --TODO FINISH STYLE NAMES MUST BE VARIABLE COMPLIANT
+--local Styles           = ""; --TODO FINISH STYLE NAMES MUST BE VARIABLE COMPLIANT. Edit: QUESTION - why must they be?
 
 local function sink() end
 
@@ -235,7 +234,7 @@ local function CreateImage(hImage, nImageID)
     local sBaseError    = "Forge.CreateImage (private static): Could not";
 
     --create the image only if it's not already been created
-    if (hImage == null and nImageID == null) then
+    if not (hImage and nImageID) then
         --create, check, and store the image handle
         hRet        = DrawingImageNew(_nCardWidth, _nCardHeight, BIT_DEPTH_32, DRAW_IMAGE_TRANSPARENT);
         sMessage    = sBaseError.." create image for canvas object, \"${canvas}\".";
@@ -301,7 +300,7 @@ local function DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC)
         if (bDrawText) then
             local sX = tostring(nX);
             local nTextWidth = D.GetTextWidth(sX);
-            _tStyles.RULER.Draw(sObject, D, hInternalDC, floor(Forge.CenterOnX(nX, nTextWidth)), floor(nTextY), sX);
+            FontStyle.Get("RULER").Draw(sObject, D, hInternalDC, floor(Forge.CenterOnX(nX, nTextWidth)), floor(nTextY), sX);
         end
     end
 
@@ -319,7 +318,7 @@ local function DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC) --TODO minor
     local nYMax = _nCardHeight - 1;
 
     D.DrawLineEx(nX, 0, nX, nYMax, oColor);
-    D.SetDrawingFont(_tStyles.RULER.GetFont());--TODO FIX This must be gotten from the Forge
+    D.SetDrawingFont(_tStyles.RULER.GetFont());--TODO FIX This must be gotten from the Forge...why?
 
     for nY = 0, nYMax, nMinorStep do
         local nWidth        = (nY % nMajorStep == 0) and nMajorWidth or nMinorWidth;
@@ -542,71 +541,75 @@ end
 local function Draw()--, bExport, fExport) --TODO move this out to private static to be used here and in new export function
     --in case a resize happens
     --_tActiveRow  = tRow;
+    if (_nImageID) then
 
-    --draw the card
-    local function ProcDraw(sObject, D, hInternalDC)
-        ClearImage(D);
+        --draw the card
+        local function ProcDraw(sObject, D, hInternalDC)
+            ClearImage(D);
 
-        D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
-
-        --update private vars for use in DrawText and other functions
-        _Object      = sObject;
-        _D           = D;
-        _InternalDC  = hInternalDC;
-
-        --execute the proc's draw method
-        if (_bDrawBack) then
-            _fDrawBack(sObject, D, hInternalDC);
-        else
-            _fDraw(sObject, D, hInternalDC);
-        end
-
-    end
-
-    --reset the image size to its original size
-    --hImage:Resize(nWidth, nHeight, DRAW_RESIZE_RAW);
-
-    --clear the canvas
-    --if (_bClearCanvasEachDraw) then
-        Canvas.Clear(_sCanvas, _nColorClear); --TODO MOVE TO UTIL ON/OFF
-    --end
-
-    --draw on the card image
-    if (_bRedrawCard) then
-        _bRedrawCard = false;
-        _hImage:Draw(ProcDraw);
-    end
-
-    --draw on the util image
-    if (_bRedrawUtil) then
-        _bRedrawUtil = false;
-        _hImageUtil:Draw(DrawUtilObjects);
-    end
-
-    --draw the card and util images onto the canvas (since drawing directly on the canvas is no bueno)
-    Canvas.Draw(_sCanvas,
-        function(sObject, D, hInternalDC)
             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
-            D.DrawImage(_nImageID, 0, 0, _nCanvasWidth, _nCanvasHeight);
 
-            if MainMenu.IsChecked("Options:>Draw:>Utility Overlay") then--TODO FINISH Break this OUt of here so util and card can be drawn seperately and composited in a nother function...this will fix having to redraw the card whenever the util changes
-                D.DrawImage(_nImageUtilID, 0, 0, _nCanvasWidth, _nCanvasHeight);
+            --update private vars for use in DrawText and other functions
+            _Object      = sObject;
+            _D           = D;
+            _InternalDC  = hInternalDC;
+
+            --execute the proc's draw method
+            if (_bDrawBack) then
+                _fDrawBack(sObject, D, hInternalDC);
+            else
+                _fDraw(sObject, D, hInternalDC);
             end
 
         end
-    );
-    --Page.Redraw();
-    --if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..each export should not be displayed first
-    --    fExport(D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
-    --end
 
-    --[[
-    --saves the entire canvas!
-    local hNew = Canvas.GrabImage(_sCanvas);
-    if(hNew)then
-        DrawingImage.Save(hNew, tRow.Name..".png", DRAW_FORMAT_PNG);
-        DrawingImage.Free(hNew);
-    end]]
+        --reset the image size to its original size
+        --hImage:Resize(nWidth, nHeight, DRAW_RESIZE_RAW);
+
+        --clear the canvas
+        --if (_bClearCanvasEachDraw) then
+            Canvas.Clear(_sCanvas, _nColorClear); --TODO MOVE TO UTIL ON/OFF
+        --end
+
+        --draw on the card image
+        if (_bRedrawCard) then
+            _bRedrawCard = false;
+            _hImage:Draw(ProcDraw);
+        end
+
+        --draw on the util image
+        if (_bRedrawUtil) then
+            _bRedrawUtil = false;
+            _hImageUtil:Draw(DrawUtilObjects);
+        end
+
+        --draw the card and util images onto the canvas (since drawing directly on the canvas is no bueno)
+        Canvas.Draw(_sCanvas,
+            function(sObject, D, hInternalDC)
+                D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+                D.DrawImage(_nImageID, 0, 0, _nCanvasWidth, _nCanvasHeight);
+
+                if MainMenu.IsChecked("Options:>Draw:>Utility Overlay") then--TODO FINISH Break this OUt of here so util and card can be drawn seperately and composited in a nother function...this will fix having to redraw the card whenever the util changes
+                    D.DrawImage(_nImageUtilID, 0, 0, _nCanvasWidth, _nCanvasHeight);
+                end
+
+            end
+        );
+        --Page.Redraw();
+        --if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..each export should not be displayed first
+        --    fExport(D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
+        --end
+
+        --[[
+        --saves the entire canvas!
+        local hNew = Canvas.GrabImage(_sCanvas);
+        if(hNew)then
+            DrawingImage.Save(hNew, tRow.Name..".png", DRAW_FORMAT_PNG);
+            DrawingImage.Free(hNew);
+        end]]
+
+    end
+
 end
 
 
@@ -1207,7 +1210,7 @@ return class("Forge",
             end
 
             return nBaseX, nBaseY, nBlockW, nBlockH;
-        end,    
+        end,
         OnShow = function()
             --local nV = KEY_CODES.v.dec;
             --local nH = KEY_CODES.h.dec;
@@ -1216,6 +1219,7 @@ return class("Forge",
             if not (_bCanvasCreated) then
                 local bCanvasCreated = Canvas.Create(_sCanvas, {Keyboard = true});
                 assert(bCanvasCreated, "Error in Forge, \"${game}\": Could not create canvas for object, \"${canvas}\"." % {game = "TODO GET GAME NAME", canvas = _sCanvas});
+                _bCanvasCreated = true; --TODO QUESTION does the canvas need created everytime the page loads? If os, remove this flag entirely.
             end
 
             if not (_hWndCard) then
@@ -1245,8 +1249,6 @@ return class("Forge",
 
             BuildFontStyleProxy();
 
-            FontStyle.OnShow();
-
             Page.StartTimer(_nRedrawTimerInterval, _nRedrawTimerID);
         end,
         OnSize = function(nWindowWidth, nWindowHeight, nPageWidth, nPageHeight, nType)
@@ -1275,8 +1277,6 @@ return class("Forge",
         end,
         --STYLE = null, --public enum --TODO Does it need to be public still? It gets injected into the userenv so why make it public?
         OnTimer = function(nID)
-
-            FontStyle.OnTimer(nID);--TODO Check for timer ID before calling
 
             if (nID ~= _nRedrawTimerID or _bDrawBlocked or _bDrawTimerBusy) then
                 return;
@@ -1355,22 +1355,22 @@ return class("Forge",
             _sCardSetName   = oCardSet.GetName();
 
             --(re)create the Forge images
-            if (_hImage ~= null) then
+            if (_hImage) then
                 _hImage:Free();
-                _hImage = null;
-                _nImageID = null;
+                _hImage     = false;
+                _nImageID   = false;
             end
 
-            if (_hImageExport ~= null) then
+            if (_hImageExport) then
                 _hImageExport:Free();
-                _hImageExport = null;
-                _nImageExportID = null;
+                _hImageExport   = false;
+                _nImageExportID = false;
             end
 
-            if (_hImageUtil ~= null) then
+            if (_hImageUtil) then
                 _hImageUtil:Free();
-                _hImageUtil = null;
-                _nImageUtilID = null;
+                _hImageUtil     = false;
+                _nImageUtilID   = false;
             end
 
             _hImage,        _nImageID       = CreateImage(_hImage,         _nImageID);
