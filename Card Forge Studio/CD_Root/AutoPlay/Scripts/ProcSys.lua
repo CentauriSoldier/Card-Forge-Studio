@@ -1,6 +1,5 @@
 ------------------------------------- Localization
 local Grid                          = Grid;
-    local GetColumnIDByName         = Grid.GetColumnIDByName;
     local GetCellText               = Grid.GetCellText;
     local SetCellText               = Grid.SetCellText;
 
@@ -30,7 +29,12 @@ local _nCurrentColumn               = false;
 local _nLastRow                     = -1;
 local _nRowCount                    = -1;
 local _nColumnCount                 = -1;
-local _tColumnNameIDMap             = {};
+local _tColumnNameIDMap             = {}; --indices are names, values numbers
+local _tColumnNameCaseMap           = {}; --indices are upper case names, values lower case names
+local _tColumnIDNameMap             = {}; --indices are numbers, values names
+local _tRows                        = {}; --repo of all processed rows
+local _tDirtyRows                   = {}; --rows that need reprocessed
+local _nRowProcTimerBudget          = 20; --max rows that can be processed each timer cycle
 ------------------------------------- Export
 local _tExporters                   = {};
 ------------------------------------- CSV
@@ -39,7 +43,6 @@ local _sCSVDelimiter                = CSV_DELIMITER;
 local _pActiveCSV                   = "";
 local _pExportCSV                   = "";
 ------------------------------------- RowProc / Special Procs
-local _tReprocRows                  = {};
 local _oRowProcLiveFileRepo         = LiveFileRepo();
 local _bRowProcChanged              = false;
 local _sRowProcCode                 = "";
@@ -85,11 +88,30 @@ local _tFileSpecCFG                 = FILESPEC_GAME_CFG;
 local _tFileSpecENV                 = FILESPEC_GAME_ENV; --TODO add all neede file specs here
 local _tFileSpecDraw                = FILESPEC_CARDSET_DRAW;
 local _tFileSpecRowProc             = FILESPEC_CARDSET_ROWPROC;
-------------------------------------- Preemptive Declarations
-local ProcessCell;
-local PrepUpdateGrids;
-local TryDrawCard;
-local UpdateGrids;
+------------------------------------- Preemptive Declarations (Local Functions)
+local
+BuildCardSetFunction,
+BuildUserTable,
+BuildWindows,
+EnsureRowProcessed,
+GetRow,
+LoadFileToGrid,
+MarkAllRowsDirty,
+MarkRowDirty,
+PrepUpdateGrids,
+ProcessCell,
+ProcessDirtyRows,
+ProcessRow,
+SetReprocRows,
+TryBackupFile,
+TryDrawActiveCard,
+TryDrawCard,
+UpdateCardSetLiveFileRepo,
+UpdateCodeCell,
+UpdateCodeColumns,
+UpdateGameLiveFileRepo,
+UpdateGrids,
+XPCallError;
 ----------------------------------------------------------------------------------------------------------------------
 --TODO Clean these up
 local _nDescriptionMaxWidth         = 100;
@@ -104,7 +126,7 @@ local _nDescriptionMaxWidth         = 100;
 --may be used by the proc's cell processor to get final values
 --local _nFinalValueRow = -1; --TODO QUESTION is the ever used?
 --local function GetFinalValue(sColumn)
---    return GetCellText(_sFinalDataGrid, _nFinalValueRow, Grid.GetColumnIDByName(_sFinalDataGrid, sColumn));
+--    return GetCellText(_sFinalDataGrid, _nFinalValueRow, _tColumnNameIDMap[sColumn]);
 --end
 
 --[[--when changes occur
@@ -115,12 +137,36 @@ Draw            - Redraw Current Row
 ]]
 -----------------------------------------------------------------------------------------------------------------------
 
-local function XPCallError(vErr)
-    return debug.traceback(tostring(vErr), 2);
-end
+
+--[[
+██╗      ██████╗  ██████╗ █████╗ ██╗         ███████╗██╗   ██╗███╗   ██╗ ██████╗████████╗██╗ ██████╗ ███╗   ██╗███████╗
+██║     ██╔═══██╗██╔════╝██╔══██╗██║         ██╔════╝██║   ██║████╗  ██║██╔════╝╚══██╔══╝██║██╔═══██╗████╗  ██║██╔════╝
+██║     ██║   ██║██║     ███████║██║         █████╗  ██║   ██║██╔██╗ ██║██║        ██║   ██║██║   ██║██╔██╗ ██║███████╗
+██║     ██║   ██║██║     ██╔══██║██║         ██╔══╝  ██║   ██║██║╚██╗██║██║        ██║   ██║██║   ██║██║╚██╗██║╚════██║
+███████╗╚██████╔╝╚██████╗██║  ██║███████╗    ██║     ╚██████╔╝██║ ╚████║╚██████╗   ██║   ██║╚██████╔╝██║ ╚████║███████║
+╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝    ╚═╝      ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝]]
 
 
-local function BuildCardSetFunction(sName, sChunk)
+--[[!
+@fqxn CFS.Classes.ProcSys.Methods.BuildCardSetFunction
+@desc Compiles and executes a Lua chunk that returns a function used by the active card set. The chunk is loaded inside the UserEnv environment and must return a callable function.
+@param string sName Logical name of the function being built (for example "Draw" or "RowProc"). Used for chunk identification and error reporting.
+@param string sChunk Lua source code that returns the function implementation.
+@return function fFunction The function returned by the executed chunk.
+@note The chunk executes inside the UserEnv environment. The chunk must return a function or an error is raised. Errors during loading or execution include the card set name for context.
+@example
+    local sCode = "[".."[" ..
+        "return function(nRow, nColumn, sColumn, tRow, sText)\n" ..
+        "    return sText:upper()\n" ..
+        "end" ..
+    "]".."]"
+
+    local fProc = BuildCardSetFunction("RowProc", sCode)
+    local sValue = fProc(1, 2, "Name", {}, "test")
+    -- sValue == "TEST"
+@vis Static Private
+!]]
+BuildCardSetFunction = function (sName, sChunk)
 
     if not (rawtype(sName) == "string" and not sName:isempty()) then
         error("BuildCardSetFunction: Argument 1 (function name) must be non-empty string. Got "..rawtype(sName)..".", 2);
@@ -150,13 +196,16 @@ local function BuildCardSetFunction(sName, sChunk)
 end
 
 
-
 --[[!
-    @fqxn CFS.Classes.ProcSys.Methods.BuildUserTable
-    @desc TODO
-    @vis Static Private
+@fqxn CFS.Classes.ProcSys.Methods.BuildUserTable
+@desc Loads, compiles, and executes a Lua file for the specified game and returns the table produced by that file. The file is executed inside the UserEnv environment.
+@param string sGame Name of the active game used for contextual error reporting.
+@param table tFileSpec File specification table describing the script file to load.
+@return table tUserTable The table returned by the executed Lua file.
+@note The file is read from the Scripts directory using the provided file specification. The chunk is loaded with the UserEnv environment and executed safely using pcall. The script must return a table or an error is raised.
+@vis Static Private
 !]]
-local function BuildUserTable(sGame, tFileSpec)
+BuildUserTable = function(sGame, tFileSpec)
     local sInitChunk = TextFile.ReadToString(FS.Scripts.."\\"..tFileSpec.Full);
     --TODO CHECK AND ERROR on bad file
 
@@ -195,7 +244,7 @@ end
         It builds the base data editor and final data viewer grids, captures each window’s original callbacks, then wraps OnClose/OnMaximize/OnResizeStop/OnRestore to both forward events and persist window geometry, visibility, and maximized state back to the INI.</p>
     @vis Static Private
 !]]
-local function BuildWindows()
+BuildWindows = function()
 
     if not (_bWindowsBuilt) then
         local tWindows = _tWindows;
@@ -328,13 +377,124 @@ end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Methods.LoadFileToGrid
-    @desc Loads a CSV into the base grid, rebuilds the final grid by processing all cells, and refreshes the UI.
-    @param string pFile Path to the CSV to load.
-    @note Disables saving while loading and re-enables normal editing after completion.
-    @vis Static Private
+@fqxn CFS.Classes.ProcSys.Methods.EnsureRowProcessed
+@desc Ensures the specified row has been processed and cached. If the row is marked dirty it will be reprocessed before returning the cached row table.
+@param number nRow Row index to ensure is processed.
+@return table tRow The processed row table from the internal row cache.
+@note If the row is marked dirty it is processed immediately using ProcessRow and then removed from the dirty row table.
+@example
+    local tRow = EnsureRowProcessed(5)
+
+    if (tRow) then
+        local sName = tRow["Name"]
+    end
+@vis Static Private
 !]]
-local function LoadFileToGrid(pFile)
+EnsureRowProcessed = function(nRow)
+
+    if (_tDirtyRows[nRow]) then
+        ProcessRow(nRow, true);
+        _tDirtyRows[nRow] = nil;
+    end
+
+    return _tRows[nRow];
+end
+
+
+--[[!
+@fqxn CFS.Classes.ProcSys.Methods.GetRow
+@desc Builds and returns a read-only row table for the specified grid row. The returned table supports lookup by column index or column name and also supports reverse lookup of column names and indices through its call metamethod.
+@param string sGrid Name of the grid to read from.
+@param number nRow Row index to read.
+@return table tRow Read-only row table exposing values by column index and upper-case column name.
+@note The returned row table is backed by a metatable that prevents writes. Numeric indexing returns cell text by column index. String indexing returns cell text by upper-case column name. Calling the table with a number returns the upper-case column name for that index, and calling it with a string returns the column index for that name.
+@example
+    local tRow = GetRow(_sBaseDataGrid, 5)
+
+    local sName = tRow["NAME"]
+    local sType = tRow[2]
+
+    local sColumnName = tRow(2)
+    local nColumnID = tRow("Name")
+@vis Static Private
+!]]
+GetRow = function (sGrid, nRow)
+    local tRet      = {};
+
+    local tByColumnID       = {};
+    local tByColumnName     = {};
+    local tColumns          = {};
+    local tColumnIDsByName  = {};
+
+    if _nColumnCount > 0 then
+
+        for nColumn = 0, _nColumnCount - 1 do
+            local sCellText             = GetCellText(sGrid, nRow, nColumn);
+            local sColumn               = _tColumnIDNameMap[nColumn]:upper();
+            tByColumnID[nColumn]        = sCellText;
+            tByColumnName[sColumn]      = sCellText;
+            tColumns[nColumn]           = sColumn;
+            tColumnIDsByName[sColumn]   = nColumn;
+        end
+
+    end
+
+    local tRetMeta = {
+        --returns the name or index of a column given the index or name
+        __call = function(t, v)
+            local zV = rawtype(v);
+
+            if (zV == "number") then
+                return tColumns[v] or nil;
+            elseif (zV == "string") then
+                return tColumnIDsByName[v:upper()];
+            end
+        end,
+        __index = function(t, k)
+            local sRet;
+            local zK = type(k);
+
+            if (zK == "number") then
+                sRet = tByColumnID[k] or nil;
+            elseif (zK == "string") then
+                sRet = tByColumnName[k:upper()] or nil;
+            end
+
+            return sRet;
+        end,
+        __newindex = function() error("Cannot write to read-only row table for grid \""..sGrid.."\" at row index "..nRow..".") end,
+        __pairs = function(t)
+            local nIndex = 0;
+            local nMax   = #tByColumnID;
+
+            return function()
+                nIndex = nIndex + 1;
+
+                if (nIndex <= nMax) then
+                    return nIndex, tColumns[nIndex], tByColumnID[nIndex];
+                end
+
+            end
+
+        end,
+        __len = function()
+            return _nColumnCount;
+        end,
+    };
+    setmetatable(tRet, tRetMeta);
+
+    return tRet;
+end
+
+
+--[[!
+@fqxn CFS.Classes.ProcSys.Methods.LoadFileToGrid
+@desc Loads the specified CSV file into the Base and Final data grids, rebuilds the column lookup tables, processes all data rows, refreshes the grids, and resets save state.
+@param string pFile Full path to the CSV file to load.
+@note Both grids are cleared and reloaded from the same source file. Row 0 is treated as the header row and is used to rebuild the column name and column ID maps. All data rows are processed immediately after loading, and the processed row cache and dirty row table are reset.
+@vis Static Private
+!]]
+LoadFileToGrid = function(pFile)
     _bIsLoading = true;
     PrepUpdateGrids();
 
@@ -359,7 +519,7 @@ local function LoadFileToGrid(pFile)
         --Grid.SetHeaderSort(         sGrid, false);
         --Grid.SetListMode(           sGrid, true);
         --Grid.ExpandColumnsToFit(    sGrid, true, true);
-        --local nColumnID = Grid.GetColumnIDByName(_sBaseDataGrid, "Description");
+        --local nColumnID = _tColumnNameIDMap["Description"];
         --Grid.SetColumnWidth(sGrid, nColumnID, _nDescriptionMaxWidth);
     end
 
@@ -369,25 +529,27 @@ local function LoadFileToGrid(pFile)
     _nCurrentRow    = 1;
     _nCurrentColumn = 1;
 
-    StatusDlg.SetMeterRange(1, _nRowCount);
+    --(re)build the column name/id maps
+    _tColumnNameIDMap = {};
+    _tColumnIDNameMap = {};
 
+    for nColumnID = 0, _nColumnCount - 1 do
+        local sColumn = GetCellText(_sBaseDataGrid, 0, nColumnID);
+        _tColumnNameIDMap[sColumn]                  = nColumnID;
+        _tColumnIDNameMap[nColumnID]                = sColumn;
+        _tColumnNameCaseMap[sColumn:upper()]        = sColumn;
+    end
+
+    --reset the rows and dirty rows table
+    _tRows      = {};
+    _tDirtyRows = {};
+
+    --process all rows
     for nRow = 1, _nRowCount - 1 do
-
-        for nColumn = 1, _nColumnCount - 1 do
-            ProcessCell(nRow, nColumn);
-        end
-
+        ProcessRow(nRow, true);
     end
 
     UpdateGrids();
-
-
-    --(re)build the column name/id map
-    _tColumnNameIDMap = {};
-
-    for nColumnID = 0, _nColumnCount - 1 do
-        _tColumnNameIDMap[GetCellText(_sBaseDataGrid, 0, nColumnID):collapse():lower()] = nColumnID;
-    end
 
     --set loading to finished
     _bAllowSave = false;
@@ -397,8 +559,47 @@ end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.PrepUpdateGrids
-    @desc TODO
+@fqxn CFS.Classes.ProcSys.Methods.MarkAllRowsDirty
+@desc Marks all data rows as dirty so they will be reprocessed during the next processing cycle.
+@note The dirty row table is reset and every data row index is inserted. Header row 0 is excluded and rows are marked from 1 through the last data row.
+@vis Static Private
+!]]
+MarkAllRowsDirty = function()
+    _tDirtyRows = {};
+
+    for nRow = 1, _nRowCount - 1 do
+        _tDirtyRows[nRow] = true;
+    end
+
+end
+
+
+--[[!
+@fqxn CFS.Classes.ProcSys.Methods.MarkRowDirty
+@desc Marks a single data row as dirty so it will be reprocessed during the next processing cycle.
+@param number nRow Row index to mark dirty.
+@note The row index must be within the valid data range (1 through the last data row). An error is raised if the argument is not a number or falls outside the valid range.
+@vis Static Private
+!]]
+MarkRowDirty = function(nRow)
+
+    if (rawtype(nRow) ~= "number") then
+        error("ProcSys - MarkRowDirty: row index must be number. Got "..rawtype(nRow)..".", 2);
+    end
+
+    if (nRow < 1 or nRow >= _nRowCount) then
+        error("ProcSys - MarkRowDirty: row index out of range. Got "..tostring(nRow)..", expected 1-"..tostring(_nRowCount - 1)..".", 2);
+    end
+
+    _tDirtyRows[nRow] = true;
+end
+
+
+--[[!
+@fqxn CFS.Classes.ProcSys.Methods.PrepUpdateGrids
+@desc Prepares the Base and Final grids for a bulk update by clearing the status message and temporarily disabling redraw on both grids.
+@note This prevents visual flicker and improves performance when many grid updates are about to occur.
+@vis Static Private
 !]]
 PrepUpdateGrids = function()
     Status.Set("");
@@ -406,7 +607,7 @@ PrepUpdateGrids = function()
     Grid.SetRedraw(_sFinalDataGrid, false);
 end
 
-
+--TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
 --[[!
     @fqxn CFS.Classes.ProcSys.Static Private.Methods.ProcessCell
     @desc Processes a single base grid cell into the final grid and returns data for redraw/export.
@@ -419,11 +620,9 @@ end
         </ul>
 !]]
 ProcessCell = function(nRow, nColumn)
-    local sColumn       = GetCellText(_sBaseDataGrid, 0, nColumn);
+    local sColumn       = _tColumnIDNameMap[nColumn];
     local sText         = GetCellText(_sBaseDataGrid, nRow, nColumn);
-    --local tCodeColumn   = _tCodeColumns[sColumn];
-    local sColumnKey    = rawtype(sColumn) == "string" and sColumn:collapse():lower() or "";
-    local tCodeColumn   = _tCodeColumns[sColumnKey];
+    local tCodeColumn   = _tCodeColumns[sColumn];
 
     if (tCodeColumn and tCodeColumn[nRow]) then
         local tCodeCell = tCodeColumn[nRow];
@@ -435,7 +634,7 @@ ProcessCell = function(nRow, nColumn)
             if (rawtype(fCellProc) == "function") then
                 --QUESTION how to get this return value back the _tRow[sColumn]
                 --TODO XP call this
-                local tRow = Grid.GetRow(_sBaseDataGrid, nRow);
+                local tRow = GetRow(_sBaseDataGrid, nRow);
                 local bOK, vRetOrError = xpcall(function()
                     fCellProc(nRow, nColumn, sColumn, tRow, sText);
                 end, XPCallError);
@@ -453,7 +652,7 @@ ProcessCell = function(nRow, nColumn)
 
     else
         local function fGetFinalValue(sColumn, vCoerce)
-            local vRet = GetCellText(_sFinalDataGrid, nRow, GetColumnIDByName(_sFinalDataGrid, sColumn));
+            local vRet = GetCellText(_sFinalDataGrid, nRow, _tColumnNameIDMap[sColumn]);
             local nCoerce = rawtype(vCoerce) == "number" and vCoerce or nil;
 
             if (nCoerce == PROCSYS_TO_NUMBER) then
@@ -466,7 +665,7 @@ ProcessCell = function(nRow, nColumn)
             return vRet;
         end
 
-        local vProcRet = _fRowProc(nRow, nColumn, sColumn, Grid.GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
+        local vProcRet = _fRowProc(nRow, nColumn, sColumn, GetRow(_sBaseDataGrid, nRow), sText, fGetFinalValue);
 
         if (rawtype(vProcRet) == "string") then
             ---update the cell's text
@@ -481,23 +680,77 @@ ProcessCell = function(nRow, nColumn)
 end
 
 
-local function SetReprocRows(vFlag)
+--[[!
+@fqxn CFS.Classes.ProcSys.Methods.ProcessDirtyRows
+@desc Processes rows that have been marked dirty, rebuilding their processed values and updating the cached row table.
+@note The currently selected row is processed first if it is dirty and does not count toward the processing budget. Remaining dirty rows are processed until the timer budget is exhausted, and each processed row is removed from the dirty row table.
+@vis Static Private
+!]]
+ProcessDirtyRows = function()
+    local nBudget = _nRowProcTimerBudget;
 
-    local nRows = Grid.GetRowCount(_sBaseDataGrid);
-    local bFlag = rawtype(vFlag) == "boolean" and vFlag or false;
+    --check if current row is dirty first
+    if (_tDirtyRows[_nCurrentRow]) then
+        ProcessRow(_nCurrentRow);
+    end
 
-    for nRow = 0, nRows - 1 do
-        _tReprocRows[nRow] = bFlag;
+    for nRow in pairs(_tDirtyRows) do
+        ProcessRow(nRow, true);
+
+        nBudget = nBudget - 1;
+        if (nBudget <= 0) then
+            break;
+        end
+
     end
 
 end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.TryBackupFile
-    @desc TODO
+@fqxn CFS.Classes.ProcSys.Methods.ProcessRow
+@desc Reprocesses a single data row by executing the cell processing logic for each column, rebuilding the processed row data, and updating the internal row cache.
+@param number nRow Row index to process.
+@param boolean bSkipExtUpdate When true, the UserEnv and Forge active row are not updated after processing.
+@note The row is removed from the dirty row table before processing begins. Each column in the row is processed using ProcessCell, and the resulting final grid row is cached in the internal row table for fast lookup.
+@vis Static Private
 !]]
-local function TryBackupFile(pFile)--tFiles)
+ProcessRow = function(nRow, bSkipExtUpdate)
+    --inform the system that this row has been processed
+    _tDirtyRows[nRow] = nil;
+
+    --reprocess the row
+    --Grid.SetRedraw(_sBaseDataGrid, false); --TODO this may work to speed things up a bit, check it out
+    for nColumn = 1, _nColumnCount - 1 do
+        ProcessCell(nRow, nColumn);
+    end
+    --Grid.SetRedraw(_sBaseDataGrid, true);
+
+    --get the final row
+    local tRow  = GetRow(_sFinalDataGrid, nRow);
+
+    --store the row for later, quick lookup
+    _tRows[nRow] = tRow;
+
+    if not (bSkipExtUpdate) then
+        --update the final row in the UserEnv
+        UserEnv.ProcSysUpdateRoot {_tRow = tRow};
+        --update the Forge's active row
+        Forge.SetActiveRow(tRow);
+    end
+
+end
+
+-- TODO TODO TODO TODO TODO TODO FIX STORAGE LOCATION AND UPDATE DOX
+--[[!
+@fqxn CFS.Classes.ProcSys.Methods.TryBackupFile
+@desc Creates a timestamped backup of the specified CSV file in the ProcSys backup directory if the configured backup interval has elapsed.
+@param string pFile Full path to the CSV file to back up.
+@return boolean bWriteFile True if a new backup file was written, false if no backup was needed.
+@note Backups are stored in a folder named after the CSV file inside the ProcSys backup directory. The timestamp is generated using the current ISO date and military time collapsed to minute precision. If the backup interval has not elapsed since the latest backup, no new file is written. When the maximum backup count is reached, the oldest backup file is deleted before writing a new one.
+@vis Static Private
+!]]
+TryBackupFile = function(pFile)--tFiles)
     --local pFile = tFiles[1];
     local tParts = String.SplitPath(pFile);
 
@@ -543,59 +796,44 @@ end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.TryDrawActiveCard
-    @desc TODO
+@fqxn CFS.Classes.ProcSys.Methods.TryDrawActiveCard
+@desc Attempts to draw the card for the currently selected row using the cached processed row data.
+@note If a current row is selected, the cached processed row table is retrieved from the internal row cache and passed to TryDrawCard for rendering.
+@vis Static Private
 !]]
-local function TryDrawActiveCard()
+TryDrawActiveCard = function()
 
     if (_nCurrentRow) then
-        local tRow = Grid.GetRow(_sFinalDataGrid, _nCurrentRow);
-        TryDrawCard(tRow);
+        TryDrawCard(_tRows[_nCurrentRow]);
     end
 
 end
 
---TODO clean all these functions up...params are messy
+
 --[[!
-    @fqxn CFS.Classes.ProcSys.Methods.TryDrawCard
-    @desc Attempts to draw the card for the given row using the resolved processor.
-    @param class cProc Processor class providing the DrawCard method.
-    @param number nRow Row index being drawn.
-    @param table tRow Final grid row data for the card.
-    @note
-        <ul>
-            <li>Sets Forge orientation based on row data.</li>
-            <li>Optionally exports the card when the corresponding menu option is enabled.</li>
-        </ul>
-    @vis Static Private
+@fqxn CFS.Classes.ProcSys.Methods.TryDrawCard
+@desc Requests Forge to render the card represented by the provided processed row table.
+@param table tRow Processed row table containing the final grid values for the card.
+@note Rendering occurs only if the row contains data. The row is first assigned as the active Forge row and then a redraw request is issued.
+@vis Static Private
 !]]
---local function TryDrawCard(cProc, nRow, tRow)
 TryDrawCard = function(tRow)
-
-    --if (cProc and type(cProc.DrawCard) == "function" and nRow > 0) then
-
-        --make sure there's data in the row
-        if (#tRow > 0) then
-            --check for export call
-            --local fExport = _tExporters[_sGame][_pActiveCSV];
-            --local bExport = MainMenu.IsChecked("Options:>Draw:>Export Selected Card") and rawtype(fExport) == "function"; --TODO FINISH use new/custom exporter system BUT dnot here...do not draw for every export, simply export
-
-            --tell Forge to draw (and possibly export) the card
-            Forge.SetActiveRow(tRow);
-            Forge.RequestCardRedraw();
-        end
-
-    --end
+    --make sure there's data in the row
+    if (#tRow > 0) then
+        Forge.SetActiveRow(tRow);
+        Forge.RequestCardRedraw();
+    end
 
 end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Methods.UpdateCardSetLiveFileRepo
-    @desc TODO
-    @vis Static Private
+@fqxn CFS.Classes.ProcSys.Methods.UpdateCardSetLiveFileRepo
+@desc Configures and starts the live file repository for the active card set, registering watchers for all card set files that can trigger runtime updates.
+@note The repository is reset before watchers are added. Each watched file updates its associated state variables and change flags when modifications are detected. These flags are later processed by the ProcSys timer system to rebuild functions, reload configuration, or reprocess rows as needed.
+@vis Static Private
 !]]
-local function UpdateCardSetLiveFileRepo() --TODO FINISH
+UpdateCardSetLiveFileRepo = function()
     local oCardSet      = _oActiveCardSet;
     local oLiveFileRepo = _oCardSetLiveFileRepo;
 
@@ -648,10 +886,100 @@ end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateGameLiveFileRepo
-    @desc TODO
+@fqxn CFS.Classes.ProcSys.Methods.UpdateCodeCell
+@desc Decodes and compiles a code cell from the Base grid for a registered code column and stores the resulting metadata in the column code table.
+@param number nRow Row index containing the code cell.
+@param number nColumn Column index of the code cell in the Base grid.
+@param string sColumn Column name associated with the code column.
+@note The cell text is expected to contain Base64-encoded Lua source. The decoded source is compiled inside the UserEnv environment and stored along with validation information. If the cell is empty or invalid the row entry for that column is cleared.
+@vis Static Private
 !]]
-local function UpdateGameLiveFileRepo()
+UpdateCodeCell = function(nRow, nColumn, sColumn)
+    local sCode = GetCellText(_sBaseDataGrid, nRow, nColumn);
+    local tColumnCode = _tCodeColumns[sColumn];
+
+    if (rawtype(sCode) == "string" and not sCode:isempty()) then
+        local sDecoded = dec(sCode);
+        local fChunk, sError = load(sDecoded, "CodeColumn '"..sColumn.."' Row "..tostring(nRow), "t", UserEnv.Get());
+
+        tColumnCode[nRow] = {
+            Column      = sColumn,
+            Error       = sError or "",
+            Function    = fChunk or false,
+            IsValid     = rawtype(fChunk) == "function",
+            Row         = nRow,
+            Code        = sCode,
+            Decoded     = sDecoded,
+        };
+    else
+        tColumnCode[nRow] = nil;
+    end
+
+end
+
+
+--[[!
+@fqxn CFS.Classes.ProcSys.Methods.UpdateCodeColumns
+@desc Rebuilds the internal code column registry based on the current CodeColumns definition file and regenerates compiled code entries for each referenced column.
+@note The CodeColumns definition is parsed from the live file contents and matched against existing grid column names using the column name case map. Columns no longer referenced are removed from the internal registry. Each referenced column is rebuilt by scanning all data rows and updating the compiled code cell entries.
+@vis Static Private
+!]]
+UpdateCodeColumns = function()
+    --get the requested code columns from the LiveFile var
+    local tCodeColumns = _sCodeColumns:totable("\n");
+
+    if not (rawtype(tCodeColumns) == "table" and #tCodeColumns > 0) then
+        _tCodeColumns = {};
+        return;
+    end
+
+    local tReferenced = {};
+
+    -- build reference set
+    for _, sKey in pairs(tCodeColumns) do
+        local sColumn = _tColumnNameCaseMap[sKey:upper()];
+
+        if (sColumn) then
+            tReferenced[sColumn] = true;
+        end
+
+    end
+
+    -- remove old keys not referenced
+    for sCodeColumn in pairs(_tCodeColumns) do
+
+        if not (tReferenced[sCodeColumn]) then
+            _tCodeColumns[sCodeColumn] = nil;
+        end
+
+    end
+
+    -- rebuild each referenced code column
+    for _, sCodeColumn in pairs(tCodeColumns) do
+        local nColumn = _tColumnNameIDMap[sCodeColumn];
+
+        if (nColumn ~= nil and nColumn ~= -1) then
+            local tColumnCode = {};
+
+            for nRow = 1, _nRowCount - 1 do
+                UpdateCodeCell(nRow, nColumn, sCodeColumn);
+            end
+
+            _tCodeColumns[sCodeColumn] = tColumnCode;
+        end
+
+    end
+
+end
+
+
+--[[!
+@fqxn CFS.Classes.ProcSys.Methods.UpdateGameLiveFileRepo
+@desc Configures and starts the live file repository for the active game, registering watchers for game configuration, environment scripts, and style files.
+@note The repository is reset before watchers are added. Changes to CFG or ENV files update their cached source code and set change flags so the ProcSys timer can rebuild the corresponding runtime tables. The Styles.ini file watcher updates the cached style definition and marks the font style system for refresh.
+@vis Static Private
+!]]
+UpdateGameLiveFileRepo = function()
     local sGame         = _oActiveGame;
     local oLiveFileRepo = _oGameLiveFileRepo;
 
@@ -705,15 +1033,17 @@ end
 
 
 --[[!
-    @fqxn CFS.Classes.ProcSys.Static Private.Methods.UpdateGrids
-    @desc TODO
+@fqxn CFS.Classes.ProcSys.Methods.UpdateGrids
+@desc Applies the current grid visual settings, refreshes the Base and Final data grids, restores redraw, and requests a page redraw.
+@note Grid colors and visual properties are loaded from the application INI using the pane sections for the Base and Final grid windows. Alternate row background colors are applied to even-numbered rows. The Description column width is explicitly set after refresh using the current column name map.
+@vis Static Private
 !]]
 UpdateGrids = function ()--TODO FINISH MOVE Color stuff out to a theme system
     Application.SetRedraw(false);
     --adjust/refresh the appropriate grids QUESTION SHould this be after the refresh?
     --Grid.ExpandColumnsToFit(_sBaseDataGrid,     true, true);
     --Grid.ExpandColumnsToFit(_sFinalDataGrid,    true, true);
-    --local nColumnID = Grid.GetColumnIDByName(_sBaseDataGrid, "Description");
+    --local nColumnID = _tColumnNameIDMap["Description"];
     --Grid.SetColumnWidth(_sBaseDataGrid, nColumnID, _nDescriptionMaxWidth);--TODO magick number
     --Grid.SetColumnWidth(_sFinalDataGrid, nColumnID, _nDescriptionMaxWidth);
     local nColumns = Grid.GetColumnCount(_sBaseDataGrid);
@@ -781,7 +1111,7 @@ UpdateGrids = function ()--TODO FINISH MOVE Color stuff out to a theme system
     for sObject, sSection in pairs(tGrids) do
         local tProps = {Background = tAltColor[sObject]};
 
-        for nRow = 1, Grid.GetRowCount(sObject) do
+        for nRow = 1, _nRowCount do--Grid.GetRowCount(sObject) do
             local bIsEven = nRow % 2 == 0;
 
             if (bIsEven) then
@@ -796,8 +1126,8 @@ UpdateGrids = function ()--TODO FINISH MOVE Color stuff out to a theme system
 
     end
 
-    --local nColumnID             = GetColumnIDByName(_sBaseDataGrid, "ID");
-    local nColumnDescription    = GetColumnIDByName(_sBaseDataGrid, "Description");
+    --local nColumnID             = _tColumnNameIDMap["ID"];
+    local nColumnDescription    = _tColumnNameIDMap["Description"]-- _tColumnNameIDMap["Description"];--TODO BUG FIX FINISH this muct be applied to ALL code columns
 
     --Grid.AutoSizeColumns(_sBaseDataGrid, GVS_DEFAULT, false);
     --Grid.AutoSizeColumns(_sFinalDataGrid, GVS_DEFAULT, false);
@@ -814,290 +1144,122 @@ UpdateGrids = function ()--TODO FINISH MOVE Color stuff out to a theme system
 end
 
 
-
-
-
-local function ProcessRow(nRow, bSkipRedraw)
-    --reprocess the row
-    --Grid.SetRedraw(_sBaseDataGrid, false); --TODO this may work to speed things up a bit, check it out
-    for nColumn = 1, _nColumnCount - 1 do
-        ProcessCell(nRow, nColumn);
-    end
-    --Grid.SetRedraw(_sBaseDataGrid, true);
-
-    --get the final row
-    local tRow  = Grid.GetRow(_sFinalDataGrid, nRow);
-    --update the final row in the UserEnv
-    UserEnv.ProcSysUpdateRoot {_tRow = tRow};
-    --redraw the card
-    Forge.SetActiveRow(tRow);
-
-    if not (bSkipRedraw) then
-        Forge.RequestCardRedraw();
-    end
-
+--[[!
+@fqxn CFS.Classes.ProcSys.Methods.XPCallError
+@desc Formats an error value into a stack traceback string suitable for use with xpcall error handlers.
+@param any vErr Error value passed by xpcall.
+@return string sTraceback Traceback string containing the error message and call stack.
+@note The traceback starts two stack levels above the handler so that the handler itself is omitted from the reported stack.
+@vis Static Private
+!]]
+XPCallError = function(vErr)
+    return debug.traceback(tostring(vErr), 2);
 end
 
 --TODO MAKE SURE NAME IS UNIQUE BEFORE ALLOWING CHANGE IN TABLE!!!!!!!!!!!!!!!!!!!!! FINISH CODE RELIES ON UNIQUNESS!!!!!!
 
-local function UpdateCodeColumnsOLD()
-    local tFileColumns = _sCodeColumns:totable("\n");
-    --local sSalt        = --prevents writing by obfuscation from other functions
-
-    if (rawtype(tFileColumns) == "table" and #tFileColumns > 0) then
-        local tReferenced = {};
-
-        -- build reference set from new table
-        for _, sKey in pairs(tFileColumns) do
-
-            if (rawtype(sKey) == "string") then
-                tReferenced[sKey] = true;
-            end
-
-        end
-
-        -- remove old keys not referenced
-        for sKey in pairs(_tCodeColumns) do
-
-            if not (tReferenced[sKey]) then
-                _tCodeColumns[sKey] = nil;
-            end
-
-        end
-
-        -- add missing keys
-        local nNameID = GetColumnIDByName(_sBaseDataGrid, "Name");
-
-        for _, sKey in pairs(tFileColumns) do
-
-            if (rawtype(sKey) == "string" and _tCodeColumns[sKey] == nil and _tColumnNameIDMap[sKey]) then  --TODO FINISH QUESTION What about case sensitivity? Isn't the system insensitive elsewhere?
-                local tColumnCode       = {};
-                local tColumnCodeDecoy  = {};
-                local tColumnCodeMeta   = {
-                    __index = tColumnCode,
-                    __newindex = function(t, k, v) --assumes that k is the name of the card and is correct and exists, and that v is the base64 code from the cell
-                        local zK = rawtype(k);
-
-                        if not (tColumnCode[k]) then
-                            tColumnCode[k] = {
-                                Column      = "",
-                                Error       = "",
-                                Function    = false,
-                                IsValid     = false,
-                                Row         = -1,
-                            };
-                        end
-
-                        if (zK == "string") then
-                            local tCC = tColumnCode[k];
-                            local fChunk, sError = load(dec(v), "CodeColumn '"..k.."'", 't', UserEnv.Get())
-
-                            tCC.Column      = sKey;
-                            tCC.Error       = sError;
-                            tCC.Function    = fChunk;
-                            tCC.IsValid     = rawtype(fChunk) == "function";
-                            tCC.Row         = -1;
-
-                        elseif (zK == "number") then
-                            tColumnCode[k].Row = v;
-                        end
-
-
-                    end,
-                };
-
-                setmetatable(tColumnCodeDecoy, tColumnCodeMeta);
-                _tCodeColumns[sKey] = tColumnCodeDecoy;
-            end
-
-            local nKeyColumnID  = GetColumnIDByName(_sBaseDataGrid, sKey);
-
-            for nRow = 1, _nRowCount do
-                local sCode = GetCellText(_sBaseDataGrid, nRow, nKeyColumnID);
-
-                if not (sCode:isempty()) then
-                    --local sName = GetCellText(_sBaseDataGrid, nRow, nNameID);
-                    --_tCodeColumns[sKey][sName] = sCode;
-                    _tCodeColumns[sKey][nRow] = sCode;
-                    _tCodeColumns[sKey][nRow] = nRow;
-                else
-                    --_tCodeColumns[sKey][sName] = nil;
-                    _tCodeColumns[sKey][nRow] = nil;
-                end
-
-            end
-
-        end
-
-    else
-        --if no code columns were listed...reset the table
-        _tCodeColumns = {};
-    end
-
-end
-
-
-local function NormalizeColumnKey(sValue)
-    if (rawtype(sValue) ~= "string") then
-        return nil;
-    end
-
-    sValue = sValue:collapse();
-
-    if (sValue:isempty()) then
-        return nil;
-    end
-
-    return sValue:lower();
-end
-
-local function UpdateCodeColumns()
-    local tFileColumns = _sCodeColumns:totable("\n");
-
-    if not (rawtype(tFileColumns) == "table" and #tFileColumns > 0) then
-        _tCodeColumns = {};
-        return;
-    end
-
-    local tReferenced = {};
-
-    -- build normalized reference set from file
-    for _, sKey in pairs(tFileColumns) do
-        local sNorm = NormalizeColumnKey(sKey);
-
-        if (sNorm) then
-            tReferenced[sNorm] = true;
-        end
-    end
-
-    -- remove old keys not referenced
-    for sKey in pairs(_tCodeColumns) do
-
-        if not (tReferenced[sKey]) then
-            _tCodeColumns[sKey] = nil;
-        end
-
-    end
-
-    -- rebuild each referenced code column
-    for _, sKey in pairs(tFileColumns) do
-        local sNorm = NormalizeColumnKey(sKey);
-
-        if (sNorm) then
-            local nKeyColumnID = _tColumnNameIDMap[sKey] or _tColumnNameIDMap[sNorm] or GetColumnIDByName(_sBaseDataGrid, sKey);
-
-            if (nKeyColumnID ~= nil and nKeyColumnID ~= -1) then
-                local tColumnCode = {};
-
-                for nRow = 1, _nRowCount - 1 do
-                    local sCode = GetCellText(_sBaseDataGrid, nRow, nKeyColumnID);
-
-                    if (rawtype(sCode) == "string" and not sCode:isempty()) then
-                        local sDecoded = dec(sCode);
-                        local fChunk, sError = load(sDecoded, "CodeColumn '"..sKey.."' Row "..tostring(nRow), "t", UserEnv.Get());
-
-                        tColumnCode[nRow] = {
-                            Column      = sKey,
-                            ColumnKey   = sNorm,
-                            Error       = sError or "",
-                            Function    = fChunk or false,
-                            IsValid     = rawtype(fChunk) == "function",
-                            Row         = nRow,
-                            Code        = sCode,
-                            Decoded     = sDecoded,
-                        };
-                    else
-                        tColumnCode[nRow] = nil;
-                    end
-
-                end
-
-                _tCodeColumns[sNorm] = tColumnCode;
-            end
-
-        end
-
-    end
-
-end
-
-
-
-local function UpdateCardSetDrawRepo()
---TODO LEFT OFF HERE
-end
-
-local function UpdateDraw()
-    --get the chunk from the active card set
-    local sDrawChunk = _oDrawLiveFileRepo.Text;
-
-    --the error message in case things go south
-    local sCardSetName  = oCardSet.GetName(); --TODO cache this value
-    local sChunkName    = sCardSetName.." Draw";
-
-    --try to load the chuck
-    local fChunk, sError = load(sDrawChunk, sChunkName, "t", UserEnv.Get());
-    if not (fChunk) then
-        error("Error loading Draw file for CardSet "..sCardSetName..".\r\n"..sError, 2); --TODO LOG/display
-    end
-
-    --try to call the chunk
-    local bOk, vReturnOrError = pcall(fChunk);
-
-    if not (bOk) then --TODO are drafts gettging loaded back in? Are they even needed...?
-        error("ERror 539 - Forge: "..vReturnOrError)
-        --error(sChunkName..": "..tostring(vDescOrErr), 3); TODO LOG and display
-    else
-        fSetOnImageDraw = vReturnOrError;--(this, tRow, nWidth, nHeight);
-    end
-
-end
-
-
-
-
+--[[
+██████╗██╗      █████╗ ███████╗███████╗
+██╔════╝██║     ██╔══██╗██╔════╝██╔════╝
+██║     ██║     ███████║███████╗███████╗
+██║     ██║     ██╔══██║╚════██║╚════██║
+╚██████╗███████╗██║  ██║███████║███████║
+ ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝]]
 --[[!
-    @fqxn CFS.Classes.ProcSys
-    @desc <h2>ProcSys</h2>
+@fqxn CFS.Classes.ProcSys
+@desc <h2>ProcSys</h2>
 
-    <p>
-      Coordinates the CSV editing pipeline between a <strong>Base Data</strong> grid and a <strong>Final Data</strong> grid.
-      When data is loaded, each cell in <strong>Base Data</strong> grid is processed and moved to the <strong>Final Data</strong> grid.
-      The <strong>Final Data</strong> grid is what is output, while the <strong>Base Data</strong> grid preserves the original input.
-    </p>
+<p>
+Coordinates the full ProcSys CSV workflow between the <strong>Base Data</strong> and <strong>Final Data</strong> grids.
+The <strong>Base Data</strong> grid preserves the original source values exactly as authored, while the
+<strong>Final Data</strong> grid stores the processed output generated from those values.
+</p>
 
-    <h3>What it does</h3>
-    <ul>
-      <li><strong>Loads</strong> a CSV into the base grid, then builds the final grid by processing every cell.</li>
-      <li><strong>Processes</strong> individual cell edits and keeps the final grid in sync immediately.</li>
-      <li><strong>Refreshes</strong> the grids efficiently to avoid flicker and slow updates.</li>
-      <li><strong>Draws</strong> the current row’s card when selection changes or when a cell edit occurs (when enabled).</li>
-      <li><strong>Saves</strong> the updated base CSV when requested.</li>
-      <li><strong>Backs up</strong> source CSVs to a per-file backup folder using timestamp and retention rules.</li>
-    </ul>
+<p>
+ProcSys also acts as the runtime bridge between grid data, the active card set, the active game,
+<strong>UserEnv</strong>, and <strong>Forge</strong>. It is responsible for loading and processing CSV data,
+caching processed rows, tracking rows that must be rebuilt, reacting to live file changes, and ensuring the
+currently selected row can be previewed and redrawn correctly.
+</p>
 
-    <h3>How processing works</h3>
-    <p>
-      Each row resolves to a processor object. As that processor provides a processing hook, the system calls it during
-      initial load and on edits. If the hook returns nothing, the original text is copied through, unchanged.
-    </p>
+<h3>Core Responsibilities</h3>
+<ul>
+<li><strong>Loads</strong> card set CSV data into both the Base and Final grids.</li>
+<li><strong>Processes</strong> each data row through the active row-processing logic and stores the result in the Final grid.</li>
+<li><strong>Caches</strong> processed rows internally for fast lookup and preview.</li>
+<li><strong>Tracks</strong> dirty rows so changed or invalidated rows can be rebuilt only when needed.</li>
+<li><strong>Synchronizes</strong> runtime state with UserEnv and Forge for preview, redraw, and tool behavior.</li>
+<li><strong>Monitors</strong> live game and card set files so RowProc, Draw, DrawBack, CFG, ENV, Styles, and CSV data can refresh at runtime.</li>
+<li><strong>Builds</strong> and restores the auxiliary <strong>Base Data Editor</strong> and <strong>Final Data Viewer</strong> windows.</li>
+<li><strong>Saves</strong> the active source CSV when saving is allowed.</li>
+<li><strong>Backs up</strong> source CSV files according to the configured retention and interval rules.</li>
+</ul>
 
-    <h3>Workflow</h3>
-    <ol>
-      <li><strong>Load</strong> a CSV (from a path or a file picker).</li>
-      <li><strong>Backup</strong> the CSV if enough time has passed since the last backup.</li>
-      <li><strong>Populate</strong> both grids and build the final grid by iterating all rows and columns.</li>
-      <li><strong>Edit</strong> cells in the base grid; changes are processed and mirrored into the final grid.</li>
-      <li><strong>Preview</strong> by selecting rows; the current row is used to trigger a draw attempt.</li>
-      <li><strong>Save</strong> both the base and final outputs when changes are allowed.</li>
-    </ol>
+<h3>Data Model</h3>
+<ul>
+<li><strong>Base Data grid</strong> = authoritative source/original values.</li>
+<li><strong>Final Data grid</strong> = authoritative processed/export-ready cell values.</li>
+<li><strong>_tRows</strong> = cached processed row tables built from the Final Data grid.</li>
+<li><strong>_tDirtyRows</strong> = row indices that must be reprocessed before their cached data can be trusted.</li>
+</ul>
 
-    <h3>Notes</h3>
-    <ul>
-      <li><em>Base grid</em> = source/original values.</li>
-      <li><em>Final grid</em> = processed/export-ready values.</li>
-      <li>Saving is disabled during bulk loading and enabled after edits.</li>
-    </ul>
+<h3>How Processing Works</h3>
+<p>
+When a card set is loaded, ProcSys reads the CSV into both grids, rebuilds its column lookup tables, then processes
+every data row into the Final grid and internal row cache. After the initial load, rows do not need to be rebuilt
+blindly. Instead, ProcSys marks rows dirty when data or processing logic changes, then reprocesses them either
+during timer-driven background work or immediately when the active row is required.
+</p>
+
+<p>
+This lets ProcSys avoid unnecessary work while still guaranteeing that the currently selected row can be previewed
+with fresh processed data. The active row may therefore be processed on demand, while the remaining dirty rows are
+rebuilt incrementally according to the timer budget.
+</p>
+
+<h3>Runtime Synchronization</h3>
+<p>
+ProcSys continuously watches game and card set files through live file repositories. When relevant files change,
+it updates cached source text, raises the corresponding change flags, and lets the timer system apply the required
+rebuild steps in a controlled order.
+</p>
+
+<ul>
+<li><strong>Data changes</strong> trigger a CSV reload.</li>
+<li><strong>RowProc changes</strong> invalidate processed rows.</li>
+<li><strong>CFG and ENV changes</strong> rebuild UserEnv runtime tables.</li>
+<li><strong>Draw and DrawBack changes</strong> rebuild Forge draw functions.</li>
+<li><strong>Style changes</strong> refresh font/style state and utility redraws.</li>
+<li><strong>Code column changes</strong> rebuild the internal compiled code-column registry.</li>
+</ul>
+
+<h3>Workflow</h3>
+<ol>
+<li><strong>Prep</strong> the active game and initialize live repositories for game-level files.</li>
+<li><strong>Load</strong> the active card set and register its live file watchers.</li>
+<li><strong>Load</strong> the card set CSV into both grids.</li>
+<li><strong>Process</strong> all data rows into the Final grid and processed row cache.</li>
+<li><strong>Select</strong> a row to synchronize UserEnv and Forge with the ensured processed row.</li>
+<li><strong>Edit</strong> data, rebuild affected rows, and optionally redraw preview output.</li>
+<li><strong>React</strong> to live file changes through the timer synchronization cycle.</li>
+<li><strong>Save</strong> the Base Data CSV when editing is complete.</li>
+</ol>
+
+<h3>Selection and Preview</h3>
+<p>
+When the user selects a row, ProcSys records the current selection, ensures the selected row has been processed,
+updates the ProcSys root state in UserEnv, pushes the processed row into Forge as the active row, and requests
+a redraw of the card preview.
+</p>
+
+<h3>Notes</h3>
+<ul>
+<li>ProcSys treats row <strong>0</strong> as the grid header row and data rows as <strong>1..n</strong>.</li>
+<li>Saving is disabled during bulk loading and enabled only when editable data has changed.</li>
+<li>Processed row caching allows Forge and related systems to consume row data without repeatedly rebuilding it.</li>
+<li>Dirty-row processing keeps background synchronization efficient while preserving correct active-row previews.</li>
+<li>ProcSys owns both data-grid windows and persists their size, position, visibility, and maximized state in the app INI.</li>
+</ul>
 !]]
 return class("ProcSys",
     {},--METAMETHODS
@@ -1228,7 +1390,9 @@ return class("ProcSys",
                 return;
             end
 
-            if (nColumn == 1 and 5 == 8) then--Grid.GetColumnIDByName("Name")) then --TODO cache this value
+
+
+            if (nColumn == 1 and 5 == 8) then--_tColumnNameIDMap["Name"]) then --TODO cache this value
 
                 --handle the name
                 if (sNewText:isempty() or not sNewText:isfilesafe()) then
@@ -1237,7 +1401,7 @@ return class("ProcSys",
                     bProcess = false;
                 else
 
-                    local tRow = Grid.GetRow(_sBaseDataGrid, nRow);
+                    local tRow = GetRow(_sBaseDataGrid, nRow);
                     local cProc = ProcSys.GetProc(nRow);
 
                     if (type(cProc) == "class" and class.haspublicmember(cProc, "ImagePath")) then --TODO BUG FIX get the image path from somewhere else now...
@@ -1258,20 +1422,21 @@ return class("ProcSys",
 
             if (bProcess) then
                 --process the cell change
-                PrepUpdateGrids();
+                --PrepUpdateGrids();
+                MarkRowDirty(nRow);
+                --_tDirtyRows[nRow] = nil;
+                --ProcessRow(nRow);
 
-                ProcessRow(nRow);
-
-                UpdateGrids(); --TODO do i still need this?
+                --UpdateGrids(); --TODO QUESTION do i still need this?
 
                 --update saveability
                 _bAllowSave = true;
                 MainMenu.SetEnabled("CardSet:>Save", true);
 
                 --update the draw call
-                if (MainMenu.IsChecked("Options:>Draw:>Redraw On Cell Changed")) then
-                    TryDrawActiveCard();
-                end
+                --if (MainMenu.IsChecked("Options:>Draw:>Redraw On Cell Changed")) then
+                --    TryDrawActiveCard();
+                --end
 
             end
 
@@ -1343,17 +1508,38 @@ return class("ProcSys",
 
             --local bRedrawn = false;
 --TODO LEFT OFF HERE
-            if (_nLastRow ~= nRow or _tReprocRows[_nCurrentRow]) then-- or isspecial column) then
+
+            --local sColumn = _tColumnNameIDMap[nColumn];
+
+            --if (_tCodeColumns[sColumn]) then
+
+            --end
+
+            --File.Run(_Bin.."\\lite-xl\\lite-xl.exe", _pTempFile, _TempFolder, SW_SHOWNORMAL, true);
+
+            if (_nLastRow ~= nRow) then-- or [_nCurrentRow]) then-- or isspecial column) then
                 --_fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
 
                 --ProcSys.ProcessActiveRow();
-                _nLastRow = nRow;
-                _tReprocRows[_nCurrentRow] = false;
-                --_bReady = true;
-                ProcessRow(_nCurrentRow);
 
-                local tRow = Grid.GetRow(_sFinalDataGrid, nRow);
+
+                --set the last row
+                _nLastRow = nRow;
+                --get the row (ensuring processing first)
+                local tRow = EnsureRowProcessed(nRow);
+                --update the env
                 UserEnv.ProcSysUpdateRoot {_tRow = tRow};
+                --set the Forge's active row
+                --Forge.SetActiveRow(tRow);
+                --request card redraw
+                --Forge.RequestCardRedraw();
+                TryDrawCard(tRow);
+
+                --_bReady = true;
+                --ProcessRowDEDEDED(_nCurrentRow);
+
+                --local tRow = GetRow(_sFinalDataGrid, nRow);
+            --    UserEnv.ProcSysUpdateRoot {_tRow = tRow};
             end
 
             --[[--THIS IS the special column proc section
@@ -1380,7 +1566,7 @@ return class("ProcSys",
 
             local bOK, sErr = xpcall(function()
                 local bResetRows            = _bDataChanged         or _bCFGChanged     or _bENVChanged         or _bRowProcChanged;
-                local bRedrawCard           = bResetRows            or _bDrawChanged    or _bDrawBackChanged    or _bFontStylesChanged;
+                local bRedrawCard           = bResetRows            or _bDrawChanged    or _bDrawBackChanged    or _bFontStylesChanged  or _tDirtyRows[_nCurrentRow];
                 local bRedrawUtils          = _bFontStylesChanged;
                 local bReloadCodeColumns    = _bCodeColumnsChanged  or _bDataChanged;
 
@@ -1422,7 +1608,7 @@ return class("ProcSys",
 
                 if (bReloadCodeColumns) then
                     _bCodeColumnsChanged = false;
-                    UpdateCodeColumns();
+                    --UpdateCodeColumns();--TODO UNCOMMENT AFTER ROW REFECTOR WHEN READY
                 end
 
                 if (_bCFGChanged) then
@@ -1475,13 +1661,18 @@ return class("ProcSys",
                     FontStyle.UpdateINI(_sFontStyleINI);
                 end
 
+                if (bResetRows) then
+                    MarkAllRowsDirty();
+                end
+
+                ProcessDirtyRows();
+
                 if (_bSelectionMade) then
 
-                    if (bResetRows) then
-                        SetReprocRows(true);
-                        _tReprocRows[_nCurrentRow] = false;
-                        ProcessRow(_nCurrentRow, true);
-                    end
+                    --if (bResetRows) then
+                        --SetReprocRows(true);--TODO ENSURE CURRENT ROW HERE
+                        --ProcessRow(_nCurrentRow, true);
+                    --end
 
                     if (_bDrawChanged) then
                         _bDrawChanged = false;
@@ -1506,7 +1697,7 @@ return class("ProcSys",
                     if (bRedrawCard) then
                         _bDrawChanged       = false;
                         _bDrawBackChanged   = false;
-                        TryDrawCard(Grid.GetRow(_sFinalDataGrid, _nCurrentRow));
+                        TryDrawCard(_tRows[_nCurrentRow]);
                     end
 
                     if (bRedrawUtils) then

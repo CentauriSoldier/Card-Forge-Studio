@@ -24,7 +24,7 @@ Dog gets 1 chase per Bunny player
 
 Each chase targets one Bunny
 
-A Bunny may only be chased once per Dog turn
+A Bunny may be chased only once per Dog turn
 
 Bunny play:
 

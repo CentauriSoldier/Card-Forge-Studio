@@ -92,7 +92,9 @@ function Grid.GetRow(sGrid, nRow)
                 if (nIndex <= nMax) then
                     return nIndex, tColumns[nIndex], tByColumnID[nIndex];
                 end
+
             end
+            
         end,
         __len = function()
             return nEntries;
