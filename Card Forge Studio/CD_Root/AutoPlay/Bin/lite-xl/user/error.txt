@@ -1,0 +1,7 @@
+Error: ...e Studio\CD_Root\AutoPlay\Bin\lite-xl\data/core/init.lua:692: attempt to index a nil value (local 'session')
+
+stack traceback:
+	...e Studio\CD_Root\AutoPlay\Bin\lite-xl\data/core/init.lua:692: in function 'core.init'
+	[string "local core..."]:13: in function <[string "local core..."]:6>
+	[C]: in function 'xpcall'
+	[string "local core..."]:6: in main chunk

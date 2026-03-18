@@ -98,7 +98,7 @@ local tFunctions = {
         --setup the game's files --TODO use FILESPECS HERE
         tPaths.Drafts        = pGame.."\\Drafts.lua";                   CheckFile(tPaths.Drafts,                        "return\r\n{\r\n};"); --QUESTION IS THIS BEING USED?
         tPaths.Info          = pGame.."\\Info.ini";                     CheckFile(tPaths.Info,                          BuildInfoFile(_sGame));
-        tPaths.Scratch       = tPaths.Temp.."\\Scratch.lua";            CheckFile(tPaths.Scratch,                       "");        
+        tPaths.Scratch       = tPaths.Temp.."\\Scratch.lua";            CheckFile(tPaths.Scratch,                       "");
         tPaths.Styles        = pGame.."\\Styles.ini";                   CheckFile(tPaths.Styles,                        pTemplates.."\\Styles.ini");
                                                                         CheckFile(tPaths.Scripts.."\\CFG.lua",          pTemplates.."\\CFG.lua");
                                                                         CheckFile(tPaths.Scripts.."\\ENV.lua",          pTemplates.."\\ENV.lua");

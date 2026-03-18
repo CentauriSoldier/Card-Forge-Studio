@@ -107,7 +107,7 @@ local sVRE = "Vertical Ruler";
 local sHCE = "Horizontal Centerline";
 local sVCE = "Vertical Centerline";
 local sESC = "Export Selected Card";
-local sRCC = "Redraw On Cell Changed";
+--local sRCC = "Redraw On Cell Changed";
 local sDSP = "---";
 
 TheMenu.Add(sOD,                 _nIconID,       _bEnabled,     -_bChecked,                      -_bCheckable,   _tNoCallbacks).
@@ -121,8 +121,8 @@ TheMenu.Add(sOD,                 _nIconID,       _bEnabled,     -_bChecked,     
         Add(sOD.._sSub..sVCE,    _nIconID,       _bEnabled,     LoadB(sVCE:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sVCE:collapse(), tItem.IsChecked); Forge.RequestUtilRedraw(); end}).
         Add(sOD.._sSub..sDSP,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks).
         Add(sOD.._sSub..sESC,    _nIconID,       _bEnabled,     LoadB(sESC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sESC:collapse(), tItem.IsChecked) end}).
-        Add(sOD.._sSub..sDSP,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks).
-        Add(sOD.._sSub..sRCC,    _nIconID,       _bEnabled,     LoadB(sRCC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sRCC:collapse(), tItem.IsChecked) end});
+        Add(sOD.._sSub..sDSP,    _nIconID,       -_bEnabled,    -_bChecked,                      -_bCheckable,   _tNoCallbacks);
+        --Add(sOD.._sSub..sRCC,    _nIconID,       _bEnabled,     LoadB(sRCC:collapse()),          _bCheckable,    {[eMenu.OnSelected] = function(tItem) Save(sRCC:collapse(), tItem.IsChecked) end});
         --TODO add disable UTIL canvas here and move export somewhere else
 
 
@@ -242,7 +242,7 @@ tSupport = {
             TheMenu.SetEnabled(sOD.._sSub..sHCE,            false);
             TheMenu.SetEnabled(sOD.._sSub..sVCE,            false);
             TheMenu.SetEnabled(sOD.._sSub..sESC,            false);
-            TheMenu.SetEnabled(sOD.._sSub..sRCC,            false);
+            --TheMenu.SetEnabled(sOD.._sSub..sRCC,            false);
             --Game items
             TheMenu.SetEnabled("Game:>Browse",              false);
             --card set items
@@ -268,7 +268,7 @@ tSupport = {
             TheMenu.SetEnabled(sOD.._sSub..sHCE,            true);
             TheMenu.SetEnabled(sOD.._sSub..sVCE,            true);
             TheMenu.SetEnabled(sOD.._sSub..sESC,            true);
-            TheMenu.SetEnabled(sOD.._sSub..sRCC,            true);
+            --TheMenu.SetEnabled(sOD.._sSub..sRCC,            true);
             --Game items
             TheMenu.SetEnabled("Game:>Load:>".._sGame,      false);
             TheMenu.SetEnabled("Game:>Browse",              true);
