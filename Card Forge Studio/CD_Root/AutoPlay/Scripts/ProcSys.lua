@@ -104,7 +104,7 @@ PrepUpdateGrids,
 ProcessCell,
 ProcessDirtyRows,
 ProcessRow,
-SetReprocRows,
+ResetCodeCellTable,
 TryBackupFile,
 TryDrawCard,
 UpdateCardSetLiveFileRepo,
@@ -383,12 +383,6 @@ end
 @param number nRow Row index to ensure is processed.
 @return table tRow The processed row table from the internal row cache.
 @note If the row is marked dirty it is processed immediately using ProcessRow and then removed from the dirty row table.
-@example
-    local tRow = EnsureRowProcessed(5)
-
-    if (tRow) then
-        local sName = tRow["Name"]
-    end
 @vis Static Private
 !]]
 EnsureRowProcessed = function(nRow)
@@ -401,6 +395,10 @@ EnsureRowProcessed = function(nRow)
     return _tRows[nRow];
 end
 
+
+local function ForceWriteFinalData()
+
+end
 
 --[[!
 @fqxn CFS.Classes.ProcSys.Methods.GetRow
@@ -418,7 +416,7 @@ end
     local sColumnName = tRow(2)
     local nColumnID = tRow("Name")
 @vis Static Private
-!]]
+!]]--TODO clean this up and remove useless table runs. Most of the internal tables can be deleted
 GetRow = function (sGrid, nRow)
     local tRet      = {};
 
@@ -452,16 +450,39 @@ GetRow = function (sGrid, nRow)
             end
         end,
         __index = function(t, k)
-            local sRet;
+            local vRet;
             local zK = type(k);
+            local nColumn;
+            local sColumn;
 
+            --try to get the column name and number
             if (zK == "number") then
-                sRet = tByColumnID[k] or nil;
+                --sRet = tByColumnID[k] or nil;
+                nColumn = k;
+                sColumn = _tColumnIDNameMap[nColumn];
             elseif (zK == "string") then
-                sRet = tByColumnName[k:upper()] or nil;
+                sColumn = _tColumnNameCaseMap[k:upper()];
+
+                if (sColumn) then
+                    nColumn = _tColumnNameIDMap[sColumn];
+                end
+                --sRet = tByColumnName[k:upper()] or nil;
             end
 
-            return sRet;
+            --if the column name and number are valid
+            if (nColumn and sColumn) then
+
+                if (_tCodeColumns[sColumn]) then--if it's a code column
+                    --Log.Note(sColumn);
+                    --Log.Note(type(_tCodeColumns[sColumn].CallReturn))
+                    vRet = _tCodeColumns[sColumn].CallReturn;
+                else --otherwise
+                    vRet = tByColumnID[nColumn];
+                end
+
+            end
+
+            return vRet;
         end,
         __newindex = function() error("Cannot write to read-only row table for grid \""..sGrid.."\" at row index "..nRow..".") end,
         __pairs = function(t)
@@ -643,35 +664,63 @@ ProcessCell = function(nRow, nColumn)
     local sText         = GetCellText(_sBaseDataGrid, nRow, nColumn);
     local tCodeColumn   = _tCodeColumns[sColumn];
 
+    if not (rawtype(sText) == "string") then --QUESTION IS THIS REQUIRED? Won't there always be text except for out of bounds which can't happen here?
+        return;
+    end
+
+
+    --handle no proc columns
     if (_tColumnNoProcIDs[nColumn]) then
         SetCellText(_sFinalDataGrid, nRow, nColumn, sText);
 
+    --handle code columns
     elseif (tCodeColumn) then
+        local tCodeCell = tCodeColumn[nRow];
 
-        if (rawtype(sText) == "string" and not sText:isempty()) then
-            local sCode = dec(sText);
-            local fChunk, sError = load(sCode, "Row "..tostring(nRow)..", CodeColumn '"..sColumn.."'.", "t", UserEnv.Get());
+        --check if the cell text has changed
+        if (tCodeCell.Text ~= sText) then
 
-            tCodeColumn[nRow] = {
-                Column      = sColumn,
-                Error       = sError or "",
-                Function    = fChunk or false,
-                IsValid     = rawtype(fChunk) == "function",
-                Row         = nRow,
-                Code        = sCode,
-            };
-
-            if (sError) then
-                Log.Warning(sError); --warn the user of bad code
-                SetCellText(_sFinalDataGrid, nRow, nColumn, "ERROR");
+            if (sText:isempty()) then
+                --if empty, reset the code cell's values
+                ResetCodeCellTable(nRow, sCodeColumn);
             else
-                SetCellText(_sFinalDataGrid, nRow, nColumn, "COMPILED");
-                --_tRows[nRow][nColumn] = fChunk();
+                --if not empty, attempt to create the function
+                local sCode = dec(sText);
+                local fChunk, sError = load(sCode, "Code Column Error for Card: \""..GetCellText(_sBaseDataGrid, nRow, _tColumnNameIDMap["NAME"]).."\" ".."(Row "..tostring(nRow)..", CodeColumn '"..sColumn.."').", "t", UserEnv.Get());
+
+                tCodeCell.Code        = sCode;
+                tCodeCell.Column      = sColumn;
+                tCodeCell.Error       = sError or "";
+                tCodeCell.Function    = fChunk or false;
+                tCodeCell.IsValid     = rawtype(fChunk) == "function";
+                tCodeCell.Row         = nRow;
+                tCodeCell.Text        = sText;
+
+                if (sError) then
+                    Log.Warning(sError); --warn the user of bad code
+                    SetCellText(_sFinalDataGrid, nRow, nColumn, "ERROR");
+                else
+                    SetCellText(_sFinalDataGrid, nRow, nColumn, "COMPILED");
+                end
+
             end
 
-        else
-            tCodeColumn[nRow] = nil;
-            SetCellText(_sFinalDataGrid, nRow, nColumn, "");
+            --call the function if it's valid
+            tCodeCell = tCodeColumn[nRow];
+            if tCodeCell.IsValid then
+
+                local bOK, vReturnOrError = xpcall(tCodeCell.Function, XPCallError);
+
+                if bOK then
+                    tCodeCell.CallReturn = vReturnOrError
+                else
+                    Log.Warning(vReturnOrError);
+                end
+
+            else
+                tCodeCell.CallReturn = nil;
+            end
+
         end
 
     else
@@ -769,6 +818,26 @@ ProcessRow = function(nRow, bSkipExtUpdate)
     end
 
 end
+
+
+ResetCodeCellTable = function(nRow, sCodeColumn)
+
+    if not (_tCodeColumns[sCodeColumn]) then
+        _tCodeColumns[sCodeColumn] = {};
+    end
+
+    _tCodeColumns[sCodeColumn][nRow] = {
+        CallReturn  = nil,
+        Code        = false,
+        Column      = sCodeColumn,
+        Error       = false,
+        Function    = false,
+        IsValid     = false,
+        Row         = nRow,
+        Text        = "",
+    };
+end
+
 
 -- TODO TODO TODO TODO TODO TODO TURN BACK ON, FIX STORAGE LOCATION, AND UPDATE DOX
 --[[!
@@ -934,7 +1003,12 @@ UpdateCodeColumns = function()
         local nColumn = _tColumnNameIDMap[sCodeColumn];
 
         if (nColumn ~= nil and nColumn ~= -1) then
-            _tCodeColumns[sCodeColumn] = {};
+            --_tCodeColumns[sCodeColumn] = {};
+
+            for nRow = 1, _nRowCount - 1 do
+                ResetCodeCellTable(nRow, sCodeColumn);
+            end
+
         end
     end
 
@@ -1268,11 +1342,11 @@ return class("ProcSys",
             UpdateGameLiveFileRepo();
         end,
         --[[! TODO FIX REDO
-            @fqxn CFS.Classes.ProcSys.Methods.GetSetName
+            @fqxn CFS.Classes.ProcSys.Methods.GetCardSetName
             @desc Returns the active card set name.
             @return string sSetName Active card set identifier.
         !]]
-        GetSetName = function()
+        GetCardSetName = function()
             return _sCardSetName;
         end,
 
@@ -1316,6 +1390,7 @@ return class("ProcSys",
 
             UserEnv.ProcSysUpdateRoot {
                 --Count     =  TODO
+                _sCardSetName   = _sCardSetName,
                 _nCardWidth     = _nCardWidth,
                 _nCardHeight    = _nCardHeight,
             };
@@ -1385,7 +1460,7 @@ return class("ProcSys",
                     Application.Exit(0);
                 elseif (nYesNoCancel == IDYES) then
                     ProcSys.SaveCSVs();
-                    Application.Sleep(1500);
+                    Application.Sleep(1200);
                     Application.Exit(0);
                 end
 
@@ -1441,9 +1516,8 @@ return class("ProcSys",
                 --prep the temp file and load the editor
                 local sOldCode = GetCellText(_sBaseDataGrid, nRow, nColumn);
                 sOldCode = sOldCode:isempty() and sOldCode or dec(sOldCode);
-                --p(pScratch)
                 TextFile.WriteFromString(pScratch, sOldCode, false);--TODO FILE ERROR CHECK
-                Application.Sleep(200);
+                --Application.Sleep(200);
                 --open the editor
                 File.Run(_pLiteXL, '"'..pScratch..'"', FS.Temp, SW_SHOWNORMAL, true);
                 --TODO LEFT OFF HERE
@@ -1612,7 +1686,6 @@ return class("ProcSys",
                 if (_bSelectionMade) then
 
                     --if (bResetRows) then
-                        --SetReprocRows(true);
                         --ProcessRow(_nCurrentRow, true);
                     --end
 

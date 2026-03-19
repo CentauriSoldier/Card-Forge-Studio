@@ -8,7 +8,6 @@
                                                                                     ]]
 --[[!
 @fqxn CFS.UserEnv
-@todo Add Style class to UserEnv
 @desc
 <div class="mb-4">
 
@@ -177,6 +176,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     Exists           = function(sPath)
         --TextFile.DoesExist
     end,
+    LogClear         = Log.ClearWindow, --TODO NOTE THESE
     Log              = Log.Note,
     --[[!
     @fqxn CFS.UserEnv.Import
@@ -215,6 +215,8 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     Uptime           = function()
         return os.time() - SANDBOX_TIME_START;
     end,
+    --TODO DOX
+    STYLE           = Forge.STYLE,    
 };
 
 -- decoy -> real backing table map (weak keys so nothing is kept alive)
@@ -1494,23 +1496,25 @@ local tUserEnv = {
 
         local function Walk(t, sPrefix)
             if (tVisited[t]) then return end
-            tVisited[t] = true
+            tVisited[t] = true;
 
             for k in pairs(EnumKeys(t)) do
-                local v = t[k]
-                local sPath = sPrefix and (sPrefix .. "." .. k) or k
+                local v = t[k];
+                local sPath = sPrefix and (sPrefix .. "." .. k) or k;
 
                 if (rawtype(v) == "function") then
-                    AddCommand(sPath)
+                    AddCommand(sPath);
                 elseif (rawtype(v) == "table") then
-                    Walk(v, sPath)
+                    Walk(v, sPath);
                 end
+
             end
+
         end
 
-        Walk(tRoot, nil)
-        table.sort(tOut, function(a, b) return a:lower() < b:lower() end)
-        return tOut
+        Walk(tRoot, nil);
+        table.sort(tOut, function(a, b) return a:lower() < b:lower() end);
+        return tOut;
     end,
     Refresh = function()
         --TODO FINISH CLEAN THIS OUT!!! On game  load, it should be clean
@@ -1525,7 +1529,7 @@ local tUserEnv = {
                     tEnv[sKey] = nil;
                 end
 
-                tProcSysKeys = {}; --clear the keys
+                tProcSysKeys = {};--reset the keys
             end
 
             --import (and record) the new keys
