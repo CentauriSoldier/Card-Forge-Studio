@@ -215,8 +215,12 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     Uptime           = function()
         return os.time() - SANDBOX_TIME_START;
     end,
-    --TODO DOX
-    STYLE           = Forge.STYLE,    
+    --TODO UPDATE THESE DOX 
+    --[[!
+    @fqxn CFS.UserEnv.STYLE
+    @inheritdoc CFS.Classes.FontStyle.Methods.Get
+    !]]
+    STYLE           = STYLE,
 };
 
 -- decoy -> real backing table map (weak keys so nothing is kept alive)
@@ -1398,10 +1402,35 @@ InjectEnv("string", {
                                                                                    ██║   ██║  ██║██████╔╝███████╗███████╗
                                                                                    ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝
                                                                                 ]]
-InjectEnv("table", {
+local tAllowedMetaMethods = {   __index = true, __newindex  = true, __len    = true, __tostring = true,
+                                __call  = true, __concat    = true, __pairs  = true, __ipairs   = true,
+                                __add   = true, __sub       = true, __mul    = true, __div      = true,
+                                __mod   = true, __pow       = true, __unm    = true, __eq       = true,
+                                __lt    = true, __le        = true};
+InjectEnv("table", { --TODO DOX
     concat  = table.concat,
     insert  = table.insert,
     move    = table.move,
+    new     = function(tSpec)
+        local tNew      = {};
+        local tNewMeta  = {};
+
+        if (rawtype(tSpec) == "table") then
+
+            for sIndex, bAllowed in pairs(tAllowedMetaMethods) do
+
+                if (bAllowed and rawtype(tSpec[sIndex]) == "function") then
+                    tNewMeta[sIndex] = tSpec[sIndex];
+                end
+
+            end
+
+        end
+
+        tNewMeta.__metatable = "locked";
+
+        return setmetatable(tNew, tNewMeta);
+    end,
     pack    = table.pack,
     remove  = table.remove,
     sort    = table.sort,

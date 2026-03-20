@@ -306,11 +306,42 @@ end
 
 --TODO build style repair/update algorithm that brings old/malformed versions in the ini up to date with the current one.
 
+
+
+
+--create the STYLE constant
+local tStyleProxy = {};
+local tStyleProxyMeta = {
+    __index = function(t, k)
+        local sName = rawtype(k) == "string" and k or "";
+        return not (sName:isempty()) and _tStyles[sName:upper()] or nil;
+    end,
+
+    __newindex = function(t, k, v)
+        error("Styles is read-only.", 2);
+    end,
+
+    __metatable = "locked",
+};
+
+local tStyle = setmetatable(tStyleProxy, tStyleProxyMeta);
+constant("STYLE", tStyle);
+
 return class("FontStyle",
     {--METAMETHODS
-
+        __call = function(this, cdat, self, sText)
+            --TODO assertions
+            local sName = cdat.pri.Name;
+            return '<'..sName..'>'..sText..'</'..sName..'>'
+        end,
     },
     {--STATIC PUBLIC
+        --[[!
+            @fqxn CFS.Classes.FontStyle.Methods.FontStyle
+            @desc Initializes the FontStyle class reference for internal static use.
+            @param class cFontStyle The FontStyle class.
+            @param string sAuthCode An authorization code.
+        !]]
         FontStyle = function(cFontStyle, sAuthCode)
             FontStyle = cFontStyle;
         end,
@@ -319,6 +350,12 @@ return class("FontStyle",
             LoadAndSync();
         end,]]
 
+        --[[!
+            @fqxn CFS.Classes.FontStyle.Methods.Get
+            @desc Gets a font style object by name.
+            @param string sName The name of the font style to retrieve.
+            @return FontStyle|nil oFontStyle The matching FontStyle object, or nil if not found.
+        !]]
         Get = function(sName)
             local oRet;
 
@@ -329,6 +366,13 @@ return class("FontStyle",
             return oRet;
         end,
 
+
+        --[[!
+            @fqxn CFS.Classes.FontStyle.Methods.Has
+            @desc Checks if a font style exists.
+            @param string sName The name of the font style.
+            @return boolean bHas True if the style exists; otherwise false.
+        !]]
         Has = function(sName)
             local bRet = false;
 
@@ -339,6 +383,12 @@ return class("FontStyle",
             return bRet;
         end,
 
+
+        --[[!
+            @fqxn CFS.Classes.FontStyle.Methods.GetNames
+            @desc Gets all registered font style names.
+            @return table tNames A sorted array of font style names.
+        !]]
         GetNames = function()
             local tRet = {};
             local sName = "";
@@ -352,6 +402,12 @@ return class("FontStyle",
             return tRet;
         end,
 
+
+        --[[!
+            @fqxn CFS.Classes.FontStyle.Methods.UpdateINI
+            @desc Loads and synchronizes font styles from an INI file.
+            @param string sINI The path to the INI file.
+        !]]
         UpdateINI = function(sINI)
 
             if (rawtype(sINI) == "string") then

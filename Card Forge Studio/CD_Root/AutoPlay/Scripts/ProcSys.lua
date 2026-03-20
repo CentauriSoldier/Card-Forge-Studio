@@ -471,11 +471,12 @@ GetRow = function (sGrid, nRow)
 
             --if the column name and number are valid
             if (nColumn and sColumn) then
+                 local tCodeColumn = _tCodeColumns[sColumn];
 
-                if (_tCodeColumns[sColumn]) then--if it's a code column
+                if (tCodeColumn and tCodeColumn[nRow]) then--if it's a code column
                     --Log.Note(sColumn);
                     --Log.Note(type(_tCodeColumns[sColumn].CallReturn))
-                    vRet = _tCodeColumns[sColumn].CallReturn;
+                    vRet = _tCodeColumns[sColumn][nRow].CallReturn;
                 else --otherwise
                     vRet = tByColumnID[nColumn];
                 end
@@ -485,7 +486,7 @@ GetRow = function (sGrid, nRow)
             return vRet;
         end,
         __newindex = function() error("Cannot write to read-only row table for grid \""..sGrid.."\" at row index "..nRow..".") end,
-        __pairs = function(t)
+        __pairs = function(t) --TODO FIX NOT WORKING, MATH WRONG
             local nIndex = 0;
             local nMax   = #tByColumnID;
 
@@ -682,7 +683,7 @@ ProcessCell = function(nRow, nColumn)
 
             if (sText:isempty()) then
                 --if empty, reset the code cell's values
-                ResetCodeCellTable(nRow, sCodeColumn);
+                ResetCodeCellTable(nRow, sColumn);
             else
                 --if not empty, attempt to create the function
                 local sCode = dec(sText);
@@ -836,6 +837,8 @@ ResetCodeCellTable = function(nRow, sCodeColumn)
         Row         = nRow,
         Text        = "",
     };
+
+    SetCellText(_sFinalDataGrid, nRow, _tColumnNameIDMap[sCodeColumn], "");
 end
 
 
@@ -1505,9 +1508,6 @@ return class("ProcSys",
             _nCurrentColumn = nColumn;
 
             --if it's a special column, fire up the editor
-
-            --cell will get processed...then waht?
-
             local sColumn = _tColumnIDNameMap[nColumn];
             local tCodeColumn = _tCodeColumns[sColumn];
 

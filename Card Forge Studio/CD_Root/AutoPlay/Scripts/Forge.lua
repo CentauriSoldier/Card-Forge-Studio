@@ -26,6 +26,8 @@ local DrawingFont   = DrawingFont;
 local DrawingImage  = DrawingImage;
     local DrawingImageNew       = DrawingImage.New;
     local DrawingImageGetID     = DrawingImage.GetID
+local FontStyle     = FontStyle
+    local GetFontStyle          = FontStyle.Get;
 local INIFile       = INIFile;
 local Paragraph     = Paragraph;
     local ParagraphGetText      = Paragraph.GetText;
@@ -138,51 +140,7 @@ local _nSizingDelta             = FORGE_REDRAW_SIZING_INTERVAL;
 local _nRedrawTimerID           = FORGE_REDRAW_TIMER_ID;
 local _nRedrawTimerInterval     = FORGE_REDRAW_TIMER_INTERVAL;
 -------------------------------------------------------------------
-local _tStyles = {};
---local Styles           = ""; --TODO FINISH STYLE NAMES MUST BE VARIABLE COMPLIANT. Edit: QUESTION - why must they be?
 
-local function sink() end
-
-local function BuildFontStyleProxy()
-    local tMeta = {
-        __index = function(t, k)
-            local oRet = nil;
-
-            if (rawtype(k) == "string") then
-                oRet = FontStyle.Get(k);
-            end
-
-            return oRet;
-        end,
-
-        __newindex = function(t, k, v)
-            error("Forge.STYLE is read-only.", 2);
-        end,
-
-        __pairs = function()
-            local tNames = FontStyle.GetNames();
-            local nIndex = 0;
-            local nMax = #tNames;
-
-            return function()
-                local sName;
-                local oStyle;
-
-                nIndex = nIndex + 1;
-
-                if (nIndex <= nMax) then
-                    sName = tNames[nIndex];
-                    oStyle = FontStyle.Get(sName);
-                    return nIndex, sName, oStyle;
-                end
-
-            end
-
-        end,
-    };
-
-    setmetatable(_tStyles, tMeta);
-end
 
 local function ImageLoadError(sPath, sName, sMsg)
     error("Error in Forge.LoadImage:\r\nError loading card image at path: \""..sPath.."\" with name, \""..sName.."\"."..#sName.."\r\n"..sMsg, 4);
@@ -300,7 +258,7 @@ local function DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC)
         if (bDrawText) then
             local sX = tostring(nX);
             local nTextWidth = D.GetTextWidth(sX);
-            FontStyle.Get("RULER").Draw(sObject, D, hInternalDC, floor(Forge.CenterOnX(nX, nTextWidth)), floor(nTextY), sX);
+            GetFontStyle("RULER").Draw(sObject, D, hInternalDC, floor(Forge.CenterOnX(nX, nTextWidth)), floor(nTextY), sX);
         end
     end
 
@@ -314,11 +272,12 @@ local function DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC) --TODO minor
     local nMinorWidth    = _tVerRuler.MinorWidth;
     local nTextX         = nMajorWidth + 3;
     local oColor         = _tVerRuler.Color;
+    local oRulerFS       = GetFontStyle("RULER");
 
     local nYMax = _nCardHeight - 1;
 
     D.DrawLineEx(nX, 0, nX, nYMax, oColor);
-    D.SetDrawingFont(_tStyles.RULER.GetFont());--TODO FIX This must be gotten from the Forge...why?
+    D.SetDrawingFont(oRulerFS.GetFont());--TODO FIX This must be gotten from the Forge...why?
 
     for nY = 0, nYMax, nMinorStep do
         local nWidth        = (nY % nMajorStep == 0) and nMajorWidth or nMinorWidth;
@@ -331,7 +290,7 @@ local function DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC) --TODO minor
         if (nY > 0) then
             local sY = tostring(nY);
             local nTextHeight = D.GetTextHeight(sY);
-            _tStyles.RULER.Draw(sObject, D, hInternalDC, floor(nTextX), floor(Forge.CenterOnY(nY, nTextHeight)), sY);
+            oRulerFS.Draw(sObject, D, hInternalDC, floor(nTextX), floor(Forge.CenterOnY(nY, nTextHeight)), sY);
         end
 
     end
@@ -746,13 +705,11 @@ end
 !]]
 return class("Forge",
     {--METAMETHODS
-
     },
     {--STATIC PUBLIC
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
         --Forge = function(cForge, sAuthCode) end, --static constructor (runs after class object creation)
         LoadImage = LoadImage,
-        STYLE__RO = _tStyles,
         CenterOnX = function(nVal, nTextWidth) --TODO BUG FIX FINISH These functions NOT working properly on angled text
             local nRet = nVal or 0;
             nRet = nVal - nTextWidth / 2;
@@ -856,13 +813,10 @@ return class("Forge",
             );
         !]]
         DrawText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)
-            --TODO assertions
-            local eStyle        = _tStyles;
-
             local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
             local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
             local bCenterY      = rawtype(vCenterY)     == "boolean"    and vCenterY    or false;
-            local oStyle        = eStyle[sStyle] --TODO add default style as fallback???
+            local oStyle        = GetFontStyle(sStyle); --TODO add default style as fallback???
             local tLines        = {}; --used for text wrapping
             local nStartOffsetX, nStartOffsetY = 0, 0;
 
@@ -959,8 +913,6 @@ return class("Forge",
             );
         !]]
         DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)--TODO BUG FIX USe HTML parser, not this
-            local eStyle        = _tStyles;
-
             local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
             local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
             local bCenterY      = rawtype(vCenterY)     == "boolean"    and vCenterY    or false;
@@ -1013,7 +965,7 @@ return class("Forge",
                     end
 
                     local inner = sIn:sub(b + 1, c - 1);
-                    local use = eStyle[tag] and tag or sStyle;
+                    local use = GetFontStyle(tag) and tag or sStyle;
 
                     tRuns[#tRuns + 1] = { Style = use, Text = inner };
                     sPlain = sPlain .. inner;
@@ -1033,13 +985,13 @@ return class("Forge",
             -- UPDATE STYLES (if requested)
             --------------------------------------------------------------------
             if (_bAutoUpdateStyle) then
-                local oDef = eStyle[sStyle];
+                local oDef = GetFontStyle(sStyle);
                 if (oDef and oDef.Update) then
                     oDef.Update();
                 end
 
                 for _, r in ipairs(tRunsSrc) do
-                    local o = eStyle[r.Style];
+                    local o = GetFontStyle(r.Style);
                     if (o and o.Update) then
                         o.Update();
                     end
@@ -1054,7 +1006,7 @@ return class("Forge",
             local nStartOffsetY = 0;
 
             if (fWrap) then
-                local oDef = eStyle[sStyle];
+                local oDef = GetFontStyle(sStyle);
                 local nW, nH = oDef.Prep(D, sPlain);
                 tLines, nStartOffsetX, nStartOffsetY = fWrap(nW, nH, sPlain, vAngle, {...});
             else
@@ -1124,7 +1076,7 @@ return class("Forge",
                 local nLineMaxY = 0;
 
                 for _, seg in ipairs(tSegs) do
-                    local oStyle = eStyle[seg.Style] or eStyle[sStyle];
+                    local oStyle = GetFontStyle(seg.Style) or GetFontStyle(sStyle);
                     local sPart  = seg.Text;
 
                     -- ensure correct font set
@@ -1184,7 +1136,7 @@ return class("Forge",
                 local nLineY = nY - (tInfo.MinY or 0); -- align to real top
 
                 for _, seg in ipairs(tSegs) do
-                    local oStyle = eStyle[seg.Style] or eStyle[sStyle];
+                    local oStyle = GetFontStyle(seg.Style) or GetFontStyle(sStyle);
                     local sPart  = seg.Text;
 
                     oStyle.Prep(_D, sPart, false);
@@ -1246,8 +1198,6 @@ return class("Forge",
             end
 
             _bForgeAutoSizing = false;
-
-            BuildFontStyleProxy();
 
             Page.StartTimer(_nRedrawTimerInterval, _nRedrawTimerID);
         end,
@@ -1392,13 +1342,6 @@ return class("Forge",
         SetUtilVisible = function(vFlag)
             _bUtilVisible = rawtype(vFlag) == "boolean" and vFlag or false;
             _bRedrawCanvas  = true;
-        end,
-        UpdateStyles = function()
-
-            --for nIndex, sIndex, oStyle in pairs(_tStyles) do
-                --oStyle.Update();
-            --end
-
         end,
     },
     {--PRIVATE
