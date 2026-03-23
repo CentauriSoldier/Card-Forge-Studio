@@ -49,8 +49,9 @@ constant("PROCSYS_TO_NUMBER",                       2);
 constant("PROCSYS_GRID_BASE",                       "grd base data");
 constant("PROCSYS_GRID_FINAL",                      "grd final data");
 
-
 constant("FILE_LITEXL", _Bin.."\\lite-xl\\lite-xl.exe");
+
+
 
 
 

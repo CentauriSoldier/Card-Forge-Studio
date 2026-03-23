@@ -24,6 +24,7 @@ local function NewItem()
             [eMenuEvent.OnSelected]          = sink,
             [eMenuEvent.OnTextChanged]       = sink,
         },
+        GroupID     = -1,
         IconID      = -1,
         IsEnabled   = true,
         IsChecked   = false,
@@ -102,7 +103,7 @@ return class("Menu",
 
         end,
 
-        Add = function(this, cdat, vPath, vIconID, vEnabled, vChecked, vCheckable, vCallbacks)
+        Add = function(this, cdat, vPath, vIconID, vEnabled, vChecked, vCheckable, vCallbacks, vGroupID)
             local pri = cdat.pri;
 
             local tItem = NewItem();
@@ -117,7 +118,8 @@ return class("Menu",
             local tText     = sPath:totable(Menu.DELIMITER) or {};
             local sText     = tText[#tText] or "";
             tItem.Text      = sText;
-            tItem.IconID    = rawtype(vIconID)      == "number"     and math.floor(vIconID)  or -1;
+            tItem.IconID    = rawtype(vIconID)      == "number"                     and math.floor(vIconID)  or -1;
+            tItem.GroupID   = (rawtype(vGroupID)    == "number" and vGroupID >= 1)  and math.floor(vGroupID) or -1;
 
             if (rawtype(vEnabled) == "boolean") then
                 tItem.IsEnabled = vEnabled;
@@ -209,6 +211,32 @@ return class("Menu",
             return clone(cdat.pri.AMSMenu);
         end,
 
+        GetSiblings = function(this, cdat, vPath)
+            local pri   = cdat.pri;
+            local tItem = pri.ItemsByPath[vPath];
+
+            if not tItem then
+                error("Menu.GetSiblings: No menu item at path: "..tostring(vPath), 2);
+            end
+
+            local sDelim   = Menu.DELIMITER;
+            local sParent  = vPath:match("^(.*)"..sDelim) or "";
+
+            local tRet     = {};
+
+            for x = 1, #pri.Items do
+                local tCurItem   = pri.Items[x];
+                local sCurPath   = tCurItem.Path;
+                local sCurParent = sCurPath:match("^(.*)"..sDelim) or "";
+
+                if (sCurParent == sParent) then
+                    tRet[#tRet + 1] = clone(tCurItem);
+                end
+            end
+
+            return tRet;
+        end,
+
         IsEnabled = function(this, cdat, vPath)
             local tItem = cdat.pri.ItemsByPath[vPath]
             if not tItem then
@@ -233,7 +261,7 @@ return class("Menu",
             return tItem.IsCheckable
         end,
 
-        OnMenu = function(this, cdat, nID, tItemInfo)
+        OnMenuOLD = function(this, cdat, nID, tItemInfo)
             local pri   = cdat.pri;
             local tItem = pri.ItemsByID[nID] or nil;
             if not tItem then return end
@@ -246,6 +274,22 @@ return class("Menu",
                     tItem.IsChecked = not bChecked;
                     this.Refresh();
                     tItem.Callbacks[eEvent](clone(tItem));
+                end
+
+                tItem.Callbacks[eMenuEvent.OnSelected](clone(tItem));
+            end
+
+        end,
+
+        OnMenu = function(this, cdat, nID, tItemInfo)
+            local pri   = cdat.pri;
+            local tItem = pri.ItemsByID[nID] or nil;
+            if not tItem then return end;
+
+            if (tItem.IsEnabled) then
+
+                if (tItem.IsCheckable) then
+                    this.SetChecked(tItem.Path, not tItem.IsChecked);
                 end
 
                 tItem.Callbacks[eMenuEvent.OnSelected](clone(tItem));
@@ -387,7 +431,7 @@ return class("Menu",
             return this;
         end,
 
-        SetChecked = function(this, cdat, vPath, bFlag, bSkipCallback)
+        SetCheckedOLD = function(this, cdat, vPath, bFlag, bSkipCallback)
             local pri   = cdat.pri;
             local tItem = pri.ItemsByPath[vPath];
 
@@ -400,6 +444,52 @@ return class("Menu",
             local bNew = rawtype(bFlag) == "boolean" and bFlag or false;
             if (tItem.IsChecked ~= bNew) then
                 tItem.IsChecked = bNew;
+                if (pri.AutoUpdate) then this.Refresh() end
+
+                if not (bSkipCallback) then
+                    tItem.Callbacks[bNew and eMenuEvent.OnChecked or eMenuEvent.OnUnchecked](clone(tItem));
+                end
+
+            end
+
+            return this;
+        end,
+
+        SetChecked = function(this, cdat, vPath, bFlag, bSkipCallback)
+            local pri   = cdat.pri;
+            local tItem = pri.ItemsByPath[vPath];
+
+            if not tItem then
+                error("Menu.SetChecked: No menu item at path: "..tostring(vPath), 2);
+            end
+
+            if not tItem.IsCheckable then return this end
+
+            local bNew = rawtype(bFlag) == "boolean" and bFlag or false;
+
+            if (tItem.IsChecked ~= bNew) then
+                local nGroupID = tItem.GroupID;
+
+                if (bNew and nGroupID >= 1) then
+
+                    for x = 1, #pri.Items do
+                        local tOther = pri.Items[x];
+
+                        if (tOther ~= tItem and tOther.GroupID == nGroupID and tOther.IsChecked) then
+                            tOther.IsChecked = false;
+
+                            if not (bSkipCallback) then
+                                tOther.Callbacks[eMenuEvent.OnUnchecked](clone(tOther));
+                            end
+
+                        end
+
+                    end
+
+                end
+
+                tItem.IsChecked = bNew;
+
                 if (pri.AutoUpdate) then this.Refresh() end
 
                 if not (bSkipCallback) then

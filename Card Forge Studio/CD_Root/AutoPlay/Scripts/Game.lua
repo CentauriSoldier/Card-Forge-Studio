@@ -136,31 +136,11 @@ return class("Game",
             end
 
             _oActiveGame = oGame;
-
-            StatusDlg.Show(MB_ICONNONE, false);
-            StatusDlg.SetTitle("Loading Game: "..oGame.GetName());
-
-            FS.PrepGame(oGame); --set the filepaths for the current game
-
-            --reset the BuildMechanics var (it gets reloaded in Init.lua if present)
-            BuildMechanics = nil; --TODO WHAT IS THIS?'
-
-            --build the user's mechanics html if it exists QUESTION qhat is this? Is it used?
-            if type(BuildMechanics) == "function" then
-                local sHTML = BuildMechanics(CFG);
-
-                if (type(sHTML) == "string") then
-                    TextFile.WriteFromString(_pGame.."\\Mechanics.html", sHTML, false);
-                end
-
-            end
-
-            StatusDlg.SetMessage("Processing Game Dox...");
+            Log.Note("Game.Activate: Loading game, \""..oGame.GetName()..'".');
+            FS.PrepGame(oGame); --set the filepaths for the current game            
             ProcessDox();--TODO get this boolean from INI file before running Dox
-
             ProcSys.PrepGame(oGame);
-
-            StatusDlg.Hide();
+            Log.Note("Game.Activate: Game loaded.");
         end,
         --rebuilds all game objects and refreshes the private static info
         Refresh = function()

@@ -1,7 +1,8 @@
-local eMenu         = Menu.EVENT;
-local _sSection     = "";
-local _pINI         = "";
-local _sSub         = ":>";
+local eMenu                 = Menu.EVENT;
+local _sSection             = ""; --set this at each section below to direct INI access
+local _pINI                 = FS.AppCFG;
+local _sSub                 = ":>";
+local _nExportRadioGroupID  = 1;
 
 --happens only during startup
 local function Load(sValue, vType)
@@ -45,14 +46,28 @@ local _tNoCallbacks                     = nil;
 ██╔══╝  ██║██║     ██╔══╝
 ██║     ██║███████╗███████╗
 ╚═╝     ╚═╝╚══════╝╚══════╝  ]]
-TheMenu.Add("File",          _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
-        --Add("File:>New",     _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
-        --Add("File:>---",     _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
-        Add("File:>Exit",    _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   {[eMenu.OnSelected] = function(tItem)
+_sSection = "ExporterType";
+
+TheMenu.Add("File",                             _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
+        Add("File:>Export",                     _nIconID,   -_bEnabled,   -_bChecked,   -_bCheckable,   _tNoCallbacks).
+        Add("File:>---",                        _nIconID,   -_bEnabled,   -_bChecked,   -_bCheckable,   _tNoCallbacks).
+        Add("File:>Export Type",                _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
+        Add("File:>---",                        _nIconID,   -_bEnabled,   -_bChecked,   -_bCheckable,   _tNoCallbacks).
+        Add("File:>Exit",                       _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   {[eMenu.OnSelected] = function(tItem)
             Application.Exit(0); --TODO check for savability
         end});
 
-
+        for _, eExporter in Exporter.TYPE() do
+            local tExporter     = eExporter.value;
+            local sValueName    = tExporter.ClassName;
+            TheMenu.Add("File:>Export Type:>"..tExporter.Name, _nIconID, _bEnabled, LoadB(sValueName), _bCheckable, {
+                [eMenu.OnSelected] = function(tItem)
+                    Exporter.SetActiveType(eExporter);
+                    --Save(sValueName, tostring(tItem.IsSelected));
+                end
+        },
+        _nExportRadioGroupID);
+        end
 --[[
 ██████╗  █████╗ ███╗   ███╗███████╗
 ██╔════╝ ██╔══██╗████╗ ████║██╔════╝
@@ -97,7 +112,6 @@ TheMenu.Add("Options",      _nIconID,       _bEnabled,      -_bChecked,     -_bC
 ██  ██ ██▄█▄ ██▀██ ██ ▄ ██
 ████▀  ██ ██ ██▀██  ▀█▀█▀  ]]
 _sSection     = "Options";
-_pINI         = FS.AppCFG;
 
 local sOD  = "Options:>Draw";
 local sUO  = "Utility Overlay";
@@ -189,6 +203,26 @@ TheMenu.Refresh();
 
 local tSupport;
 tSupport = {
+    RefreshGameExporters = function(sPage)--TODO FIX FINISH USE the Game class to help with this
+        --clear the games list
+        TheMenu.ClearChildren("File:>Export");
+
+        --TODO LEFT OFF HERE!!!!============================================================================================
+        for _, oGame in ipairs(Game.GetAll()) do
+            local sGame = oGame.GetName();
+
+            local sMenuPath = "Game:>Load:>"..sGame;
+                TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, {
+                    [eMenu.OnSelected] = function(tItem)
+                        --TODO check that the current Game isn't loaded first and that there are no unssaved changes
+                        Game.Activate(oGame);
+                        Page.Jump("Forge");
+                    end
+            });
+        end
+
+        TheMenu.Refresh();
+    end,
     RefreshGamesList = function(sPage)--TODO FIX FINISH USE the Game class to help with this
         --clear the games list
         TheMenu.ClearChildren("Game:>Load");

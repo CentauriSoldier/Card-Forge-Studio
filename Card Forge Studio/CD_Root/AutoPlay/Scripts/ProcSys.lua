@@ -23,6 +23,7 @@ local _ePane                        = PANE;
 local _bAutoSizeGrid                = true;
 local _sBaseDataGrid                = PROCSYS_GRID_BASE;
 local _sFinalDataGrid               = PROCSYS_GRID_FINAL;
+local _tRowTypes                    = {[_sBaseDataGrid] = "BaseRow", [_sFinalDataGrid] = "FinalRow"}; --used for type in GetRow
 local _bIsLoading                   = false;
 local _nCurrentRow                  = false;
 local _nCurrentColumn               = false;
@@ -503,6 +504,7 @@ GetRow = function (sGrid, nRow)
         __len = function()
             return _nColumnCount;
         end,
+        __type = _tRowTypes[sGrid],
     };
     setmetatable(tRet, tRetMeta);
 
@@ -692,16 +694,30 @@ ProcessCell = function(nRow, nColumn)
                 tCodeCell.Code        = sCode;
                 tCodeCell.Column      = sColumn;
                 tCodeCell.Error       = sError or "";
-                tCodeCell.Function    = fChunk or false;
-                tCodeCell.IsValid     = rawtype(fChunk) == "function";
+                tCodeCell.Function    = false;
+                tCodeCell.IsValid     = false;
                 tCodeCell.Row         = nRow;
                 tCodeCell.Text        = sText;
 
+
+
                 if (sError) then
+                    tCodeCell.Error = sError;
                     Log.Warning(sError); --warn the user of bad code
                     SetCellText(_sFinalDataGrid, nRow, nColumn, "ERROR");
                 else
-                    SetCellText(_sFinalDataGrid, nRow, nColumn, "COMPILED");
+                    local bOK, vReturnOrError = xpcall(fChunk, XPCallError);
+
+                    if (bOK and rawtype(vReturnOrError) == "function") then
+                        tCodeCell.Function    = vReturnOrError;
+                        tCodeCell.IsValid     = true;
+                        SetCellText(_sFinalDataGrid, nRow, nColumn, "COMPILED");
+                    else
+                        tCodeCell.Error = bOK and "Code column must return a function." or vReturnOrError;
+                        Log.Warning(tCodeCell.Error);
+                        SetCellText(_sFinalDataGrid, nRow, nColumn, "ERROR");
+                    end
+
                 end
 
             end
@@ -970,7 +986,7 @@ UpdateCardSetLiveFileRepo = function()
     oLiveFileRepo.StartAll();
 end
 
-
+--TODO FINISH SET COLUMN WIDTH IN GRID FOR EACH CODE COLUMN using AppCFG Settings>CodeColumnWidth or 100
 --[[!
 @fqxn CFS.Classes.ProcSys.Methods.UpdateCodeColumns
 @desc Rebuilds the internal code column registry based on the current CodeColumns definition file and regenerates compiled code entries for each referenced column.
@@ -1321,6 +1337,9 @@ return class("ProcSys",
         --[[CreateImagePath = function(sName, sMime)
             return _pCards.."\\"..sName..'.'..sMime:gsub('%.', '');
         end,]]
+        BuildExport = function()
+            
+        end,
         GetActiveCardSet = function() --TODO QUESTION IS THIS EVER USED???
             return _oActiveCardSet;
         end,
@@ -1331,7 +1350,7 @@ return class("ProcSys",
                 error("ProcSys.PrepGame: Error prepping game. Expected Game object. Got "..type(oGame)..'.');
             end
 
-            StatusDlg.SetMessage("Updating User Environment...");
+            Log.Note("ProcSys.PrepGame: Updating user environment.");
             _sFontStyleINI      = TextFile.ReadToString(FS.Styles);
 
             _oActiveGame        = oGame;
@@ -1341,7 +1360,7 @@ return class("ProcSys",
             _bENVChanged        = true;
             _bFontStylesChanged = true;
 
-            StatusDlg.SetMessage("Updating Life File Repository...");
+            Log.Note("ProcSys.PrepGame: Updating LiveFile repository.");
             UpdateGameLiveFileRepo();
         end,
         --[[! TODO FIX REDO

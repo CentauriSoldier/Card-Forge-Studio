@@ -1,1 +1,0 @@
---Log.Note(FontStyle.Get("DESVAR")("Hello!"));

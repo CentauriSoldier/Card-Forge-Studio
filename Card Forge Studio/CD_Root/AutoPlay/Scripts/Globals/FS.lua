@@ -7,6 +7,7 @@ local pGames       = pAppDir.."\\Games";
 local pAppCFG_T    = pTemplates.."\\"..APP_CFG; --template
 local pAppCFG      = pAppDir.."\\"..APP_CFG;
 local pTutorials   = _Docs.."\\Tutorials";
+local pExporters   = _Scripts.."\\Exporters";
 
 local tPaths = {
     Templates   = pTemplates,
@@ -15,6 +16,7 @@ local tPaths = {
     AppCFG_T    = pAppCFG_T,
     AppCFG      = pAppCFG,
     Tutorials   = pTutorials,
+    Exporters   = pExporters,
 };
 
 local function BuildInfoFile(sGame) --TODO move this
@@ -66,7 +68,7 @@ local tFunctions = {
             error("FS: Error prepping game paths. Argument 1 must be of type Game. Got "..type(oGame)..'.');
         end
 
-        StatusDlg.SetMessage("Updating Virtual File System...");
+        Log.Note("FS.PrepGame: Updating virtual file system.");
 
         local pGame = oGame.GetPath();
 
@@ -77,20 +79,20 @@ local tFunctions = {
         --TODO USE FILESPECs WHERE POSSIBLE
 
         --setup the game's folder
-        tPaths.Game         = pGame;                                        --CheckFolder(pGame);
-        tPaths.Docs         = pGame             .."\\Docs";                 CheckFolder(tPaths.Docs);
-        tPaths.Temp         = pGame             .."\\Temp";                 CheckFolder(tPaths.Temp);
-        tPaths.CardSets     = pGame             .."\\"..FOLDER_CARD_SETS;   CheckFolder(tPaths.CardSets);
-        tPaths.Set          = ""; --Gets set during set loading QUESTION DOes it? How?
-        tPaths.CSVBackup    = pGame             .."\\CSV Backup";           CheckFolder(tPaths.CSVBackup);
-        tPaths.CSVExport    = pGame             .."\\CSV Export";           CheckFolder(tPaths.CSVExport);
-        tPaths.CardExport   = pGame             .."\\Card Export";          CheckFolder(tPaths.CardExport);
-        tPaths.Scripts      = pGame             .."\\Scripts";              CheckFolder(tPaths.Scripts);
-        tPaths.Cards        = pGame             .."\\Cards";                CheckFolder(tPaths.Cards);
-        tPaths.Symbols      = pGame             .."\\Symbols";              CheckFolder(tPaths.Symbols);
-        tPaths.CFG          = tPaths.Scripts    .."\\CFG";                  CheckFolder(tPaths.CFG);
-        tPaths.ENV          = tPaths.Scripts    .."\\ENV";                  CheckFolder(tPaths.ENV);
-
+        tPaths.Game             = pGame;                                        --CheckFolder(pGame);
+        tPaths.Docs             = pGame             .."\\Docs";                 CheckFolder(tPaths.Docs);
+        tPaths.Temp             = pGame             .."\\Temp";                 CheckFolder(tPaths.Temp);
+        tPaths.CardSets         = pGame             .."\\"..FOLDER_CARD_SETS;   CheckFolder(tPaths.CardSets);
+        tPaths.Set              = ""; --Gets set during set loading QUESTION DOes it? How?
+        tPaths.CSVBackup        = pGame             .."\\CSV Backup";           CheckFolder(tPaths.CSVBackup);
+        --tPaths.CSVExport    = pGame             .."\\CSV Export";           CheckFolder(tPaths.CSVExport);
+        tPaths.UserExporters    = pGame             .."\\Exporters";            CheckFolder(tPaths.UserExporters);
+        tPaths.Exports          = pGame             .."\\Exports";              CheckFolder(tPaths.Exports);
+        tPaths.Scripts          = pGame             .."\\Scripts";              CheckFolder(tPaths.Scripts);
+        tPaths.Cards            = pGame             .."\\Cards";                CheckFolder(tPaths.Cards);
+        tPaths.Symbols          = pGame             .."\\Symbols";              CheckFolder(tPaths.Symbols);
+        tPaths.CFG              = tPaths.Scripts    .."\\CFG";                  CheckFolder(tPaths.CFG);
+        tPaths.ENV              = tPaths.Scripts    .."\\ENV";                  CheckFolder(tPaths.ENV);
 
         --set the game name
         _sGame = oGame.GetName(); --TODO FINISH UPDATE THIS
@@ -105,6 +107,8 @@ local tFunctions = {
 
         --add game's scripts folder to the package path
         package.path = _sOriginalPackagePath..";"..pGame.."\\Scripts\\?.lua";
+
+        Log.Note("FS.PrepGame: Virtual file system updated.");
     end,
 };
 

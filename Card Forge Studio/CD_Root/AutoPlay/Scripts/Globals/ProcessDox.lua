@@ -1,4 +1,5 @@
 return function()
+    Log.Note("ProcessDox: Building game's documentation files.");
     local sName           = INIFile.GetValue(FS.Info, "SETTINGS", "Name");
     sName                 = (type.isstring(sName) and not sName:isempty()) and sName or APP_NAME;
     local bIncludePlugins = INIFile.GetValueBoolean(FS.Info, "SETTINGS", "IncludePlugins");
@@ -51,5 +52,5 @@ return function()
     oDoxLua.refresh();
     oDoxLua.setOutputPath(FS.Docs);
     oDoxLua.export(DOX_EXPORT_FILENAME);
-    Log.Note("Dox Build Complete.");
+    Log.Note("ProcessDox: Build complete.");
 end

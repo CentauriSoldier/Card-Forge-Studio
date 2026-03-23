@@ -142,6 +142,11 @@ local _nRedrawTimerInterval     = FORGE_REDRAW_TIMER_INTERVAL;
 -------------------------------------------------------------------
 
 
+local function Export(tExports)
+
+end
+
+
 local function ImageLoadError(sPath, sName, sMsg)
     error("Error in Forge.LoadImage:\r\nError loading card image at path: \""..sPath.."\" with name, \""..sName.."\"."..#sName.."\r\n"..sMsg, 4);
 end
@@ -1240,6 +1245,7 @@ return class("Forge",
 
                 --check if a redraw request was made and that we're done resizing
                 if (_bRedrawCanvas and not _bIsResizing) then
+                    Log.Note("Redraw")
                     --redraw the card
                     Draw();
                     --fulfill the request
@@ -1288,7 +1294,7 @@ return class("Forge",
         end,
         SetActiveRow = function(tRow)
             --TODO ASSERTIONS
-            if (type(tRow) == "table") then
+            if (type(tRow) == "FinalRow") then
                 _tActiveRow = tRow;
             end
 
