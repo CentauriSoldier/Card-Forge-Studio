@@ -1,8 +1,7 @@
-local _sClass   = "ExporterImage";
-local _sName    = "Image";
+local _sClass   = "";
+local _sName    = "";
 local _tReturns = {
-    [1] = {"boolean"},          --import row?
-    [2] = {"string", "nil"},    --(optional) path
+    [1] = {""},
 };
 
 

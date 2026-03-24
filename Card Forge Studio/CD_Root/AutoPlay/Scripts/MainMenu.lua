@@ -57,17 +57,19 @@ TheMenu.Add("File",                             _nIconID,   _bEnabled,    -_bChe
             Application.Exit(0); --TODO check for savability
         end});
 
-        for _, eExporter in Exporter.TYPE() do
-            local tExporter     = eExporter.value;
-            local sValueName    = tExporter.ClassName;
-            TheMenu.Add("File:>Export Type:>"..tExporter.Name, _nIconID, _bEnabled, LoadB(sValueName), _bCheckable, {
-                [eMenu.OnSelected] = function(tItem)
-                    Exporter.SetActiveType(eExporter);
-                    --Save(sValueName, tostring(tItem.IsSelected));
-                end
-        },
-        _nExportRadioGroupID);
+--[[
+for _, eExporter in Exporter.TYPE() do
+    local tExporter     = eExporter.value;
+    local sValueName    = tExporter.ClassName;
+    TheMenu.Add("File:>Export Type:>"..tExporter.Name, _nIconID, _bEnabled, LoadB(sValueName), _bCheckable, {
+        [eMenu.OnSelected] = function(tItem)
+            Exporter.SetActiveType(eExporter);
+            --Save(sValueName, tostring(tItem.IsSelected));
         end
+},
+_nExportRadioGroupID);
+end
+]]
 --[[
 ██████╗  █████╗ ███╗   ███╗███████╗
 ██╔════╝ ██╔══██╗████╗ ████║██╔════╝
@@ -96,8 +98,17 @@ TheMenu.Add("CardSet",           _nIconID,      _bEnabled,      -_bChecked,     
         Add("CardSet:>Load",     _nIconID,      _bEnabled,      -_bChecked,     -_bCheckable,   _tNoCallbacks).
         Add("CardSet:>Save",     _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   {[eMenu.OnSelected] = function() ProcSys.SaveCSVs(); end}).
         Add("CardSet:>---",      _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks).
-        Add("CardSet:>Browse",   _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks);
+        Add("CardSet:>Browse",   _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks).
+        Add("CardSet:>---",      _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   _tNoCallbacks).
+        Add("CardSet:>Edit CSV", _nIconID,      -_bEnabled,     -_bChecked,     -_bCheckable,   {[eMenu.OnSelected] = function()
+            local oCardSet = ProcSys.GetActiveCardSet();
 
+            if (type(oCardSet) == "CardSet") then
+                local pCSV = oCardSet.GetDataPath();
+                File.Open(pCSV, "", SW_SHOWNORMAL);
+            end
+
+        end});
 --[[
  ██████╗ ██████╗ ████████╗██╗ ██████╗ ███╗   ██╗███████╗
 ██╔═══██╗██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║██╔════╝
@@ -150,9 +161,9 @@ TheMenu.Add(sOD,                 _nIconID,       _bEnabled,     -_bChecked,     
 TheMenu.Add("Tools:>Rebuild Dox",      _nIconID,       -_bEnabled,     -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) Log.ClearWindow(); ProcessDox(Game.GetActive().GetName()) end}).
         Add("Tools:>Style Editor",     _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Style Editor",       false, nil, nil); end}).  --TODO save coords
         Add("Tools:>Mechanics Viewer", _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  {[eMenu.OnSelected] = function(tItem) DialogEx.Show("Mechanics Viewer",   false, nil, nil); end}).  --TODO save coords
-        Add("Tools:>---",              _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks).
-        Add("Tools:>Modern CSV",       _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks); --TODO HOOK THIS UP SO if the prog exists, the user can tell the app , app will open instead of GET
-                                                                                                                                    --TODO add link
+        Add("Tools:>---",              _nIconID,       _bEnabled,      -_bChecked,                    -_bCheckable,  _tNoCallbacks);
+
+
 --[[
 ██╗    ██╗██╗███╗   ██╗██████╗  ██████╗ ██╗    ██╗
 ██║    ██║██║████╗  ██║██╔══██╗██╔═══██╗██║    ██║

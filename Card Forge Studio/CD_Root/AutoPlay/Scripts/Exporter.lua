@@ -26,7 +26,7 @@
         - HTML preview site
         - Static gallery export
         - ZIP bundle (full pack)
-]]
+
 local bImplemented = true;
 local _tExporters = {
     --Core
@@ -50,6 +50,9 @@ local _tExporters = {
     [16] = {Name = "HTML Static Gallery",   Implemented = -bImplemented,    ClassName = "ExporterHTMLStaticGallery",    Class = nil},
     [17] = {Name = "ZIP",                   Implemented = -bImplemented,    ClassName = "ExporterZIP",                  Class = nil},
 };
+_tExportersMeta     = {};
+_tExportersDecoy    = {};
+
 
 local function GetExporterEntryByClassName(sName)
     local tRet;
@@ -65,15 +68,16 @@ local function GetExporterEntryByClassName(sName)
 
     return tRet;
 end
-
+]]
 local _eActiveExporter;
-
-Exporter = class("Exporter",
+--NOTE CodeColumns DO NOT EXPORT, they are not designed for that nor will they be. Put that note in the Dox.
+return class("Exporter",
     {--METAMETHODS
 
     },
     {--STATIC PUBLIC
-        __INIT = function(stapub)--static initializer (runs before class object creation)
+        TYPE = _tExportersDecoy,
+        --[[__INIT = function(stapub)--static initializer (runs before class object creation)
             local tEnumNames    = {};
             local tEnumValues   = {};
             local nIndex        = 0;
@@ -99,7 +103,7 @@ Exporter = class("Exporter",
             end
 
             stapub.TYPE = enum("Exporter.TYPE", tEnumNames, tEnumValues, true);
-        end,
+        end,]]
         --Exporter = function(cMe, sAuthCode)
 
 
@@ -112,7 +116,6 @@ Exporter = class("Exporter",
         end,
         GetAll = function()
             local tRet = {};
-
             --TODO
         end,
         SetActiveType = function(eExporterType)
@@ -124,10 +127,31 @@ Exporter = class("Exporter",
 
     },
     {--PROTECTED
+        Name        = "",
         OutputPath  = "",
         PerRow      = true,
-        Rows        = null;
-        Exporter  = function(this, cdat, tRow, pOutput)
+        Returns     = {},
+        Rows        = null,
+
+        Exporter  = function(this, cdat, sName, tReturns)
+            type.assert.string(sName, "%S+", "Name must be a non-blank string");
+            type.assert.table(tReturns, "number", "table", 1);
+            local pro = cdat.pro;
+            local tMyReturns = pro.Returns;
+
+            --iterate over the strictly-ordered return table
+            for nIndex, tReturn in ipairs(tReturns) do
+                type.assert.table(tReturn, "number", "string", 1);
+                local tMyReturn     = {};
+                tMyReturns[nIndex]  = tMyReturn;
+
+                --determine what types are allowed for this return index
+                for nTypeIndex, sType in ipairs(tReturn) do
+                    type.assert.string(sType, "%S+", "Return type names must be non-blank strings");
+                    tMyReturn[sType] = true;
+                end
+
+            end
 
         end,
     },
@@ -138,7 +162,7 @@ Exporter = class("Exporter",
 );
 
 --import all exporter classes
-local sFileError = "Exporter.Init: Could not find any Exporter subclass files.";
+--[[local sFileError = "Exporter.Init: Could not find any Exporter subclass files.";
 local tExporters = File.Find(FS.Exporters.."\\", "*.lua", false, false, nil, nil);
 
 if not (type(tExporters) == "table") then
@@ -164,4 +188,4 @@ for _, pFile in pairs(tExporters) do
     end
 
     tExporter.Class = cExporter;
-end
+end]]

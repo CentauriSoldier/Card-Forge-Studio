@@ -70,6 +70,10 @@ local _sCFGCode                     = "";
 local _sENVCode                     = "";
 local _tCFG                         = null;
 local _tENV                         = null;
+------------------------------------- Exporters
+local _tUserExporters               = {};
+local _bExportersChanged            = true;
+local _tChangedUserExporterIDs      = {};
 ------------------------------------- CardSet
 local _oCardSetLiveFileRepo         = LiveFileRepo();
 local _oActiveCardSet               = false;
@@ -113,6 +117,7 @@ UpdateCodeCell,
 UpdateCodeColumns,
 UpdateGameLiveFileRepo,
 UpdateGrids,
+UpdateUserExporters,
 XPCallError;
 ----------------------------------------------------------------------------------------------------------------------
 --TODO Clean these up
@@ -595,7 +600,8 @@ LoadFileToGrid = function(pFile)
     UpdateGrids();
 
     --set loading to finished
-    MainMenu.SetEnabled("CardSet:>Save", false);
+    MainMenu.SetEnabled("CardSet:>Save",        false);
+    MainMenu.SetEnabled("CardSet:>Edit CSV",    true);
     _bAllowSave     = false;
     _bIsLoading     = false;
 end
@@ -1338,7 +1344,7 @@ return class("ProcSys",
             return _pCards.."\\"..sName..'.'..sMime:gsub('%.', '');
         end,]]
         BuildExport = function()
-            
+
         end,
         GetActiveCardSet = function() --TODO QUESTION IS THIS EVER USED???
             return _oActiveCardSet;
@@ -1380,6 +1386,9 @@ return class("ProcSys",
         LoadCardSet = function(oCardSet)
             _bSelectionMade = false;
 
+            local sCardSetName = oCardSet.GetName();
+            Log.Note("ProcSys.LoadCardSet: Loading CardSet, '"..sCardSetName.."'.");
+
             --TODO assert type
             _oActiveCardSet = oCardSet;
 
@@ -1399,14 +1408,13 @@ return class("ProcSys",
             --TryBackupFile(pData); --TODO FIX uncomment and place where appropriate this when ready!!
 
             --set defaults
-            _pActiveCSV     = "";
             _bAllowSave     = false;
             _pActiveCSV     = oCardSet.GetDataPath();
             _sDrawCode      = TextFile.ReadToString(oCardSet.GetDrawPath());
             _sDrawBackCode  = TextFile.ReadToString(oCardSet.GetDrawBackPath());
             _sRowProcCode   = TextFile.ReadToString(oCardSet.GetRowProcPath());
             _sCodeColumns   = TextFile.ReadToString(oCardSet.GetCodeColumnsPath());
-            _sCardSetName   = oCardSet.GetName();
+            _sCardSetName   = sCardSetName;
             _nCardWidth     = oCardSet.GetCardWidth();
             _nCardHeight    = oCardSet.GetCardHeight();
 
@@ -1430,6 +1438,7 @@ return class("ProcSys",
             _bCodeColumnsChanged    = true;
 
             Forge.SetActiveCardSet(oCardSet);
+            Log.Note("ProcSys.LoadCardSet: CardSet, '"..sCardSetName.."', Loaded.");
         end,
 
         --[[!

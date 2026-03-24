@@ -148,7 +148,7 @@ local tKeysMeta     = {
         end
 
     end,
-    __newindex = function(t, k, v) error("Attempt to write to read-only KeyCode table.", 3) end,
+    __newindex = function(t, k, v) error("Attempt to write to read-only KEY_CODES table.", 3) end,
     __len = function() return nCount; end,
     __pairs = function(t)
         local sKey = nil;
