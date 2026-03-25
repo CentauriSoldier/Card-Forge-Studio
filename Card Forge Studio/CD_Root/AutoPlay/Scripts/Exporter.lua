@@ -69,6 +69,21 @@ local function GetExporterEntryByClassName(sName)
     return tRet;
 end
 ]]
+
+
+
+--[[
+--Exporter object is created from user Exporter files
+
+--User clicks Export->1/x:TYPE->1/x:Exporter
+
+
+]]
+
+
+
+local _tExporters = {};
+
 local _eActiveExporter;
 --NOTE CodeColumns DO NOT EXPORT, they are not designed for that nor will they be. Put that note in the Dox.
 return class("Exporter",
@@ -76,7 +91,7 @@ return class("Exporter",
 
     },
     {--STATIC PUBLIC
-        TYPE = _tExportersDecoy,
+        --TYPE = _tExportersDecoy,
         --[[__INIT = function(stapub)--static initializer (runs before class object creation)
             local tEnumNames    = {};
             local tEnumValues   = {};
@@ -116,7 +131,21 @@ return class("Exporter",
         end,
         GetAll = function()
             local tRet = {};
-            --TODO
+
+            for sName, oExporter in pairs(_tExporters) do
+                tRet[sName] = oExporter;
+            end
+
+            return tRet;
+        end,
+        GetAllNames = function()--Used to build/access exporters subfolders
+            local tRet = {};
+
+            for sName, oExporter in pairs(_tExporters) do
+                tRet[sName] = sName;
+            end
+
+            return tRet;
         end,
         SetActiveType = function(eExporterType)
             type.assert.custom(eExporterType, "Exporter.TYPE");
@@ -127,15 +156,16 @@ return class("Exporter",
 
     },
     {--PROTECTED
-        Name        = "",
-        OutputPath  = "",
-        PerRow      = true,
-        Returns     = {},
-        Rows        = null,
+        Name__AUTOA_    = "",
+        OutputPath      = "",
+        PerRow          = true,
+        Returns         = {},
+        Rows            = null,
 
         Exporter  = function(this, cdat, sName, tReturns)
             type.assert.string(sName, "%S+", "Name must be a non-blank string");
-            type.assert.table(tReturns, "number", "table", 1);
+            type.assert.table(tReturns, "number", "table", 1); --there should be at least one return, a boolean if nothing else
+
             local pro = cdat.pro;
             local tMyReturns = pro.Returns;
 
@@ -153,7 +183,11 @@ return class("Exporter",
 
             end
 
+            --store the exporter for use in static functions
+            _tExporters[sName] = this;
         end,
+
+
     },
     {},--PUBLIC
     nil,   --extending class

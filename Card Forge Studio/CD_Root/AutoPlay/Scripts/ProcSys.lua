@@ -71,6 +71,7 @@ local _sENVCode                     = "";
 local _tCFG                         = null;
 local _tENV                         = null;
 ------------------------------------- Exporters
+local _oUserExportersLiveFileRepo   = LiveFileRepo();
 local _tUserExporters               = {};
 local _bExportersChanged            = true;
 local _tChangedUserExporterIDs      = {};
@@ -97,7 +98,7 @@ local _tFileSpecDraw                = FILESPEC_CARDSET_DRAW;
 local _tFileSpecRowProc             = FILESPEC_CARDSET_ROWPROC;
 ------------------------------------- Preemptive Declarations (Local Functions)
 local
-BuildCardSetFunction,
+BuildFunction,
 BuildUserTable,
 BuildWindows,
 EnsureRowProcessed,
@@ -117,6 +118,7 @@ UpdateCodeCell,
 UpdateCodeColumns,
 UpdateGameLiveFileRepo,
 UpdateGrids,
+UpdateUserExporter,
 UpdateUserExporters,
 XPCallError;
 ----------------------------------------------------------------------------------------------------------------------
@@ -144,6 +146,50 @@ Draw            - Redraw Current Row
 ]]
 -----------------------------------------------------------------------------------------------------------------------
 
+UpdateUserExporter = function(sID)
+
+end
+
+UpdateUserExportersFileRepos = function()
+    local oLiveFileRepo = _oUserExportersLiveFileRepo;
+
+    --reset the repo
+    oLiveFileRepo.Reset();
+    --clear the exporters tables
+    _tUserExporters             = {};
+    _tChangedUserExporterIDs    = {};
+
+    for _, sName in pairs(Exporters.GetAllNames()) do
+        local pFolder = FS["Exporters"..sName];
+        local tFiles  = File.Find(pFolder.."\\", "*.lua", false, false, nil, nil);
+
+        if (rawtype(tFiles) == "table" and #tFiles > 0) then
+
+            for __, pFile in pairs(tFiles) do
+                local tParts            = String.SplitPath(pFile);
+                local sUserExporterName = tParts.Filename;
+                local sID               = sName..sUserExporterName;
+
+                --watch each user exporter file
+                oLiveFileRepo.Add(sID, pFile, _nLiveFileRepoTimerInterval,
+                function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+                    _tChangedUserExporterIDs[sID] = sNewText;
+                    _bExportersChanged = true;
+                end);
+
+                --read in the exporter initially
+                _tChangedUserExporterIDs[sID] = TextFile.ReadToString(pFile);
+            end
+
+        end
+
+    end
+    
+    oLiveFileRepo.StartAll();
+end
+
+
+
 
 --[[
 ██╗      ██████╗  ██████╗ █████╗ ██╗         ███████╗██╗   ██╗███╗   ██╗ ██████╗████████╗██╗ ██████╗ ███╗   ██╗███████╗
@@ -155,8 +201,9 @@ Draw            - Redraw Current Row
 
 
 --[[!
-@fqxn CFS.Classes.ProcSys.Methods.BuildCardSetFunction
+@fqxn CFS.Classes.ProcSys.Methods.BuildFunction
 @desc Compiles and executes a Lua chunk that returns a function used by the active card set. The chunk is loaded inside the UserEnv environment and must return a callable function.
+@param string sCaller A convenience name given for easy isolation of erros.
 @param string sName Logical name of the function being built (for example "Draw" or "RowProc"). Used for chunk identification and error reporting.
 @param string sChunk Lua source code that returns the function implementation.
 @return function fFunction The function returned by the executed chunk.
@@ -168,38 +215,49 @@ Draw            - Redraw Current Row
         "end" ..
     "]".."]"
 
-    local fProc = BuildCardSetFunction("RowProc", sCode)
+    local fProc = BuildFunction("RowProc", sCode)
     local sValue = fProc(1, 2, "Name", {}, "test")
     -- sValue == "TEST"
 @vis Static Private
 !]]
-BuildCardSetFunction = function (sName, sChunk)
+BuildFunction = function (vCaller, sName, sChunk)
+    local bCallerIsString = rawtype(vCaller);
+    local sCaller = bCallerIsString and vCaller or "Unknown Caller";
 
     if not (rawtype(sName) == "string" and not sName:isempty()) then
-        error("BuildCardSetFunction: Argument 1 (function name) must be non-empty string. Got "..rawtype(sName)..".", 2);
+        error(sCaller..": Argument 1 (function name) must be non-empty string. Got "..rawtype(sName)..".", 2);
+    end
+
+    if not (bCallerIsString and not vCaller:isempty()) then
+        error(sCaller..": Argument 1 (function name) must be non-empty string. Got "..rawtype(sName)..".", 2);
     end
 
     if not (rawtype(sChunk) == "string" and not sChunk:isempty()) then
-        error("BuildCardSetFunction: Argument 2 (function chunk) must be non-empty string. Got "..rawtype(sChunk)..".", 2);
+        error(sCaller..": Argument 2 (function chunk) must be non-empty string. Got "..rawtype(sChunk)..".", 2);
     end
 
     local sChunkName = _sCardSetName..' '..sName;
 
     local fChunk, sError = load(sChunk, sChunkName, "t", UserEnv.Get());
     if not (fChunk) then
-        error("Error loading '"..sName.."' function for CardSet, '".._sCardSetName.."'.\r\n"..sError, 1);
+        error("Error loading '"..sName.."' function.\r\n"..sError, 1);
     end
 
     local bOK, fRetOrErr = pcall(fChunk);
     if not (bOK) then
-        error("Error running '"..sName.."' chuck (function) for CardSet, '".._sCardSetName.."'.\r\n"..fRetOrErr, 1);
+        error("Error running '"..sName.."' chuck (function).\r\n"..fRetOrErr, 1);
     end
 
     if not (rawtype(fRetOrErr) == "function") then
-        error("Error building '"..sName.."' function for CardSet, '".._sCardSetName.."'.\r\nExpected return type function. Got "..rawtype(fRetOrErr)..'.', 1);
+        error("Error building '"..sName.."' function.\r\nExpected return type function. Got "..rawtype(fRetOrErr)..'.', 1);
     end
 
     return fRetOrErr;
+end
+
+
+BuildExporterFunction = function(sID, sChunk)
+
 end
 
 
@@ -1577,7 +1635,7 @@ return class("ProcSys",
             --File.Run(_Bin.."\\lite-xl\\lite-xl.exe", _pTempFile, _TempFolder, SW_SHOWNORMAL, true);
 
             -- or [_nCurrentRow]) then-- or isspecial column) then
-                --_fRowProc = BuildCardSetFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
+                --_fRowProc = BuildFunction("RowProc", TextFile.ReadToString(_oActiveCardSet.GetPath().."\\".._tFileSpecRowProc.Full));
 
                 --_bReady = true;
                 --ProcessRowDEDEDED(_nCurrentRow);
@@ -1692,7 +1750,7 @@ return class("ProcSys",
 
                 if (_bRowProcChanged) then
                     _bRowProcChanged = false;
-                    local fProcOrErr = BuildCardSetFunction("RowProc", _sRowProcCode);
+                    local fProcOrErr = BuildFunction("_bRowProcChanged", "RowProc", _sRowProcCode);
 
                     if (rawtype(fProcOrErr) == "function") then
                         _fRowProc = fProcOrErr;
@@ -1720,7 +1778,7 @@ return class("ProcSys",
                     if (_bDrawChanged) then
                         _bDrawChanged = false;
 
-                        local fDraw = BuildCardSetFunction("Draw", _sDrawCode);
+                        local fDraw = BuildFunction("_bDrawChanged", "Draw", _sDrawCode);
 
                         if (rawtype(fDraw) == "function") then
                             Forge.SetDrawFunction(fDraw);
@@ -1730,7 +1788,7 @@ return class("ProcSys",
                     if (_bDrawBackChanged) then
                         _bDrawBackChanged = false;
 
-                        local fDrawBack = BuildCardSetFunction("DrawBack", _sDrawBackCode);
+                        local fDrawBack = BuildFunction("_bDrawBackChanged", "DrawBack", _sDrawBackCode);
 
                         if (rawtype(fDrawBack) == "function") then
                             Forge.SetDrawBackFunction(fDrawBack);
