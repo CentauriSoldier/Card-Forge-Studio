@@ -12,7 +12,9 @@ return class(_sClass,
     },
     {--STATIC PUBLIC
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
-        --[_sClass] = function(this, sAuthCode) end, --static constructor (runs after class object creation)
+        [_sClass] = function(cMe, sAuthCode)--static constructor (runs after class object creation)
+            Exporter.RegisterChildClass(cMe, sAuthCode, _sName, _tReturns);
+        end,
     },
     {--PRIVATE
 
@@ -21,8 +23,13 @@ return class(_sClass,
 
     },
     {--PUBLIC
-        [_sClass] = function(this, cdat, super)
-            super(_sName, _tReturns);
+        [_sClass] = function(this, cdat, super, sName, fExporter)
+            --TODO Assertions
+
+            --TODO LEFT OFF HERE
+
+
+            super(sName, fExporter);
         end,
     },
     Exporter,   --extending class

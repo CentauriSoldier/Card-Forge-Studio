@@ -50,26 +50,12 @@ _sSection = "ExporterType";
 
 TheMenu.Add("File",                             _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
         Add("File:>Export",                     _nIconID,   -_bEnabled,   -_bChecked,   -_bCheckable,   _tNoCallbacks).
-        Add("File:>---",                        _nIconID,   -_bEnabled,   -_bChecked,   -_bCheckable,   _tNoCallbacks).
-        Add("File:>Export Type",                _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
+        --Add("File:>---",                        _nIconID,   -_bEnabled,   -_bChecked,   -_bCheckable,   _tNoCallbacks).
+        --Add("File:>Export Type",                _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   _tNoCallbacks).
         Add("File:>---",                        _nIconID,   -_bEnabled,   -_bChecked,   -_bCheckable,   _tNoCallbacks).
         Add("File:>Exit",                       _nIconID,   _bEnabled,    -_bChecked,   -_bCheckable,   {[eMenu.OnSelected] = function(tItem)
             Application.Exit(0); --TODO check for savability
         end});
-
---[[
-for _, eExporter in Exporter.TYPE() do
-    local tExporter     = eExporter.value;
-    local sValueName    = tExporter.ClassName;
-    TheMenu.Add("File:>Export Type:>"..tExporter.Name, _nIconID, _bEnabled, LoadB(sValueName), _bCheckable, {
-        [eMenu.OnSelected] = function(tItem)
-            Exporter.SetActiveType(eExporter);
-            --Save(sValueName, tostring(tItem.IsSelected));
-        end
-},
-_nExportRadioGroupID);
-end
-]]
 --[[
 ██████╗  █████╗ ███╗   ███╗███████╗
 ██╔════╝ ██╔══██╗████╗ ████║██╔════╝
@@ -131,7 +117,7 @@ local sHRE = "Horizontal Ruler";
 local sVRE = "Vertical Ruler";
 local sHCE = "Horizontal Centerline";
 local sVCE = "Vertical Centerline";
-local sESC = "Export Selected Card";
+local sESC = "Export Selected Card"; --TODO REMOVE THIS!!!!!!!!
 --local sRCC = "Redraw On Cell Changed";
 local sDSP = "---";
 
@@ -218,18 +204,14 @@ tSupport = {
         --clear the games list
         TheMenu.ClearChildren("File:>Export");
 
-        --TODO LEFT OFF HERE!!!!============================================================================================
-        for _, oGame in ipairs(Game.GetAll()) do
-            local sGame = oGame.GetName();
-
-            local sMenuPath = "Game:>Load:>"..sGame;
-                TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, {
-                    [eMenu.OnSelected] = function(tItem)
-                        --TODO check that the current Game isn't loaded first and that there are no unssaved changes
-                        Game.Activate(oGame);
-                        Page.Jump("Forge");
-                    end
-            });
+        for _, sExporter in Exporter.GetAllNames() do
+            TheMenu.Add("File:>Export Type:>"..tExporter.Name, _nIconID, _bEnabled, LoadB(sValueName), _bCheckable, {
+                [eMenu.OnSelected] = function(tItem)
+                    --Exporter.SetActiveType(eExporter);
+                    --Save(sValueName, tostring(tItem.IsSelected));
+                end
+        },
+        _nExportRadioGroupID);
         end
 
         TheMenu.Refresh();

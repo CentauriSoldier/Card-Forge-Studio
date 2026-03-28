@@ -80,18 +80,28 @@ end
 
 ]]
 
+local _tExporters   = {};
+local _eExporters;
 
+local function BuildTypeEnum()
+    _eExporters = nil;
 
-local _tExporters = {};
+    --for sExporter, tExporter in pairs() do
+
+--    end
+
+end
+
 
 local _eActiveExporter;
 --NOTE CodeColumns DO NOT EXPORT, they are not designed for that nor will they be. Put that note in the Dox.
+
 return class("Exporter",
     {--METAMETHODS
 
     },
     {--STATIC PUBLIC
-        --TYPE = _tExportersDecoy,
+        TYPE = _eExporters,
         --[[__INIT = function(stapub)--static initializer (runs before class object creation)
             local tEnumNames    = {};
             local tEnumValues   = {};
@@ -141,33 +151,38 @@ return class("Exporter",
         GetAllNames = function()--Used to build/access exporters subfolders
             local tRet = {};
 
-            for sName, oExporter in pairs(_tExporters) do
+            for sName, tExporter in pairs(_tExporters) do
                 tRet[sName] = sName;
             end
 
             return tRet;
         end,
-        SetActiveType = function(eExporterType)
-            type.assert.custom(eExporterType, "Exporter.TYPE");
-            _eActiveExporter = eExporterType;
-        end,
-    },
-    {--PRIVATE
-
-    },
-    {--PROTECTED
-        Name__AUTOA_    = "",
-        OutputPath      = "",
-        PerRow          = true,
-        Returns         = {},
-        Rows            = null,
-
-        Exporter  = function(this, cdat, sName, tReturns)
-            type.assert.string(sName, "%S+", "Name must be a non-blank string");
+        RegisterChildClass = function(cCaller, sAuthCode, sName, tReturns)
+            type.assert.string(sName, "%S+", "Name must be a non-blank string.");
             type.assert.table(tReturns, "number", "table", 1); --there should be at least one return, a boolean if nothing else
 
-            local pro = cdat.pro;
-            local tMyReturns = pro.Returns;
+            if not class.is(cCaller) then
+                error("Exporter.Register: cCaller must be a class.", 2);
+            end
+
+            local cParent = class.getparent(cCaller);
+
+            if not (cParent and class.getname(cParent) == "Exporter") then
+                error("Exporter.Register: cCaller must be a child of Exporter.", 2);
+            end
+
+            if not class.isstaticconstructorrunning(cCaller, sAuthCode) then
+                error("Exporter.Register must be called from a static constructor.", 2);
+            end
+
+            _tExporters[sName] = {
+                Class       = cCaller,
+                Instances   = {},
+                Returns     = {},
+            };
+
+            local tRegistar     = _tExporters[sName];
+            local tMyReturns    = tRegistar.Returns;
 
             --iterate over the strictly-ordered return table
             for nIndex, tReturn in ipairs(tReturns) do
@@ -183,8 +198,30 @@ return class("Exporter",
 
             end
 
-            --store the exporter for use in static functions
-            _tExporters[sName] = this;
+            --(re)build the TYPE enum
+            BuildTypeEnum();
+        end,
+        SetActiveType = function(eExporterType)
+            type.assert.custom(eExporterType, "Exporter.TYPE");
+            _eActiveExporter = eExporterType;
+        end,
+    },
+    {--PRIVATE
+
+    },
+    {--PROTECTED
+        Name__AUTOA_    = "",
+        OutputPath      = "",
+        PerRow          = true,
+        Returns         = {},
+        Rows            = null,
+        ScriptPath      = "",
+
+
+        Exporter  = function(this, cdat, sName, fExporter)
+            --TODO LEFT OFF HERE
+            --register new instance
+
         end,
 
 

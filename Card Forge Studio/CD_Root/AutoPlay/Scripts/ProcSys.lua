@@ -73,7 +73,7 @@ local _tENV                         = null;
 ------------------------------------- Exporters
 local _oUserExportersLiveFileRepo   = LiveFileRepo();
 local _tUserExporters               = {};
-local _bExportersChanged            = true;
+--local _bExportersChanged            = true;
 local _tChangedUserExporterIDs      = {};
 ------------------------------------- CardSet
 local _oCardSetLiveFileRepo         = LiveFileRepo();
@@ -150,7 +150,7 @@ UpdateUserExporter = function(sID)
 
 end
 
-UpdateUserExportersFileRepos = function()
+UpdateUserExportersFileRepo = function()
     local oLiveFileRepo = _oUserExportersLiveFileRepo;
 
     --reset the repo
@@ -159,8 +159,10 @@ UpdateUserExportersFileRepos = function()
     _tUserExporters             = {};
     _tChangedUserExporterIDs    = {};
 
-    for _, sName in pairs(Exporters.GetAllNames()) do
-        local pFolder = FS["Exporters"..sName];
+    local tExporterFolderNames = Exporters.GetAllNames();
+
+    for _, sName in pairs(tExporterFolderNames) do
+        local pFolder = FS["UserExporters"..sName];
         local tFiles  = File.Find(pFolder.."\\", "*.lua", false, false, nil, nil);
 
         if (rawtype(tFiles) == "table" and #tFiles > 0) then
@@ -174,7 +176,7 @@ UpdateUserExportersFileRepos = function()
                 oLiveFileRepo.Add(sID, pFile, _nLiveFileRepoTimerInterval,
                 function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
                     _tChangedUserExporterIDs[sID] = sNewText;
-                    _bExportersChanged = true;
+                    --_bExportersChanged = true;
                 end);
 
                 --read in the exporter initially
@@ -184,7 +186,7 @@ UpdateUserExportersFileRepos = function()
         end
 
     end
-    
+
     oLiveFileRepo.StartAll();
 end
 
