@@ -13,7 +13,18 @@ return class(_sClass,
         [_sClass] = function(cMe, sAuthCode)--static constructor (runs after class object creation)
             Exporter.RegisterChildClass(cMe, sAuthCode, _tReturns);
         end,
-        Export = function(tRows)
+    },
+    {--PRIVATE
+
+    },
+    {--PROTECTED
+
+    },
+    {--PUBLIC
+        [_sClass] = function(this, cdat, super, tExporter)
+            super(tExporter);
+        end,
+        Export = function(this, cdat, tRows)
             local pro           = cdat.pro;
             local fRowHandler   = pro.RowHandler;
             --TODO Assertions
@@ -28,17 +39,7 @@ return class(_sClass,
             end
 
         end,
-    },
-    {--PRIVATE
 
-    },
-    {--PROTECTED
-
-    },
-    {--PUBLIC
-        [_sClass] = function(this, cdat, super, tExporter)
-            super(tExporter);
-        end,
     },
     Exporter,   --extending class
     false,       --if the class is final

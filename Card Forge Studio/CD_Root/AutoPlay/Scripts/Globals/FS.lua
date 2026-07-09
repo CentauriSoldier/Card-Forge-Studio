@@ -88,10 +88,11 @@ local tFunctions = {
         --tPaths.CSVExport    = pGame             .."\\CSV Export";           CheckFolder(tPaths.CSVExport);
         tPaths.UserExporters    = pGame             .."\\Exporters";            CheckFolder(tPaths.UserExporters);
 
-        for _, sName in pairs(Exporter.GetAllNames()) do
+        for _, sName in Exporter.CATALOGUE() do
             local sFullName = "UserExporters"..sName;
-            tPaths[sFullName] = tPaths.UserExporters.."\\"..sName;              CheckFolder(tPaths[sFullName]);            
+            tPaths[sFullName] = tPaths.UserExporters.."\\"..sName;              CheckFolder(tPaths[sFullName]);
         end
+
         tPaths.Exports          = pGame             .."\\Exports";              CheckFolder(tPaths.Exports);
         tPaths.Scripts          = pGame             .."\\Scripts";              CheckFolder(tPaths.Scripts);
         tPaths.Cards            = pGame             .."\\Cards";                CheckFolder(tPaths.Cards);

@@ -1,13 +1,13 @@
 local class         = class;
 local math          = math;
+    local clamp         = math.clamp;
+    local floor         = math.floor;
 local rawtype       = rawtype;
 local string        = string;
 local toboolean     = toboolean;
 local tonumber      = tonumber;
 local tostring      = tostring;
 local type          = type;
-    local clamp         = math.clamp;
-    local floor         = math.floor;
     local isnumber      = type.isnumber;
     local isstring      = type.isstring;
     local istable       = type.istable;
