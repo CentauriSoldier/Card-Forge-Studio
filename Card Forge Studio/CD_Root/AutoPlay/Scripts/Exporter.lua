@@ -64,7 +64,7 @@ local _tExporterSchema = schema.Record({
 });
 
 local _tExporters = {};
-local _eExporters;
+--local _eExporters;
 
 --[[    _tExporters[sName] = {
         Class       = cCaller,
@@ -72,13 +72,9 @@ local _eExporters;
         Returns     = {},
     };
 ]]
-
-local function GetMenuName(sClass)
-    return sClass:gsub("^Exporter", '');
-end
-
+--[[
 local function BuildTypeEnum()
-    --_eExporters = nil;
+    _eExporters         = nil;
     local tEnumNames    = {};
     local tEnumValues   = {};
     local tTemp         = {};
@@ -102,12 +98,12 @@ local function BuildTypeEnum()
 
     table.sort(tTemp,
         function(a, b)
-            return a.Name < b.Name;
+            return a.MenuName < b.MenuName;
         end
     );
 
     --_eExporters = enum(tTemp, );
-end
+end]]
 
 --local _eActiveExporter;
 --NOTE on CodeColumns; DO NOT EXPORT, they are not designed for that nor will they be. Put that note in the Dox.
@@ -117,7 +113,24 @@ return class("Exporter",
 
     },
     {--STATIC PUBLIC
-        CATALOGUE = _eExporters,
+        GetCatalogue = function()
+            local tRet      = {};
+            local nCount    = 0;
+
+            for cExporter, tExporter in pairs(_tExporters) do
+                nCount = nCount + 1;
+                tRet[tExporter.MenuName] = tExporter.Class;
+            end
+
+            table.sort(tRet);
+
+            setmetatable(tRet, {
+                __len = function() return nCount end,
+            });
+
+            return tRet;
+        end,
+        --CATALOGUE = _eExporters,
         --__INIT = function(stapub) end--static initializer (runs before class object creation)
         --Exporter = function(cMe, sAuthCode) end, --static constructor (runs after class object creation)
         --[[GetActive = function()
@@ -141,8 +154,9 @@ return class("Exporter",
 
             return tRet;
         end,]]
-        RegisterChildClass = function(cCaller, sAuthCode, tReturns)
+        RegisterChildClass = function(cCaller, sAuthCode, sMenuName, tReturns)
             type.assert.table(tReturns, "number", "table", 1); --there should be at least one return, a boolean if nothing else
+            type.assert.string(sMenuName, "%S", "Menu name must be a non-empty string");
 
             if not class.is(cCaller) then
                 error("Exporter.RegisterChildClass: Argument 1 must be a class.", 2);
@@ -164,11 +178,14 @@ return class("Exporter",
                 error("Exporter.RegisterChildClass: '"..sClassName.."' is an invalid class name. Must be 'Exporter<Something>'.", 2);
             end
 
+            if not (type(cCaller.Export) == "function") then
+                error("Exporter.RegisterChildClass: '"..sClassName.."' has not implemented a public static 'Export' method.", 2);
+            end
+
             --create the base table entry for the child class in the _tExporters table
             _tExporters[sClassName] = {
                 Class       = cCaller,                  --the actual class object
-                Instances   = {},                       --instance repo for the class
-                MenuName    = GetMenuName(sClassName),  --the name that will be shown in the Export menu
+                MenuName    = sMenuName,                --the name that will be shown in the Export menu
                 Returns     = {},                       --the returns values of the class
             };
 
@@ -196,10 +213,10 @@ return class("Exporter",
         end,]]
     },
     {--PRIVATE
-        MenuName__AUTOA_    = "",   --the name that will be shown in the Export menu
-        Name__AUTOA_        = "",   --the user-given name of this exporter object
-        Type                = "",   --the index of the table entry in _tExporters
-        TypeData            = {},   --the table entry in _tExporters
+        --MenuName__AUTOA_    = "",   --the name that will be shown in the Export menu
+        --Name__AUTOA_        = "",   --the user-given name of this exporter object
+        --Type                = "",   --the index of the table entry in _tExporters
+        --TypeData            = {},   --the table entry in _tExporters
 
         ValidateRowHandlerReturns = function(this, cdat, ...)
             local pro       = cdat.pro;
@@ -283,17 +300,6 @@ return class("Exporter",
             local bSuccess = cdat.pri.ValidateRowHandlerReturns(fRowHandler(tTestRow));
             if bSuccess then
 
-            local tInstances = _tExporters[sClass].Instances;
-
-                if (tInstances[sName]) then
-                    Log.Warning('Exporter "'..sName..'" of type '..sClass..' has been overwritten.');
-                end
-
-                tInstances[sName] = {
-                    Instance = this,
-                    Name     = sName,
-                };
-
                 --(re)build the TYPE enum
                 BuildTypeEnum();
             end
@@ -305,9 +311,6 @@ return class("Exporter",
 
     },
     {--PUBLIC
-        Export = function(this, cdat)
-            error(cdat.pro.Type.." has not implemented the public Export method.");
-        end,
         SetRowHandler = function(this, cdat, fRowHandler)
 
         end,

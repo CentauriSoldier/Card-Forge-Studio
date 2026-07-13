@@ -223,7 +223,7 @@ end
 @vis Static Private
 !]]
 BuildFunction = function (vCaller, sName, sChunk)
-    local bCallerIsString = rawtype(vCaller);
+    local bCallerIsString = rawtype(vCaller);--QUESTION ??? is this isupposed to check if it's a string?
     local sCaller = bCallerIsString and vCaller or "Unknown Caller";
 
     if not (rawtype(sName) == "string" and not sName:isempty()) then
@@ -745,7 +745,7 @@ ProcessCell = function(nRow, nColumn)
     --handle code columns
     elseif (tCodeColumn) then
         local tCodeCell = tCodeColumn[nRow];
-
+--Log.Note(UserEnv.Get()._tRow.Name)
         --check if the cell text has changed
         if (tCodeCell.Text ~= sText) then
 
@@ -792,7 +792,16 @@ ProcessCell = function(nRow, nColumn)
             tCodeCell = tCodeColumn[nRow];
             if tCodeCell.IsValid then
 
+                --get the active row and store it
+                local tOldRow = UserEnv.Get()._tRow;            --FIX Attempt: code columns were using other (old) row data. Hopefully this fixes it.
+                --get this cell's row base data
+                local tMyRow  = GetRow(_sBaseDataGrid, nRow);   --FIX Attempt: code columns were using other (old) row data. Hopefully this fixes it.
+                --update the user env to use this cell's row
+                UserEnv.ProcSysUpdateRoot({_tRow = tMyRow});    --FIX Attempt: code columns were using other (old) row data. Hopefully this fixes it.
+                --execute the column code function
                 local bOK, vReturnOrError = xpcall(tCodeCell.Function, XPCallError);
+                --put the user env back the way we found it
+                UserEnv.ProcSysUpdateRoot({_tRow = tOldRow});   --FIX Attempt: code columns were using other (old) row data. Hopefully this fixes it.
 
                 if bOK then
                     tCodeCell.CallReturn = vReturnOrError
@@ -1710,11 +1719,6 @@ return class("ProcSys",
 
                 end
 
-                if (bReloadCodeColumns) then
-                    _bCodeColumnsChanged = false;
-                    UpdateCodeColumns();
-                end
-
                 if (_bCFGChanged) then
                     _bCFGChanged = false;
                     local tCFGOrErr;
@@ -1731,6 +1735,11 @@ return class("ProcSys",
                         error(sErr, 0);
                     end
 
+                end
+
+                if (bReloadCodeColumns) then
+                    _bCodeColumnsChanged = false;
+                    UpdateCodeColumns();
                 end
 
                 if (_bENVChanged) then

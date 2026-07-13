@@ -1245,7 +1245,7 @@ return class("Forge",
 
                 --check if a redraw request was made and that we're done resizing
                 if (_bRedrawCanvas and not _bIsResizing) then
-                    Log.Note("Redraw")
+                    --Log.Note("Redraw")
                     --redraw the card
                     Draw();
                     --fulfill the request
