@@ -100,3 +100,4 @@ constant("FILESPEC_CARDSET_ROWPROC",        BuildFileSpecTable("RowProc",       
 constant("FILESPEC_CARDSET_CODECOLUMMS",    BuildFileSpecTable("CodeColumns",   "txt"));
 constant("FILESPEC_GAME_CFG",               BuildFileSpecTable("CFG",           "lua"));
 constant("FILESPEC_GAME_ENV",               BuildFileSpecTable("ENV",           "lua"));
+constant("FILESPEC_ROWFILTERS",             BuildFileSpecTable("RowFilters",    "lua"));

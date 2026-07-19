@@ -60,14 +60,17 @@ local _sDrawBackCode                = "";
 ------------------------------------- Font Styles
 local _bFontStylesChanged           = false;
 local _sFontStyleINI                = "";
-------------------------------------- Game Including CGF & ENV
+------------------------------------- Game Including CGF, ENV & RowFilters
 local _oGameLiveFileRepo            = LiveFileRepo();
 local _oActiveGame                  = null;
 local _sGameName                    = "";
+local _tRowFilters                  = {};
 local _bCFGChanged                  = false;
 local _bENVChanged                  = false;
+local _bRowFiltersChanged           = false;
 local _sCFGCode                     = "";
 local _sENVCode                     = "";
+local _tRowFiltersCode              = "";
 local _tCFG                         = null;
 local _tENV                         = null;
 ------------------------------------- Exporters
@@ -96,6 +99,7 @@ local _tFileSpecCFG                 = FILESPEC_GAME_CFG;
 local _tFileSpecENV                 = FILESPEC_GAME_ENV; --TODO add all neede file specs here
 local _tFileSpecDraw                = FILESPEC_CARDSET_DRAW;
 local _tFileSpecRowProc             = FILESPEC_CARDSET_ROWPROC;
+local _tFileSpecRowFilters          = FILESPEC_ROWFILTERS;
 ------------------------------------- Preemptive Declarations (Local Functions)
 local
 BuildFunction,
@@ -118,6 +122,7 @@ UpdateCodeCell,
 UpdateCodeColumns,
 UpdateGameLiveFileRepo,
 UpdateGrids,
+UpdateRowFilters,
 UpdateUserExporter,
 UpdateUserExporters,
 XPCallError;
@@ -1165,6 +1170,14 @@ UpdateGameLiveFileRepo = function()
 
     oLiveFileRepo.Add("Styles", FS.Styles, _nLiveFileRepoTimerInterval, NotifyFontStylesChanged);
 
+    --RowFilters
+    local function NotifyRowFiltersChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
+        _bRowFiltersChanged = sNewText;
+        _bRowFiltersChanged = true;
+    end
+
+    oLiveFileRepo.Add("RowFilters", FS.RowFilters, _nLiveFileRepoTimerInterval, NotifyRowFiltersChanged);
+
     oLiveFileRepo.StartAll();
 end
 
@@ -1278,6 +1291,17 @@ UpdateGrids = function ()--TODO FINISH MOVE Color stuff out to a theme system
     --Grid.SetColumnWidth(_sFinalDataGrid, nColumnID, 40);--TODO magick number
     Application.SetRedraw(true);
     Page.Redraw();
+end
+
+
+UpdateRowFilters = function()
+    --include built-in filter files
+
+    --include user filter files
+
+
+
+--TODO LEFT OFF HERE
 end
 
 
@@ -1757,6 +1781,12 @@ return class("ProcSys",
                     if not (bOK) then
                         error(sErr, 0);
                     end
+                end
+
+                --TODO FIX NOTE THIS IS Test, this might not go here in this order..not sure yet
+                if (_bRowFiltersChanged) then
+                    _bRowFiltersChanged = false;
+                    UpdateRowFilters();
                 end
 
                 if (_bRowProcChanged) then

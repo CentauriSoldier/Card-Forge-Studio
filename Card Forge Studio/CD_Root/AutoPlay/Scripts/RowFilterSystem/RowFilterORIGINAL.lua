@@ -1,16 +1,6 @@
 local tRowFilter = {};
 
---[[
-return {
-    Name        = "*All",
-    Description = "Includes all cards in the set.",
-    RowSelector = function(tRow)
-        return true;
-    end,
-    Blacklist   = nil,
-    Whitelist   = nil,
-};
-]]
+
 
 --this must run AFTER the debug window is loaded so code errors (WARNINGS) can be displayed to the user
 local function BuildFilter(sName, sDescription, fRowSelector, tBlacklist, tWhitelist)
