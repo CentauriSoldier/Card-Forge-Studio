@@ -6,8 +6,9 @@ CFG             = {}; --TODO lock/unlock table as needed TODO REMOVE THIS...IT W
 
 require("Constants");   --load the constants
 
-ELProfiler = require("Plugins.ELProfiler");
+ELProfiler  = require("Plugins.ELProfiler");
 ELProfiler.setClock(os.clock);
+FTCSV       = require("Plugins.FTCSV.ftcsv");
 
 FS                  = require("Globals.FS");  --load the program's file/path management system
 Log                 = require("Log");
@@ -16,6 +17,7 @@ local tImportSystem = require("Globals.ImportSystem");
 Import              = tImportSystem.Import;
 SanitizePath        = tImportSystem.SanitizePath;
 ProcessDox          = require("Globals.ProcessDox");
+RowFilter           = require("RowFilter");
 Exporter            = require("Exporter");
     ExporterImage           = require("Exporters.ExporterImage");
 FontStyle   = require("FontStyle");

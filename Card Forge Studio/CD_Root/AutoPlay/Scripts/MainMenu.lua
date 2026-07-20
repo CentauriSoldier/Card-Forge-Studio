@@ -266,6 +266,24 @@ tSupport = {
         end
 
     end,
+    RefreshRowFilters = function(tRowFilters)
+        MainMenu.ClearChildren("Filters");
+
+        --TODO FINISH Add items ONLY if not on a blacklist or if whitelist exists and is on whitelist
+        for _, oRowFilter in ipairs(tRowFilters) do
+            local sMenuPath = "Filters:>"..oRowFilter.Name;
+
+            TheMenu.Add(sMenuPath, _nIconID, _bEnabled, not _bChecked, not _bCheckable, _tNoCallbacks);
+
+            TheMenu.SetCallback(sMenuPath, Menu.EVENT.OnSelected, function(tItem)
+                Log.Warning(oRowFilter.Name.." Test.");
+                --TODO SET THIS FILTER in the ini
+                --INIFile.SetValue(FS.Info, "SESSION", "LastCardSet", oCardSet.GetUUID());
+            end);
+        end
+
+        --TODO add open/edit filter file item at the end of the filters
+    end,
     OnPreload = function(sPage)
         local sWindow = "Window".._sSub;
 
@@ -283,8 +301,10 @@ tSupport = {
             --Game items
             TheMenu.SetEnabled("Game:>Browse",              false);
             --card set items
-            TheMenu.SetEnabled("CardSet:>New",             false);
-            TheMenu.SetEnabled("CardSet:>Load",            false);
+            TheMenu.SetEnabled("CardSet:>New",              false);
+            TheMenu.SetEnabled("CardSet:>Load",             false);
+            --filters items
+            TheMenu.SetEnabled("Filters",                   false);
             --tools items
             TheMenu.SetEnabled("Tools:>Rebuild Dox",        false);
             TheMenu.SetEnabled("Tools:>Style Editor",       false);
@@ -295,7 +315,7 @@ tSupport = {
             TheMenu.SetEnabled(sWindow.."Base Data",        false);
             TheMenu.SetEnabled(sWindow.."Final Data",       false);
             --TheMenu.Refresh();
-
+--TODO FINISH add Copy Card Set UUID and Copy Game UUID items for QoL
         elseif (sPage == "Forge") then
             --options:>draw items
             TheMenu.SetEnabled(sOD.._sSub..sUO,             true);
@@ -311,9 +331,11 @@ tSupport = {
             TheMenu.SetEnabled("Game:>Browse",              true);
             TheMenu.SetCallback("Game:>Browse", eMenu.OnSelected, function(tItem) Shell.Execute(FS.Game, "open", "", "", SW_SHOWNORMAL); end);
             --card set items
-            TheMenu.SetEnabled("CardSet:>New",             true);
-            TheMenu.SetEnabled("CardSet:>Load",            true);
+            TheMenu.SetEnabled("CardSet:>New",              true);
+            TheMenu.SetEnabled("CardSet:>Load",             true);
             TheMenu.SetCallback("CardSet:>Browse", eMenu.OnSelected, function(tItem) Shell.Execute(FS.CardSets.."\\"..INIFile.GetValue(FS.Info, "SESSION", "LastCardSet"), "open", "", "", SW_SHOWNORMAL); end); --TODO GET ACTIVE SET
+            --filters items
+            TheMenu.SetEnabled("Filters",                   true);
             --tools items
             TheMenu.SetEnabled("Tools:>Rebuild Dox",        true);
             TheMenu.SetEnabled("Tools:>Style Editor",       true);

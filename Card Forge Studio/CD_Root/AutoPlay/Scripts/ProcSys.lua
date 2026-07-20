@@ -70,7 +70,6 @@ local _bENVChanged                  = false;
 local _bRowFiltersChanged           = false;
 local _sCFGCode                     = "";
 local _sENVCode                     = "";
-local _tRowFiltersCode              = "";
 local _tCFG                         = null;
 local _tENV                         = null;
 ------------------------------------- Exporters
@@ -261,6 +260,8 @@ BuildFunction = function (vCaller, sName, sChunk)
 
     return fRetOrErr;
 end
+
+
 
 
 BuildExporterFunction = function(sID, sChunk)
@@ -603,10 +604,17 @@ LoadFileToGrid = function(pFile)
         }
     };
 
-    --confgure the grids and load the data file
+    --configure the grids and load the data file
     for _, tGrid in ipairs(tGrids) do
         local sGrid = tGrid.Name;
         Grid.DeleteAllItems(        sGrid);
+
+        --TODO LEFT OFF HERE I need to manually load each row, checking it against the active row filter
+        --apply row filter
+        --_ActiveRowFilter
+
+        --FTCSV.
+
         Grid.LoadFromFile(          sGrid, tGrids[1].File, _sCSVDelimiter, _bAutoSizeGrid);
         Grid.SetFixedRowCount(      sGrid, 1);
         --Grid.SetFixedColumnCount(   sGrid, 1);
@@ -1294,14 +1302,35 @@ UpdateGrids = function ()--TODO FINISH MOVE Color stuff out to a theme system
 end
 
 
+--TODO FINISH DOX
 UpdateRowFilters = function()
-    --include built-in filter files
+    --initialize the _tRowFilters table and include built-in row filters
+    local pFile = _Scripts.."\\RowFilters.lua";
+    local sBuiltInRowFilters = TextFile.ReadToString(pFile);
+    _tRowFilters = RowFilter.BuildAllFromString(sBuiltInRowFilters, "Built-in");
 
-    --include user filter files
+    --include user row filters
+    pFile = FS.RowFilters;
+    if not (File.DoesExist(pFile)) then
+        error("Error building row filters from file, '"..pFile.."'. File not found.");
+    end
 
+    local sUserRowFilters = TextFile.ReadToString(pFile);
+    local tUserRowFilters = RowFilter.BuildAllFromString(sUserRowFilters, "User");
 
+    for _, oRowFilter in ipairs(tUserRowFilters) do
+        _tRowFilters[#_tRowFilters + 1] = oRowFilter;
+    end
 
---TODO LEFT OFF HERE
+    --sort the filters by name
+    table.sort(_tRowFilters,
+        function(a, b)
+            return a.Name < b.Name;
+        end
+    )
+
+    --update filters menu
+    MainMenu.RefreshRowFilters(_tRowFilters);
 end
 
 
@@ -1520,6 +1549,7 @@ return class("ProcSys",
 
             --disable the save system
             MainMenu.SetEnabled("CardSet:>Save", false);
+            --enable system directory browsing
             MainMenu.SetEnabled("CardSet:>Browse", true);
 
             UpdateCardSetLiveFileRepo();
@@ -1529,6 +1559,7 @@ return class("ProcSys",
             _bDrawChanged           = true;
             _bDrawBackChanged       = true;
             _bCodeColumnsChanged    = true;
+            _bRowFiltersChanged     = true;
 
             Forge.SetActiveCardSet(oCardSet);
             Log.Note("ProcSys.LoadCardSet: CardSet, '"..sCardSetName.."', Loaded.");
