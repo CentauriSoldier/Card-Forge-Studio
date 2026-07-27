@@ -6,7 +6,7 @@ local rawtype   = rawtype;
 local tostring  = tostring;
 local tonumber  = tonumber;
 local GetValue  = INIFile.GetValue
-local GameUtil  = require("Game.GameUtil");
+--local GameUtil  = require("Game.GameUtil");
 local File      = File;
 local Folder    = Folder;
 
@@ -21,12 +21,13 @@ return class("CardSet",
     {--PRIVATE
         CardWidth__AUTOR_       = null,
         CardHeight__AUTOR_      = null,
-        DataPath__AUTOR_        = null,
-        DrawPath__AUTOR_        = null,
-        DrawBackPath__AUTOR_    = null,
-        InfoPath__AUTOR_        = null,
-        RowProcPath__AUTOR_     = null,
-        CodeColumnsPath__AUTOR_ = null,
+        GameUUID__AUTOR_        = null,
+        --DataPath__AUTOR_        = null,
+        --DrawPath__AUTOR_        = null,
+        --DrawBackPath__AUTOR_    = null,
+        --InfoPath__AUTOR_        = null,
+        --RowProcPath__AUTOR_     = null,
+        --CodeColumnsPath__AUTOR_ = null,
         Name__AUTOA_            = '',
         Path__AUTOR_            = null,
         UUID__AUTOR_            = null,
@@ -35,9 +36,11 @@ return class("CardSet",
 
     },
     {--PUBLIC
-        CardSet = function(this, cdat, pFolder)
+        CardSet = function(this, cdat, sGameUUID, sUUID)
             local pri = cdat.pri;
+            --TODO validate input
 
+--TODO LEFT OFF HERE
             --validate the input string and ensure it leads to a valid directory
             if not (rawtype(pFolder) == "string" and Folder.DoesExist(pFolder)) then
                 error("Invalid CardSet: CardSet path must lead to an existing directory.", 3);

@@ -3,64 +3,43 @@ local _oActiveGame  = false;
 local GetCRC        = File.GetCRC
 local ReadToString  = TextFile.ReadToString;
 local io            = io;
-
 --TODO with New methods, checkf or existing item first...do not overwrite
 
 local CardSet   = require("Game.CardSet");
-local GameUtil  = require("Game.GameUtil");
 
+local function SortByName(oItemA, oItemB)
+    return oItemA.GetName() < oItemB.GetName();
+end
 
-local function ValidateAndUpdateGame(this, cdat)
-    local pri           = cdat.pri;
-    local pFolder       = pri.Path;
-    local nErrorLevel   = 3;
-    local sType         = "Game";
-
-    --get and validate the game's uuid
-    local sUUID = GameUtil.ValidateObjectFolder(pFolder, sType);
-
-    --validate the game's name
-    local sName = GameUtil.ValidateObjectName(pFolder, sType);
-
-    pri.UUID = sUUID;
-    pri.Name = sName;
-
-    --register/update the game object's reference
-    _tGames[pri.UUID] = {
-        Name    = sName,
-        Object  = this,
-    };
+local function UpdateCardSets(this, cdat)
+    local pri = cdat.pri;
 
     --updade the game's card sets
     pri.CardSets = {};
 
+    local sGameUUID = this.GetUUID();
+
     --iterate over all potential card set folders
-    local tCardSetFolders  = Folder.Find(pFolder.."\\"..FOLDER_CARD_SETS.."\\", "*", false, nil);
+    p(type(FS.Game))
+    local tCardSetUUIDs  = FS.Game.GetCardSetUUIDs(sGameUUID);
 
-    if (type(tCardSetFolders) == "table") then
+    if (tCardSetUUIDs) then
 
-        for _, pCardSetFolder in pairs(tCardSetFolders) do
-
-            if (io.getenddir(pCardSetFolder):lower() ~= ".ignore") then
+        for _, sUUID in pairs(tCardSetUUIDs) do
 
                 --try to create the new cardset object
-                local oCardSet = CardSet(pCardSetFolder);
-
-                pri.CardSets[oCardSet.GetUUID()] = {
+                local oCardSet = CardSet(sGameUUID, sUUID);
+                --TODO check that card set is valid (at least check inside cardset const)
+                pri.CardSets[sUUID] = {
                     Name    = oCardSet.GetName();
                     Object  = oCardSet,
                 };
 
-            end
 
         end
 
     end
 
-end
-
-local function SortByName(oItemA, oItemB)
-    return oItemA.GetName() < oItemB.GetName();
 end
 
 return class("Game",
@@ -70,6 +49,7 @@ return class("Game",
     {--STATIC PUBLIC
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
         --Game = function(this, sAuthCode) end, --static constructor (runs after class object creation)
+        --INFOINI_SECTIONS = _eInfoINISections,
         GetActive = function()
             return _oActiveGame;
         end,
@@ -136,10 +116,17 @@ return class("Game",
             end
 
             _oActiveGame = oGame;
+
             Log.Note("Game.Activate: Loading game, \""..oGame.GetName()..'".');
-            FS.PrepGame(oGame); --set the filepaths for the current game            
-            ProcessDox();--TODO get this boolean from INI file before running Dox
+
+            --set the filepaths for the current game
+            FS.Game.Prep(oGame);
+            --update this game's card sets
+            oGame.UpdateCardSets();
+            --TODO get this boolean from INI file before running Dox
+            ProcessDox();
             ProcSys.PrepGame(oGame);
+
             Log.Note("Game.Activate: Game loaded.");
         end,
         --rebuilds all game objects and refreshes the private static info
@@ -148,13 +135,33 @@ return class("Game",
             _tGames = {};
 
             --iterate over all potential game folders
-            local tGameFolders  = Folder.Find(FS.Games.."\\", "*", false, nil);
+            local tGameUUIDs = FS.Game.GetUUIDs();
 
-            if (type(tGameFolders) == "table") then
+            if (tGameUUIDs) then
 
-                for _, pGameFolder in pairs(tGameFolders) do
+                for _, sUUID in pairs(tGameUUIDs) do
+
                     --try to create the new game object
-                    Game(pGameFolder);
+                    local bSuccess, oGameOrErr = pcall(Game, sUUID);
+
+                    if (bSuccess) then
+                        local sName = oGameOrErr.GetName();
+
+                        if (sName:isempty()) then
+                            Log.Warning("Error creating game object, '"..sUUID.."'.\r\nGame name must be a non-blank string.");
+                        else
+                            --if the game is valid, add it to the list of games
+                            _tGames[sUUID] = {
+                                Name    = sName,
+                                Object  = oGameOrErr,
+                            };
+
+                        end
+
+                    else
+                        Log.Warning("Error creating game object, '"..sUUID.."'.\r\n"..oGameOrErr);
+                    end
+
                 end
 
             end
@@ -167,27 +174,27 @@ return class("Game",
         CardSets                = {},
         IncludePlugins__AUTOA_  = false,
         Name__AUTOA_            = '',
-        Path__AUTOR_            = null,
         UUID__AUTOR_            = null,
     },
     {--PROTECTED
 
     },
     {--PUBLIC
-        Game = function(this, cdat, pFolder)
+        --assumes this is being called by the refresh function (after getting data from FS)
+        Game = function(this, cdat, sUUID)
             local pri = cdat.pri;
 
-            --validate the input string and ensure it leads to a valid directory
-            if not (rawtype(pFolder) == "string" and Folder.DoesExist(pFolder)) then
-                error("Invalid game: Game path must lead to an existing directory.", 3);
-            end
+            --TODO validate input
 
-            --set the game's folder
-            pri.Path = pFolder;
-            --create the LiveFileRepo
+            pri.UUID = sUUID:upper();
 
-            --update my info
-            ValidateAndUpdateGame(this, cdat);
+            local pINI = FS.Game.GetInfoINIPath(sUUID);
+            local sSection = "SETTINGS";
+
+            pri.IncludePlugins  = INIFile.GetValueBoolean(  pINI, sSection, "IncludePlugins");
+            pri.Name            = INIFile.GetValue(         pINI, sSection, "Name");
+
+            --UpdateCardSets(this, pri);
         end,
         GetAllCardSets = function(this, cdat)
             local pri = cdat.pri;
@@ -239,7 +246,7 @@ return class("Game",
 
             return vRet;
         end,
-        GetCardSetNames = function(this, cdat)
+        --[[GetCardSetNames = function(this, cdat)
             local pri = cdat.pri;
             local tRet = {};
 
@@ -253,9 +260,9 @@ return class("Game",
         end,
         NewCardSet = function(this, cdat)
 
-        end,
+        end,]]
         --updates game, all game's card sets, and all LiveFiles
-        Update = ValidateAndUpdateGame,
+        UpdateCardSets = UpdateCardSets,
     },
     nil,   --extending class
     true,  --if the class is final
