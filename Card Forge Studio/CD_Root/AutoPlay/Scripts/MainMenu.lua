@@ -260,7 +260,7 @@ tSupport = {
 
             TheMenu.SetCallback(sMenuPath, Menu.EVENT.OnSelected, function(tItem)
                 ProcSys.LoadCardSet(oCardSet);
-                INIFile.SetValue(FS.Info, "SESSION", "LastCardSet", oCardSet.GetUUID());
+                INIFile.SetValue(FS.CardSet.Info, "SESSION", "LastCardSet", oCardSet.GetUUID());
             end);
 
         end

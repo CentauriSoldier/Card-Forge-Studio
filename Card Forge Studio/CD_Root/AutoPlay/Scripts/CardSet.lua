@@ -42,7 +42,7 @@ return class("CardSet",
 
 --TODO LEFT OFF HERE
 
---NOTE: CSV DAta should live in cardset
+--NOTE: CSV DAta should live in cardset? nooooo...
             --validate the input string and ensure it leads to a valid directory
             --if not (rawtype(pFolder) == "string" and Folder.DoesExist(pFolder)) then
         --       error("Invalid CardSet: CardSet path must lead to an existing directory.", 3);
@@ -64,7 +64,7 @@ return class("CardSet",
                 --end
 
             --end
-            local pFolder   = FS.CardSet.GetRoot(sGameUUID, sUUID);
+            --local pFolder   = FS.CardSet.GetRoot(sGameUUID, sUUID);
             local pInfoINI  = FS.CardSet.GetInfoINIPath(sGameUUID, sUUID);
             --TODO validate returns on FS calls
 

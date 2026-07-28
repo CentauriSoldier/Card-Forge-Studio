@@ -10,6 +10,7 @@ local base64                        = base64;
 
 local _pLiteXL                      = FILE_LITEXL;
 --TODO FINISH LOCALIZATION
+local FS                            = FS;
 ------------------------------------- General
 local _pAppCFG                      = FS.AppCFG;
 local _bAllowSave                   = false;
@@ -1031,42 +1032,42 @@ UpdateCardSetLiveFileRepo = function()
     oLiveFileRepo.Reset();
 
     --watch the RowProc file
-    oLiveFileRepo.Add("RowProc", oCardSet.GetRowProcPath(), _nLiveFileRepoTimerInterval,
+    oLiveFileRepo.Add("RowProc", FS.CardSet.RowProc, _nLiveFileRepoTimerInterval,
     function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
         _sRowProcCode       = sNewText;
         _bRowProcChanged    = true;
     end);
 
     --watch the Draw file
-    oLiveFileRepo.Add("Draw", oCardSet.GetDrawPath(), _nLiveFileRepoTimerInterval,
+    oLiveFileRepo.Add("Draw", FS.CardSet.Draw, _nLiveFileRepoTimerInterval,
     function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
         _sDrawCode      = sNewText;
         _bDrawChanged   = true;
     end);
 
     --watch the DrawBack file
-    oLiveFileRepo.Add("DrawBack", oCardSet.GetDrawBackPath(), _nLiveFileRepoTimerInterval,
+    oLiveFileRepo.Add("DrawBack", FS.CardSet.DrawBack, _nLiveFileRepoTimerInterval,
     function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
         _sDrawBackCode      = sNewText;
         _bDrawBackChanged   = true;
     end);
 
     --watch the Info file
-    oLiveFileRepo.Add("Info", oCardSet.GetInfoPath(), _nLiveFileRepoTimerInterval,
+    oLiveFileRepo.Add("Info", FS.CardSet.Info, _nLiveFileRepoTimerInterval,
     function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
         _sInfo          = sNewText;
         _bInfoChanged   = true;
     end);
 
     --watch the Code Columns file
-    oLiveFileRepo.Add("CodeColumns", oCardSet.GetCodeColumnsPath(), _nLiveFileRepoTimerInterval,
+    oLiveFileRepo.Add("CodeColumns", FS.CardSet.CodeColumns, _nLiveFileRepoTimerInterval,
     function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
         _sCodeColumns           = sNewText;
         _bCodeColumnsChanged    = true;
     end);
 
     --watch the Data file
-    oLiveFileRepo.Add("Data", oCardSet.GetDataPath(), _nLiveFileRepoTimerInterval,
+    oLiveFileRepo.Add("Data", FS.CardSet.Data, _nLiveFileRepoTimerInterval,
     function(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
         _bDataChanged = true;
     end);
@@ -1754,7 +1755,7 @@ return class("ProcSys",
 
                     local bLoadGridOK, sLoadGridErr = xpcall(function()
                         --reload the file
-                        LoadFileToGrid(_oActiveCardSet.GetDataPath());
+                        LoadFileToGrid(FS.CardSet.Data);
 
                         --update the current row and column if needed
                         if (_nCurrentRow >= _nRowCount) then
@@ -1886,7 +1887,7 @@ return class("ProcSys",
             _bSyncBusy = false;
 
             if not (bOK) then
-                error(sErr, 1);
+                error(sErr, 2);
             end
 
         end,

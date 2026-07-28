@@ -766,7 +766,7 @@ return class("Forge",
         !]]
         DrawImage = function(pImage, nX, nY, nWidth, nHeight, sName)--TODO REMOVE THIS....user can load image as needed this is merely a shortcut and a problematic
             --TODO assertions
-            local hImage, nImage = LoadImage(FS.Game.."\\"..SanitizePath(pImage, pImage), sName);
+            local hImage, nImage = LoadImage(FS.Game.Root.."\\"..SanitizePath(pImage, pImage), sName);
             --_D.SetFilteringMode(DRAW_BLEND_ALPHABLEND);
             _D.DrawImage(nImage, nX, nY, nWidth, nHeight);
         end,
