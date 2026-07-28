@@ -279,7 +279,7 @@ end
 @vis Static Private
 !]]
 BuildUserTable = function(sGame, tFileSpec)
-    local sInitChunk = TextFile.ReadToString(FS.Scripts.."\\"..tFileSpec.Full);
+    local sInitChunk = TextFile.ReadToString(FS.Game.Scripts.."\\"..tFileSpec.Full);
     --TODO CHECK AND ERROR on bad file
 
     local sName = tFileSpec.Filename;
@@ -1142,8 +1142,8 @@ UpdateGameLiveFileRepo = function()
         _bCFGChanged    = true;
     end
 
-    oLiveFileRepo.Add("CFG", FS.Scripts.."\\".._tFileSpecCFG.Full, _nLiveFileRepoTimerInterval, NotifyCFGChanged);
-    local tCFGFiles = File.Find(FS.CFG.."\\", "*.lua", false, false, nil, nil);
+    oLiveFileRepo.Add("CFG", FS.Game.Scripts.."\\".._tFileSpecCFG.Full, _nLiveFileRepoTimerInterval, NotifyCFGChanged);
+    local tCFGFiles = File.Find(FS.Game.CFG.."\\", "*.lua", false, false, nil, nil);
 
     if (type(tCFGFiles) == "table") then
 
@@ -1159,8 +1159,8 @@ UpdateGameLiveFileRepo = function()
         _bENVChanged    = true;
     end
 
-    oLiveFileRepo.Add("ENV", FS.Scripts.."\\".._tFileSpecENV.Full, _nLiveFileRepoTimerInterval, NotifyENVChanged);
-    local tENVFiles = File.Find(FS.ENV.."\\", "*.lua", false, false, nil, nil);
+    oLiveFileRepo.Add("ENV", FS.Game.Scripts.."\\".._tFileSpecENV.Full, _nLiveFileRepoTimerInterval, NotifyENVChanged);
+    local tENVFiles = File.Find(FS.Game.ENV.."\\", "*.lua", false, false, nil, nil);
 
     if (type(tENVFiles) == "table") then
 
@@ -1176,7 +1176,7 @@ UpdateGameLiveFileRepo = function()
         _bFontStylesChanged = true;
     end
 
-    oLiveFileRepo.Add("Styles", FS.Styles, _nLiveFileRepoTimerInterval, NotifyFontStylesChanged);
+    oLiveFileRepo.Add("Styles", FS.Game.Styles, _nLiveFileRepoTimerInterval, NotifyFontStylesChanged);
 
     --RowFilters
     local function NotifyRowFiltersChanged(tLiveFile, sOldText, sNewText, nOldCRC, nCRC)
@@ -1184,7 +1184,7 @@ UpdateGameLiveFileRepo = function()
         _bRowFiltersChanged = true;
     end
 
-    oLiveFileRepo.Add("RowFilters", FS.RowFilters, _nLiveFileRepoTimerInterval, NotifyRowFiltersChanged);
+    oLiveFileRepo.Add("RowFilters", FS.Game.RowFilters, _nLiveFileRepoTimerInterval, NotifyRowFiltersChanged);
 
     oLiveFileRepo.StartAll();
 end
@@ -1310,7 +1310,7 @@ UpdateRowFilters = function()
     _tRowFilters = RowFilter.BuildAllFromString(sBuiltInRowFilters, "Built-in");
 
     --include user row filters
-    pFile = FS.RowFilters;
+    pFile = FS.Game.RowFilters;
     if not (File.DoesExist(pFile)) then
         error("Error building row filters from file, '"..pFile.."'. File not found.");
     end
@@ -1479,7 +1479,7 @@ return class("ProcSys",
             end
 
             Log.Note("ProcSys.PrepGame: Updating user environment.");
-            _sFontStyleINI      = TextFile.ReadToString(FS.Styles);
+            _sFontStyleINI      = TextFile.ReadToString(FS.Game.Styles);
 
             _oActiveGame        = oGame;
             _sGameName          = oGame.GetName();
@@ -1530,12 +1530,14 @@ return class("ProcSys",
             --TryBackupFile(pData); --TODO FIX uncomment and place where appropriate this when ready!!
 
             --set defaults
+            FS.CardSet.Prep(oCardSet);
+
             _bAllowSave     = false;
-            _pActiveCSV     = oCardSet.GetDataPath();
-            _sDrawCode      = TextFile.ReadToString(oCardSet.GetDrawPath());
-            _sDrawBackCode  = TextFile.ReadToString(oCardSet.GetDrawBackPath());
-            _sRowProcCode   = TextFile.ReadToString(oCardSet.GetRowProcPath());
-            _sCodeColumns   = TextFile.ReadToString(oCardSet.GetCodeColumnsPath());
+            _pActiveCSV     = FS.CardSet.Data;
+            _sDrawCode      = TextFile.ReadToString(FS.CardSet.Draw);
+            _sDrawBackCode  = TextFile.ReadToString(FS.CardSet.DrawBack);
+            _sRowProcCode   = TextFile.ReadToString(FS.CardSet.RowProc);
+            _sCodeColumns   = TextFile.ReadToString(FS.CardSet.CodeColumns);
             _sCardSetName   = sCardSetName;
             _nCardWidth     = oCardSet.GetCardWidth();
             _nCardHeight    = oCardSet.GetCardHeight();
@@ -1664,14 +1666,14 @@ return class("ProcSys",
             local tCodeColumn = _tCodeColumns[sColumn];
 
             if (tCodeColumn) then
-                local pScratch = FS.Scratch;
+                local pScratch = FS.Game.Scratch;
                 --prep the temp file and load the editor
                 local sOldCode = GetCellText(_sBaseDataGrid, nRow, nColumn);
                 sOldCode = sOldCode:isempty() and sOldCode or dec(sOldCode);
                 TextFile.WriteFromString(pScratch, sOldCode, false);--TODO FILE ERROR CHECK
                 --Application.Sleep(200);
                 --open the editor
-                File.Run(_pLiteXL, '"'..pScratch..'"', FS.Temp, SW_SHOWNORMAL, true);
+                File.Run(_pLiteXL, '"'..pScratch..'"', FS.Game.Temp, SW_SHOWNORMAL, true);
                 --TODO LEFT OFF HERE
                 --get the new code from the temp file and write it the cell
                 local sNewCode = TextFile.ReadToString(pScratch); --TODO FILE ERROR CHECK

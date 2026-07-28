@@ -62,11 +62,11 @@ local function SanitizePath(sRelPath, vMessage)
     return sPath:gsub("/", "\\");   -- convert to Windows;
 end
 
---TODO make this throw an error so the user knows what's happening when a file doesn't exists or fails 
+--TODO make this throw an error so the user knows what's happening when a file doesn't exists or fails
 local function Import(sPathRaw, vMessage)
     local sMessage = rawtype(vMessage) == "string" and vMessage or "";
     local sPath = SanitizePath(sPathRaw, sMessage);
-    local pFile = (FS.Game.."\\"..sPath):gsub("\\+", "\\");
+    local pFile = (FS.Game.Root.."\\"..sPath):gsub("\\+", "\\");
 
     if not (File.DoesExist(pFile)) then
         error(sImportError.."File does not exist at \""..sPath.."\".\r\n"..sMessage, 2);

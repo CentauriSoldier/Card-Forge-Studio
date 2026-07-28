@@ -7,25 +7,13 @@ local _sOriginalPackagePath = package.path;
 ██████╔╝███████╗╚██████╗███████╗██║  ██║██║  ██║██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║███████║
 ╚═════╝ ╚══════╝ ╚═════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝--]]
 
---[[
-╭─╮╭─╮╭─╴╭─╮╭─╴╶┬╴╭─╮
-├─╯├┬╯├╴ ╰─╮├╴  │ ╰─╮
-╵  ╵╰╴╰─╴╰─╯╰─╴ ╵ ╰─╯--]]
---preset values, constant throughout program flow
-local pTemplates   = _Docs.."\\Templates";
-local pAppDir      = _AppDataLocal.."\\"..APP_NAME;
-local pGames       = pAppDir.."\\Games";
-local pAppCFG_T    = pTemplates.."\\"..APP_CFG; --template
-local pAppCFG      = pAppDir.."\\"..APP_CFG;
-local pTutorials   = _Docs.."\\Tutorials";
-local pExporters   = _Scripts.."\\Exporters";
 
 --[[
 ╭─╴╭─╮╭┬╮╭─╴
 │╶╮├─┤│││├╴
 ╰─╯╵ ╵╵ ╵╰─╴--]]
 local tGame     = {
-    Path        = "",
+    Root        = "",
     Docs        = "",
     Temp        = "",
     CardSets    = "",
@@ -58,7 +46,13 @@ setmetatable(tGameDecoy, tGameMeta);
 │  ├─┤├┬╯ ││╰─╮├╴  │
 ╰─╴╵ ╵╵╰╴╶┴╯╰─╯╰─╴ ╵ --]]
 local tCardSet = {
-
+    Root            = "",
+    Data            = "",
+    DrawPath        = "",
+    DrawBackPath    = "",
+    Info            = "",
+    RowProcPath     = "",
+    CodeColumns     = "",
 };
 local tCardSetDecoy    = {};
 local tCardSetMeta     = {
@@ -69,11 +63,21 @@ local tCardSetMeta     = {
     __metatable = false,
 };
 
+setmetatable(tCardSetDecoy, tCardSetMeta);
 
 --[[
 ╭─╴╭─╮
 ├╴ ╰─╮
 ╵  ╰─╯--]]
+--preset values, constant throughout program flow
+local pTemplates   = _Docs.."\\Templates";
+local pAppDir      = _AppDataLocal.."\\"..APP_NAME;
+local pGames       = pAppDir.."\\Games";
+local pAppCFG_T    = pTemplates.."\\"..APP_CFG; --template
+local pAppCFG      = pAppDir.."\\"..APP_CFG;
+local pTutorials   = _Docs.."\\Tutorials";
+local pExporters   = _Scripts.."\\Exporters";
+
 local tFS       = {
     Templates       = pTemplates,
     AppDir          = pAppDir,
@@ -160,7 +164,7 @@ end
 local function ProcessUUID(sUUID, sCaller)
 
     if (type(sUUID) ~= "string" and not sUUID:isempty()) then
-        Log.Warning(sCaller..": Error processing UUID input: UUID must be a UUID string.");
+        Log.Warning(sCaller..": Error processing UUID input: UUID must be a valid UUID string.");
         return;
     end
 
@@ -207,7 +211,7 @@ tGame.Prep = function(oGame)
     --TODO USE FILESPECs WHERE POSSIBLE
 
     --setup the game's folder
-    tGame.Path             = pGame;                                        --CheckFolder(pGame);
+    tGame.Root             = pGame;                                        --CheckFolder(pGame);
     tGame.Docs             = pGame             .."\\Docs";                 CheckFolder(tGame.Docs);
     tGame.Temp             = pGame             .."\\Temp";                 CheckFolder(tGame.Temp);
     tGame.CardSets         = pGame             .."\\"..FOLDER_CARD_SETS;   CheckFolder(tGame.CardSets);
@@ -245,32 +249,38 @@ tGame.Prep = function(oGame)
 end
 
 tGame.GetCardSetUUIDs = function(vUUID)
-    local sGameUUID = ProcessUUID(vUUID);
+    local sGameUUID = ProcessUUID(vUUID, "FS.Game.GetCardSetUUIDs");
+    local tRet;
 
-    if (type(sGameUUID) ~= "string" and not sGameUUID:isempty()) then
-        Log.Warning("Error getting Game's CardSet UUIDs: Game UUID must be a UUID string.");
-        return;
+    if (sGameUUID) then
+        local pCardSets = tFS.Games.."\\"..sGameUUID:upper().."\\"..FOLDER_CARD_SETS;
+
+        if not (Folder.DoesExist(pCardSets)) then
+            Log.Warning("Error getting Game's CardSet UUIDs: The specified Game path does not exist.");
+            return;
+        end
+
+        tRet = GetSubfolderUUIDs(pCardSets, "FS.Game.GetCardSetUUIDs");
     end
 
-    local pCardSets = tFS.Games.."\\"..sGameUUID:upper().."\\"..FOLDER_CARD_SETS;
-
-    if not (Folder.DoesExist(pCardSets)) then
-        Log.Warning("Error getting Game's CardSet UUIDs: The specified Game path does not exist.");
-        return;
-    end
-
-    return GetSubfolderUUIDs(pCardSets, "FS.Game.GetUUIDs");
+    return tRet;
 end
+
 tGame.GetUUIDs = function()
     return GetSubfolderUUIDs(tFS.Games, "FS.Game.GetUUIDs");
 end
+
+
 --for Game constructor bootstrapping
 tGame.GetInfoINIPath = function(vUUID)
+    --TODO asssertions
     local sUUID = ProcessUUID(vUUID);
-    return FS.Game.GetPath(sUUID.."\\Info.ini");
+    return FS.Game.GetRoot(sUUID.."\\Info.ini");
 end
+
 --for Game constructor bootstrapping
-tGame.GetPath = function(vUUID)
+tGame.GetRoot = function(vUUID)
+    --TODO asssertions
     local sUUID = ProcessUUID(vUUID);
     return tFS.Games.."\\"..sUUID;
 end
@@ -284,34 +294,53 @@ end
 ╚██████╗██║  ██║██║  ██║██████╔╝███████║███████╗   ██║
  ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝   ╚═╝   --]]
 
-tCardSet.GetInfoINIPath = function(vUUID)
-    local sUUID = ProcessUUID(vUUID);
-    return FS.CardSet.GetPath(sUUID).."\\Info.ini";
+tCardSet.GetInfoINIPath = function(vGameUUID, vUUID) --TODO BUG FIX thiese paths are not correct
+    --TODO asssertions
+    local sGameUUID = ProcessUUID(vGameUUID, "FS.CardSet.GetInfoINIPath");
+    local sUUID     = ProcessUUID(vUUID, "FS.CardSet.GetInfoINIPath");
+    local sRet;
+
+    if (sGameUUID and sUUID) then
+        sRet = tCardSet.GetRoot(vGameUUID, sUUID).."\\"..FILESPEC_CARDSET_INFO.Full;
+    end
+
+    return sRet;
 end
 
 
-tCardSet.GetPath = function(vUUID)
-    local sUUID = ProcessUUID(vUUID);
-    local sCardSetUUID = sUUID:upper();
+tCardSet.GetRoot = function(vGameUUID, vUUID)
+    --TODO asssertions
+    local sGameUUID = ProcessUUID(vGameUUID, "FS.CardSet.GetRoot");
+    local sUUID     = ProcessUUID(vUUID, "FS.CardSet.GetRoot");
+    local sRet;
 
-    local pCardSet = tFS.CardSets.."\\"..sCardSetUUID;
+    if (sGameUUID and sUUID) then
+        sRet = tFS.Games.."\\"..sGameUUID.."\\"..FOLDER_CARD_SETS.."\\"..sUUID;
 
-    if not (Folder.DoesExist(pCardSet)) then
-        Log.Warning("Error getting CardSet's path ("..sCardSetUUID..") at path '"..pCardSet.."': The specified path does not exist.");
-    return;
+        if not (Folder.DoesExist(sRet)) then
+            Log.Warning("Error getting CardSet's path ("..sUUID..") at path '"..sRet.."': The specified path does not exist.");
+            return;
+        end
+
+    end
+
+    return sRet;
 end
 
-return pCardSet;
-end
+tCardSet.Prep = function(oCardSet) --TODO LEFT OFF HERE
+    --TODO validate input
+    local sUUID             = oCardSet.GetUUID()
+    local pCardSet          = tGame.Root.."\\"..FOLDER_CARD_SETS.."\\"..sUUID;
 
-tCardSet.Prep = function(sUUID) --TODO LEFT OFF HERE
-    local pData         = pFolder.."\\"..FILESPEC_CARDSET_DATA.Full;
-    local pDrawPath     = pFolder.."\\"..FILESPEC_CARDSET_DRAW.Full;
-    local pDrawBackPath = pFolder.."\\"..FILESPEC_CARDSET_DRAWBACK.Full;
-    local pInfo         = pFolder.."\\"..FILESPEC_CARDSET_INFO.Full;
-    local pRowProcPath  = pFolder.."\\"..FILESPEC_CARDSET_ROWPROC.Full;
-    local pCodeColumns  = pFolder.."\\"..FILESPEC_CARDSET_CODECOLUMMS.Full;
-    tFS.Cards            = tFS.Game.."\\"..FOLDER_CARD_SETS;   CheckFolder(tFS.Cards);
+    tCardSet.Root           = pCardSet;
+    tCardSet.Data           = pCardSet.."\\"..FILESPEC_CARDSET_DATA.Full;
+    tCardSet.Draw           = pCardSet.."\\"..FILESPEC_CARDSET_DRAW.Full;
+    tCardSet.DrawBack       = pCardSet.."\\"..FILESPEC_CARDSET_DRAWBACK.Full;
+    tCardSet.Info           = pCardSet.."\\"..FILESPEC_CARDSET_INFO.Full;
+    tCardSet.RowProc        = pCardSet.."\\"..FILESPEC_CARDSET_ROWPROC.Full;
+    tCardSet.CodeColumns    = pCardSet.."\\"..FILESPEC_CARDSET_CODECOLUMMS.Full;
+
+    --tFS.Cards               = tFS.Game.."\\"..FOLDER_CARD_SETS;   CheckFolder(tFS.Cards);
 end
 
 --[[

@@ -29,7 +29,7 @@ return class("CardSet",
         --RowProcPath__AUTOR_     = null,
         --CodeColumnsPath__AUTOR_ = null,
         Name__AUTOA_            = '',
-        Path__AUTOR_            = null,
+        --Path__AUTOR_            = null,
         UUID__AUTOR_            = null,
     },
     {--PROTECTED
@@ -41,33 +41,39 @@ return class("CardSet",
             --TODO validate input
 
 --TODO LEFT OFF HERE
+
+--NOTE: CSV DAta should live in cardset
             --validate the input string and ensure it leads to a valid directory
-            if not (rawtype(pFolder) == "string" and Folder.DoesExist(pFolder)) then
-                error("Invalid CardSet: CardSet path must lead to an existing directory.", 3);
-            end
+            --if not (rawtype(pFolder) == "string" and Folder.DoesExist(pFolder)) then
+        --       error("Invalid CardSet: CardSet path must lead to an existing directory.", 3);
+        --    end
 
-            local pData         = pFolder.."\\"..FILESPEC_CARDSET_DATA.Full;
-            local pDrawPath     = pFolder.."\\"..FILESPEC_CARDSET_DRAW.Full;
-            local pDrawBackPath = pFolder.."\\"..FILESPEC_CARDSET_DRAWBACK.Full;
-            local pInfo         = pFolder.."\\"..FILESPEC_CARDSET_INFO.Full;
-            local pRowProcPath  = pFolder.."\\"..FILESPEC_CARDSET_ROWPROC.Full;
-            local pCodeColumns  = pFolder.."\\"..FILESPEC_CARDSET_CODECOLUMMS.Full;
+            --local pData         = pFolder.."\\"..FILESPEC_CARDSET_DATA.Full;
+            --local pDrawPath     = pFolder.."\\"..FILESPEC_CARDSET_DRAW.Full;
+            --local pDrawBackPath = pFolder.."\\"..FILESPEC_CARDSET_DRAWBACK.Full;
+            --local pInfo         = pFolder.."\\"..FILESPEC_CARDSET_INFO.Full;
+            --local pRowProcPath  = pFolder.."\\"..FILESPEC_CARDSET_ROWPROC.Full;
+            --local pCodeColumns  = pFolder.."\\"..FILESPEC_CARDSET_CODECOLUMMS.Full;
 
-            local tCheckFiles = {pDrawPath, pData, pInfo, pRowProcPath, pCodeColumns};
+            --local tCheckFiles = {pDrawPath, pData, pInfo, pRowProcPath, pCodeColumns};
 
-            for _, pFile in pairs(tCheckFiles) do
+            --for _, pFile in pairs(tCheckFiles) do
 
-                if not (File.DoesExist(pFile)) then
-                    error("Invalid Card Set: missing expected file at \""..pFile..".\"");
-                end
+                --if not (File.DoesExist(pFile)) then
+                    --error("Invalid Card Set: missing expected file at \""..pFile..".\"");
+                --end
 
-            end
+            --end
+            local pFolder   = FS.CardSet.GetRoot(sGameUUID, sUUID);
+            local pInfoINI  = FS.CardSet.GetInfoINIPath(sGameUUID, sUUID);
+            --TODO validate returns on FS calls
 
             --TODO SPECIAL COLUMNS!!!
-            local sUUID         = GameUtil.ValidateObjectFolder(pFolder, "CardSet");
-            local sName         = GameUtil.ValidateObjectName(pFolder, "CardSet");
-            local nCardWidth    = tonumber(GetValue(pFolder.."\\Info.ini", "SETTINGS", "CardWidth"));
-            local nCardHeight   = tonumber(GetValue(pFolder.."\\Info.ini", "SETTINGS", "CardHeight"));
+
+
+            local sName         = GetValue(pInfoINI, "SETTINGS", "Name")
+            local nCardWidth    = tonumber(GetValue(pInfoINI, "SETTINGS", "CardWidth"));
+            local nCardHeight   = tonumber(GetValue(pInfoINI, "SETTINGS", "CardHeight"));
 
             if (not nCardWidth) then
                 error("Invalid ${type}: Malformed ${type} INI file at ${path}. Missing \"CardWidth\" value or non-numeric value given." % {path = pFolder, type = sType}, 2);
@@ -77,16 +83,16 @@ return class("CardSet",
                 error("Invalid ${type}: Malformed ${type} INI file at ${path}. Missing \"CardHeight\" value or non-numeric value given." % {path = pFolder, type = sType}, 2);
             end
 
-            --set the game's info
+            --[[set the game's info
             pri.DataPath        = pData;
             pri.DrawPath        = pDrawPath;
             pri.DrawBackPath    = pDrawBackPath;
             pri.InfoPath        = pInfo;
             pri.RowProcPath     = pRowProcPath;
-            pri.CodeColumnsPath = pCodeColumns;
+            pri.CodeColumnsPath = pCodeColumns;]]
             pri.Name            = sName;
-            pri.Path            = pFolder;
-            pri.UUID            = sUUID;
+            --pri.Path            = pFolder;
+            pri.UUID            = sUUID:upper(); --TODO validate these
             pri.CardWidth       = abs(nCardWidth);
             pri.CardHeight      = abs(nCardHeight);
         end,

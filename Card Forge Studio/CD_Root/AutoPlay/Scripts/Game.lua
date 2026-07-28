@@ -5,7 +5,7 @@ local ReadToString  = TextFile.ReadToString;
 local io            = io;
 --TODO with New methods, checkf or existing item first...do not overwrite
 
-local CardSet   = require("Game.CardSet");
+local CardSet   = require("CardSet");
 
 local function SortByName(oItemA, oItemB)
     return oItemA.GetName() < oItemB.GetName();
@@ -20,7 +20,6 @@ local function UpdateCardSets(this, cdat)
     local sGameUUID = this.GetUUID();
 
     --iterate over all potential card set folders
-    p(type(FS.Game))
     local tCardSetUUIDs  = FS.Game.GetCardSetUUIDs(sGameUUID);
 
     if (tCardSetUUIDs) then

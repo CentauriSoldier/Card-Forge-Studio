@@ -1,8 +1,8 @@
 return function()
     Log.Note("ProcessDox: Building game's documentation files.");
-    local sName           = INIFile.GetValue(FS.Info, "SETTINGS", "Name");
+    local sName           = INIFile.GetValue(FS.Game.Info, "SETTINGS", "Name");
     sName                 = (type.isstring(sName) and not sName:isempty()) and sName or APP_NAME;
-    local bIncludePlugins = INIFile.GetValueBoolean(FS.Info, "SETTINGS", "IncludePlugins");
+    local bIncludePlugins = INIFile.GetValueBoolean(FS.Game.Info, "SETTINGS", "IncludePlugins");
 
     local oDoxLua = DoxLua(sName);
 
@@ -36,21 +36,21 @@ return function()
     end
 
     -- Import ALL app scripts under _Scripts (recursively)
-    File.Find(sScriptsRoot .. "\\", "*.lua", true, false, nil, ImportFile);
+    File.Find(sScriptsRoot.."\\", "*.lua", true, false, nil, ImportFile);
 
     -- Import ALL game scripts (recursively)
-    File.Find(FS.Game .. "\\", "*.lua", true, false, nil, ImportFile);
+    File.Find(FS.Game.Root.."\\", "*.lua", true, false, nil, ImportFile);
 
     -- Optional intro
-    local pIntro = FS.Docs .. "\\intro";
+    local pIntro = FS.Game.Docs .. "\\intro";
     if (File.DoesExist(pIntro)) then
         oDoxLua.setIntro(TextFile.ReadToString(pIntro));
     end
 
-    File.Delete(FS.Docs.."\\"..DOX_EXPORT_FILENAME);
+    File.Delete(FS.Game.Docs.."\\"..DOX_EXPORT_FILENAME);
 
     oDoxLua.refresh();
-    oDoxLua.setOutputPath(FS.Docs);
+    oDoxLua.setOutputPath(FS.Game.Docs);
     oDoxLua.export(DOX_EXPORT_FILENAME);
     Log.Note("ProcessDox: Build complete.");
 end
