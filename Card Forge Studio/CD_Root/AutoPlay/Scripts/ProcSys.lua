@@ -605,10 +605,40 @@ LoadFileToGrid = function(pFile)
         }
     };
 
+    --TODO NOTE TEST
+    local tBaseCSV, tHeaders = FTCSV.parse(pFile);
+    local sNote = "";
+    for nRow, tRow in ipairs(tBaseCSV) do
+
+        if tRow.Class == "Land" then
+            sNote = sNote..tRow.Name.."\r\n"
+        end
+
+    end
+
+    Log.Note(sNote);
+
+
+    --TODO next, apply row filter ALL (unless there's a previously-loaded filter)
+
     --configure the grids and load the data file
     for _, tGrid in ipairs(tGrids) do
         local sGrid = tGrid.Name;
         Grid.DeleteAllItems(        sGrid);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         --TODO LEFT OFF HERE I need to manually load each row, checking it against the active row filter
         --apply row filter
