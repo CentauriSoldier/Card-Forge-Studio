@@ -51,9 +51,10 @@ constant("PROCSYS_GRID_FINAL",                      "grd final data");
 
 constant("FILE_LITEXL", _Bin.."\\lite-xl\\lite-xl.exe");
 
+constant("ROW_FILTER_DEFAULT",                      "*All");
 
-
-
+constant("CSV_TYPE_BASE",                           "CSV Base");
+constant("CSV_TYPE_FINAL",                          "CSV Final");
 
 
 --[[!

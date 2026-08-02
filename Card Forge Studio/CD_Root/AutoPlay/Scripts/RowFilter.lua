@@ -26,10 +26,10 @@ end
 
 local function BuildRowFilterFromTable(tFilterData)
     local sName = tFilterData.Name;
-    local fRowSelector = tFilterData.RowSelector;
+    local fRowPredicate = tFilterData.RowPredicate;
 
     local tRowFilter = {
-        Apply       = function(tRows)
+        --[[Apply       = function(tRows)
             local tRet          = {};
             local nIndex        = 0;
             local wUser         = UserEnv.Get();
@@ -38,7 +38,7 @@ local function BuildRowFilterFromTable(tFilterData)
 
             for _, tRow in ipairs(tRows) do
 
-                if (fRowSelector(tRow)) then
+                if (fRowPredicate(tRow)) then
                     nIndex = nIndex + 1;
                     tRet[nIndex] = tRow;
                 end
@@ -46,11 +46,12 @@ local function BuildRowFilterFromTable(tFilterData)
             end
 
             return tRet;
-        end,
-        Name        = sName,
-        Description = sDescription,
-        --tBlacklist  = tBlacklist,
-        --Whitelist   = tWhitelist,
+        end,]]
+        RowPredicate    = fRowPredicate,
+        Name            = sName,
+        Description     = sDescription,
+        --tBlacklist    = tBlacklist,
+        --Whitelist     = tWhitelist,
     };
 
     local tRowFilterDecoy  = {};
@@ -69,7 +70,7 @@ end
 
 --assumes the input is a valid table. Checks the entry table contents.
 local function ValidateRowFilterTable(tFilter, sChunkName)
-    local sName, zName, sDescription, zDescription, fRowSelector, zRowSelector;
+    local sName, zName, sDescription, zDescription, fRowPredicate, zRowPredicate;
     zName = type(tFilter.Name);
 
     if (zName ~= "string") then
@@ -93,9 +94,9 @@ local function ValidateRowFilterTable(tFilter, sChunkName)
         Log.Warning("Could not create RowFilter ("..sChunkName.."),\r\n'"..sName.."'. 'Description' must be a non-blank string."); return;
     end
 
-    zRowSelector = type(tFilter.RowSelector);
-    if (zRowSelector ~= "function") then
-        Log.Warning("Could not create RowFilter ("..sChunkName.."),\r\n'"..sName.."'. Expected 'RowSelector' key with function value. Got "..zRowSelector..'.'); return;
+    zRowPredicate = type(tFilter.RowPredicate);
+    if (zRowPredicate ~= "function") then
+        Log.Warning("Could not create RowFilter ("..sChunkName.."),\r\n'"..sName.."'. Expected 'RowPredicate' key with function value. Got "..zRowPredicate..'.'); return;
     end
 
     --TODO FINISH check whitelist/blacklist when ready to complete that part

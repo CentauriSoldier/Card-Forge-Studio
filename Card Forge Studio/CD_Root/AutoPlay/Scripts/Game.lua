@@ -120,6 +120,9 @@ return class("Game",
 
             --set the filepaths for the current game
             FS.Game.Prep(oGame);
+            --TODO LEFT OFF HERE
+            --load row filters
+
             --update this game's card sets
             oGame.UpdateCardSets();
             --TODO get this boolean from INI file before running Dox
