@@ -50,6 +50,7 @@ constant("PROCSYS_GRID_BASE",                       "grd base data");
 constant("PROCSYS_GRID_FINAL",                      "grd final data");
 
 constant("FILE_LITEXL", _Bin.."\\lite-xl\\lite-xl.exe");
+constant("FILE_BUILT_IN_ROW_FILTERS",               _Scripts.."\\ProcSys\\CSV\\RowFilters.lua");
 
 constant("ROW_FILTER_DEFAULT",                      "*All");
 

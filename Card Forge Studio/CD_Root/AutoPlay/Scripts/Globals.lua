@@ -18,7 +18,6 @@ local tImportSystem = require("Globals.ImportSystem");
 Import              = tImportSystem.Import;
 SanitizePath        = tImportSystem.SanitizePath;
 ProcessDox          = require("Globals.ProcessDox");
-RowFilter           = require("RowFilter");
 Exporter            = require("Exporter");
     ExporterImage           = require("Exporters.ExporterImage");
 FontStyle   = require("FontStyle");
