@@ -46,16 +46,16 @@ constant("PROCSYS_SYNC_TIMER_ID",                   GetNextTimerID());
 constant("PROCSYS_SYNC_TIMER_INTERVAL",             10);
 constant("PROCSYS_TO_TABLE",                        1);
 constant("PROCSYS_TO_NUMBER",                       2);
-constant("PROCSYS_GRID_BASE",                       "grd base data");
-constant("PROCSYS_GRID_FINAL",                      "grd final data");
+constant("PROCSYS_GRID_BASE",                       "grd Base data");
+constant("PROCSYS_GRID_FINAL",                      "grd Final data");
 
 constant("FILE_LITEXL", _Bin.."\\lite-xl\\lite-xl.exe");
 constant("FILE_BUILT_IN_ROW_FILTERS",               _Scripts.."\\ProcSys\\CSV\\RowFilters.lua");
 
 constant("ROW_FILTER_DEFAULT",                      "*All");
 
-constant("CSV_TYPE_BASE",                           "CSV Base");
-constant("CSV_TYPE_FINAL",                          "CSV Final");
+constant("DATA_TYPE_BASE",                          "CSV Base");
+constant("DATA_TYPE_FINAL",                         "CSV Final");
 
 
 --[[!

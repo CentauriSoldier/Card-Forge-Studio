@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="iso-8859-1"?><DocumentData>
-<ProductVersion>9.1.0.0</ProductVersion>
+<ProductVersion>9.2.0.0</ProductVersion>
 <ProductID>{ABF9EF9E-ECF6-4019-8A3E-908A6CFF4D1A}</ProductID>
 <IRProductName>AutoPlay Media Studio 9</IRProductName>
 <ProductType>Commercial</ProductType>
@@ -12,7 +12,7 @@
 <Email/>
 <Comments/>
 <CreatedVersion>9.1.0.0 (Professional Edition Commercial)</CreatedVersion>
-<LastSavedVersion>9.1.0.0 (Professional Edition Commercial)</LastSavedVersion>
+<LastSavedVersion>9.2.0.0 (Professional Edition Commercial)</LastSavedVersion>
 </DocInfo>
 <ProjectInfo ToolTipStyle="0">
 <Office2007Theme Theme="5"/>
@@ -2020,7 +2020,7 @@ end</Script>
 </Event>
 <Object>
 <Type>17</Type>
-<Name>grd final data</Name>
+<Name>grd Final data</Name>
 <VisibleAtDesignTime>1</VisibleAtDesignTime>
 <VisibleAtRunTime>0</VisibleAtRunTime>
 <Locked>0</Locked>
@@ -2109,7 +2109,7 @@ end</Script>
 </Object>
 <Object>
 <Type>17</Type>
-<Name>grd base data</Name>
+<Name>grd Base data</Name>
 <VisibleAtDesignTime>1</VisibleAtDesignTime>
 <VisibleAtRunTime>0</VisibleAtRunTime>
 <Locked>0</Locked>

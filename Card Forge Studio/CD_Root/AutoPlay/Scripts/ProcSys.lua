@@ -49,7 +49,7 @@ local _tENV                         = null;
 local _bAutoSizeGrid                = true;
 local _sBaseDataGrid                = PROCSYS_GRID_BASE;
 local _sFinalDataGrid               = PROCSYS_GRID_FINAL;
-local _tGridByType                  = {[CSV_TYPE_BASE] = PROCSYS_GRID_BASE, [CSV_TYPE_FINAL] = PROCSYS_GRID_FINAL};
+local _tGridByType                  = {[DATA_TYPE_BASE] = PROCSYS_GRID_BASE, [DATA_TYPE_FINAL] = PROCSYS_GRID_FINAL};
 local _bIsLoading                   = false;
 local _nCurrentRow                  = 1;
 local _nCurrentColumn               = 1;
@@ -306,7 +306,7 @@ BuildWindows = function()
         };
 
         --create the data editor first
-        local oDataEdit = WinAMS(OBJECT_GRID, "Base Data Editor", 0, 0, 800, 1000, "grd base data", nil, OnReadyGrids)--TODO get values from INI, CHANGE NAME
+        local oDataEdit = WinAMS(OBJECT_GRID, "Base Data Editor", 0, 0, 800, 1000, PROCSYS_GRID_BASE, nil, OnReadyGrids)--TODO get values from INI, CHANGE NAME
         tWindows[_ePane.DATA_EDIT] = {
             Object = oDataEdit,
             WindowHandle = oDataEdit.GetWindowHandle(),
@@ -319,7 +319,7 @@ BuildWindows = function()
         };
 
         --then the data viewer
-        local oDataView = WinAMS(OBJECT_GRID, "Final Data Viewer", 1400, 0, 800, 1000, "grd final data", nil, OnReadyGrids)--TODO get values from INI
+        local oDataView = WinAMS(OBJECT_GRID, "Final Data Viewer", 1400, 0, 800, 1000, PROCSYS_GRID_FINAL, nil, OnReadyGrids)--TODO get values from INI
         tWindows[_ePane.DATA_VIEW] = {
             Object          = oDataView,
             WindowHandle    = oDataView.GetWindowHandle(),
@@ -911,7 +911,7 @@ return class("ProcSys",
 
             if (bProcess) then
                 --mark the row for reprocessing
-                MarkRowDirty(nRow);
+                CSV.MarkRowDirty(nRow);
                 --update saveability
                 _bAllowSave = true;
                 MainMenu.SetEnabled("CardSet:>Save", true);
@@ -982,32 +982,13 @@ return class("ProcSys",
             --update the current selection
             --_nCurrentRow    = nRow;
             --_nCurrentColumn = nColumn;
-            CSV.UpdateActiveCell(nRow, nColumn);
-
-            --if it's a special column, fire up the editor
-            local sColumn = _tColumnIDNameMap[nColumn];
-            local tCodeColumn = _tCodeColumns[sColumn];
-
-            if (tCodeColumn) then
-                local pScratch = FS.Game.Scratch;
-                --prep the temp file and load the editor
-                local sOldCode = GetCellText(_sBaseDataGrid, nRow, nColumn);
-                sOldCode = sOldCode:isempty() and sOldCode or dec(sOldCode);
-                TextFile.WriteFromString(pScratch, sOldCode, false);--TODO FILE ERROR CHECK
-                --Application.Sleep(200);
-                --open the editor
-                File.Run(_pLiteXL, '"'..pScratch..'"', FS.Game.Temp, SW_SHOWNORMAL, true);
-                --TODO LEFT OFF HERE
-                --get the new code from the temp file and write it the cell
-                local sNewCode = TextFile.ReadToString(pScratch); --TODO FILE ERROR CHECK
-                SetCellText(_sBaseDataGrid, nRow, nColumn, enc(sNewCode));
-            end
+            CSV.OnSelectionChanged(nRow + 1, nColumn + 1);
 
             if (_nLastRow ~= nRow) then
                 --set the last row
                 _nLastRow = nRow;
                 --get the row (ensuring processing first)
-                local tRow = CSV.EnsureRowProcessed(nRow);
+                local tRow = CSV.EnsureRowProcessed(nRow + 1);
                 --update the env
                 UserEnv.ProcSysUpdateRoot {_tRow = tRow};
                 --request card redraw
@@ -1078,7 +1059,7 @@ return class("ProcSys",
                     local bLoadGridOK, sLoadGridErr = xpcall(function()
                         --reload the file
                         _nRowCount, _nColumnCount = CSV.LoadFromFile(FS.CardSet.Data);
-                        CSV.LoadToGrid();
+                        CSV.UpdateGrids();
 
                     end, XPCallError);
 
@@ -1111,7 +1092,7 @@ return class("ProcSys",
 
                 if (bReloadCodeColumns) then
                     _bCodeColumnsChanged = false;
-                    CSV.UpdateCodeColumns();
+                    CSV.UpdateCodeColumns(_sCodeColumns);
                 end
 
                 if (_bENVChanged) then
