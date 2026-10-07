@@ -1,0 +1,22 @@
+body {
+    background-color: #f8f9fa;
+}
+
+h1 {
+    font-weight: 600;
+}
+
+h2 {
+    margin-top: 2rem;
+    font-weight: 600;
+}
+
+.license-block {
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    padding: 1rem;
+    white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}

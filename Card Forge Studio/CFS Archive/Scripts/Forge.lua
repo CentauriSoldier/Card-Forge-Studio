@@ -1,0 +1,1363 @@
+-------------------------🅻🅾🅲🅰🅻🅸🆉🅰🆃🅸🅾🅽--------------------
+local class             = class;
+local math              = math;
+local rawtype           = rawtype;
+local string            = string;
+local toboolean         = toboolean;
+local tonumber          = tonumber;
+local tostring          = tostring;
+local type              = type;
+    isnumber            = type.isnumber;
+    isstring            = type.isstring;
+local floor             = math.floor;
+local clamp             = math.clamp;
+local SanitizePath      = SanitizePath;
+
+local File          = File;
+    local FileDoesExist         = File.DoesExist;
+local Color         = Color;
+local Canvas        = Canvas;
+local Clipboard     = Clipboard
+    local ClipboardCopyText     = Clipboard.CopyText;
+local Color         = Color;
+    local ColorRGBA             = Color.RGBA;
+local Drawing       = Drawing;
+local DrawingFont   = DrawingFont;
+local DrawingImage  = DrawingImage;
+    local DrawingImageNew       = DrawingImage.New;
+    local DrawingImageGetID     = DrawingImage.GetID
+local FontStyle     = FontStyle
+    local GetFontStyle          = FontStyle.Get;
+local INIFile       = INIFile;
+local Paragraph     = Paragraph;
+    local ParagraphGetText      = Paragraph.GetText;
+    local ParagraphSetText      = Paragraph.SetText;
+local _pAppCFG      = FS.AppCFG;
+--TODO FINISH
+------------------------------------------------------------------- Colors
+--TODO move all these settings to file AND add a LiveFileRepo...long after Beta, not critical
+local _nColorWhite      = ColorRGBA(255, 255, 255, 255);
+local _nColorBlack      = ColorRGBA(0, 0, 0, 255);
+local _nColorClear      = ColorRGBA(0, 0, 0, 0)
+local _nColorRuler      = ColorRGBA(240, 100, 100, 255);
+local _nColorRulerBG    = ColorRGBA(255, 255, 255, 0)
+local _nColorForgeBG    = ColorRGBA(51, 51, 51, 255)
+------------------------------------------------------------------- Rulers
+local _tHorRuler            = {--TODO static functions and variables to change these values
+    Y           = 0,
+    Width       = 825,
+    MajorStep   = 100,
+    MinorStep   = 25,
+    MajorHeight = 16,
+    MinorHeight = 10,
+    Color       = _nColorRuler,
+};
+local _tVerRuler            = {--TODO static functions and variables to change these values
+    X           = 0,
+    HHeight     = 1125,
+    MajorStep   = 100,
+    MinorStep   = 25,
+    MajorWidth  = 16,
+    MinorWidth  = 10,
+    Color       = _nColorRuler,
+};
+------------------------------------------------------------------- Lines and Guides
+local _tCenterLines = {
+    Color       = ColorRGBA(50, 50, 255, 255),
+};
+local _tHorGuide = {
+    Color       = ColorRGBA(0, 255, 48, 255),
+};
+local _tVerGuide = {
+    Color       = ColorRGBA(0, 255, 48, 255),
+};
+------------------------------------------------------------------- Deadcalls
+local _fDraw        = function() end;      --NOTE: DO NOT REMOVE: dead functions in case initial user function is bad
+local _fDrawBack    = function() end;
+-------------------------------------------------------------------
+local _nPageWidth           = -1;
+local _nPageHeight          = -1;
+-------------------------------------------------------------------
+--set during Draw, used in DrawText, etc.
+local _Object       = null;
+local _D            = null;
+local _InternalDC   = null;
+-------------------------------------------------------------------
+local _bAutoUpdateStyle = false;
+------------------------------------------------------------------- Canvas Guides
+local _nGuideHorY = -1; --start off canvas
+local _nGuideVerX = -1; --start off canvas
+------------------------------------------------------------------- Canvas Keyboard Modifiers
+local _bIsAltDown       = false;
+local _bIsControlDown   = false;
+local _bIsShiftDown     = false;
+------------------------------------------------------------------- Canvas Related
+local _sCanvas              = FORGE_CANVAS_NAME;
+local _bCanvasCreated       = false;
+local _nCanvasWidth         = 100;
+local _nCanvasHeight        = 100;
+local _hWndCard             = false;
+--local _bClearCanvasEachDraw = true; --TODO GET FROM INI OR MENU?!!!
+------------------------------------------------------------------- Mouse & Status
+local _sStatusObject            = FORGE_STATUS_NAME;
+local _sStatusMouseObject       = FORGE_STATUS_MOUSE_NAME;
+local _sStatusMouseNegObject    = FORGE_STATUS_MOUSE_NEG_NAME;
+local _nStatusHeight            = 50;  --applies to all status par objects
+local _nStatusMouseWidth        = 180; --applies to both mouse status par objects
+local _sStatus                  = "";
+------------------------------------------------------------------- CoV Values
+local _CoVXW = 1;
+local _CoVYH = 1;
+------------------------------------------------------------------- Draw Plugin Images
+local _hImage           = false;
+local _nImageID         = false;
+--local _hImageBack       = null;
+--local _nImageBackID     = null;
+local _hImageExport     = false;
+local _nImageExportID   = false;
+local _hImageUtil       = false;
+local _nImageUtilID     = false;
+------------------------------------------------------------------- user Images
+local _tUserImageCache  = {};
+------------------------------------------------------------------- Card Info
+local _oActiveCardSet = false;
+local _nCardWidth     = 100;
+local _nCardHeight    = 100;
+local _sCardSetName   = "";
+------------------------------------------------------------------- Redraw & Filesync
+local _bRedrawUtil              = true; --is set to true so the Util redraws on first pass by default
+local _bRedrawCard              = true;
+local _bDrawBack                = false;
+local _bRedrawCanvas            = false;
+local _bUtilVisible             = true;
+local _tActiveRow               = false;
+local _bIsResizing              = false;
+local _bForgeAutoSizing         = false;
+local _nTimeDelta               = 0;
+local _bDrawBlocked             = false;
+local _bDrawTimerBusy           = false;
+local _nSizingDelta             = FORGE_REDRAW_SIZING_INTERVAL;
+local _nRedrawTimerID           = FORGE_REDRAW_TIMER_ID;
+local _nRedrawTimerInterval     = FORGE_REDRAW_TIMER_INTERVAL;
+-------------------------------------------------------------------
+
+
+local function Export(tExports)
+
+end
+
+
+local function ImageLoadError(sPath, sName, sMsg)
+    error("Error in Forge.LoadImage:\r\nError loading card image at path: \""..sPath.."\" with name, \""..sName.."\"."..#sName.."\r\n"..sMsg, 4);
+end
+
+local function LoadImage(sPath, sName)
+    --TODO assertions
+    if not (FileDoesExist(sPath)) then
+        local sLastError = _tblErrorMessages[Application.GetLastError()];
+        local sError = sLastError ~= "Success." and sLastError or "Image could not be found."..sLastError --TODO QUESTION is this correct?
+        ImageLoadError(sPath, sName or "UNKNOWN", sError);
+    end
+
+    if not (_tUserImageCache[sPath] and _tUserImageCache[sPath].Handle) then-- and _tUserImageCache[sPath].ID) then
+
+        local hImage = DrawingImage.Load(sPath);
+
+        _tUserImageCache[sPath] = {
+            Handle = hImage,
+        };
+
+        if not (hImage) then
+            ImageLoadError(sPath, sName, "Image could not be loaded with DrawingImage.Load().");
+        end
+
+        local nID = DrawingImageGetID(hImage);
+
+        if not (nID) then
+            ImageLoadError(sPath, sName, "Image ID not retrieved DrawingImage.GetID().");
+        end
+
+        _tUserImageCache[sPath].ID = nID;
+    end
+
+    return _tUserImageCache[sPath].Handle, _tUserImageCache[sPath].ID;
+
+end
+
+local function ClearImage(D)
+    D.SetFilteringMode(DRAW_BLEND_ALLCHANNELS);
+    D.DrawRectangle(0, 0, _nCardWidth, _nCardHeight, _nColorClear);
+    --D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+end
+
+local function CreateImage(hImage, nImageID)
+    local hRet          = hImage;
+    local nRet          = nImageID;
+    local sMessage;
+    local sBaseError    = "Forge.CreateImage (private static): Could not";
+
+    --create the image only if it's not already been created
+    if not (hImage and nImageID) then
+        --create, check, and store the image handle
+        hRet        = DrawingImageNew(_nCardWidth, _nCardHeight, BIT_DEPTH_32, DRAW_IMAGE_TRANSPARENT);
+        sMessage    = sBaseError.." create image for canvas object, \"${canvas}\".";
+        assert(hRet, sMessage % {canvas = _sCanvas});
+
+        --get, check, and store the image ID
+        nRet        = DrawingImageGetID(hRet);
+        sMessage    = sBaseError.." get image ID for canvas object, \"${canvas}\" having image handle, ${handle}.";
+        assert(nRet, sMessage % {canvas = _sCanvas, handle = tostring(hRet) or "nil"});
+    end
+
+    return hRet, nRet;
+end
+
+--[[TODO add
+Draw X
+Draw Grid
+Guides
+]]
+
+--TODO add Grid lines util
+
+local function DrawGuideHor(sObject, D, hInternalDC)--TODO ALlowwidth changes for these (and all) lines
+    D.DrawLineEx(0, _nGuideHorY, _nCardWidth, _nGuideHorY, _tHorGuide.Color);
+end
+
+local function DrawGuideVer(sObject, D, hInternalDC)
+    D.DrawLineEx(_nGuideVerX, 0, _nGuideVerX, _nCardHeight, _tVerGuide.Color);
+end
+
+local function DrawCenterLineHor(sObject, D, hInternalDC)
+    local nMidPointY = floor(_nCardHeight / 2);
+    D.DrawLineEx(0, nMidPointY, _nCardWidth, nMidPointY, _tCenterLines.Color);
+end
+
+local function DrawCenterLineVer(sObject, D, hInternalDC)
+    local nMidPointX = floor(_nCardWidth / 2);
+    D.DrawLineEx(nMidPointX, 0, nMidPointX, _nCardHeight, _tCenterLines.Color);
+end
+
+local function DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC)
+    local nY             = _tHorRuler.Y;
+    local nMajorStep     = _tHorRuler.MajorStep;
+    local nMinorStep     = _tHorRuler.MinorStep;
+    local nMajorHeight   = _tHorRuler.MajorHeight;
+    local nMinorHeight   = _tHorRuler.MinorHeight;
+    local nTextY         = nMajorHeight + 3;--TODO remove magic number
+    local oColor         = _tHorRuler.Color;
+
+    local nXMax = _nCardWidth - 1;
+
+    D.DrawLineEx(0, nY, nXMax, nY, oColor);
+
+    for nX = 0, nXMax, nMinorStep do
+
+        --draw the line
+        local nHeight = (nX % nMajorStep == 0) and nMajorHeight or nMinorHeight;
+        D.DrawLineEx(nX, nY, nX, nY + nHeight, oColor);
+
+        --draw the position text
+        local bDrawText = nX > 0 and not (nX == nMinorStep and bDrawRulerVer);
+
+        if (bDrawText) then
+            local sX = tostring(nX);
+            local nTextWidth = D.GetTextWidth(sX);
+            GetFontStyle("RULER").Draw(sObject, D, hInternalDC, floor(Forge.CenterOnX(nX, nTextWidth)), floor(nTextY), sX);
+        end
+    end
+
+end
+
+local function DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC) --TODO minor issue, realign first minor step when HOR ruler is drawing to be in line with both minor ticks
+    local nX             = _tVerRuler.X;
+    local nMajorStep     = _tVerRuler.MajorStep;
+    local nMinorStep     = _tVerRuler.MinorStep;
+    local nMajorWidth    = _tVerRuler.MajorWidth;
+    local nMinorWidth    = _tVerRuler.MinorWidth;
+    local nTextX         = nMajorWidth + 3;
+    local oColor         = _tVerRuler.Color;
+    local oRulerFS       = GetFontStyle("RULER");
+
+    local nYMax = _nCardHeight - 1;
+
+    D.DrawLineEx(nX, 0, nX, nYMax, oColor);
+    D.SetDrawingFont(oRulerFS.GetFont());--TODO FIX This must be gotten from the Forge...why?
+
+    for nY = 0, nYMax, nMinorStep do
+        local nWidth        = (nY % nMajorStep == 0) and nMajorWidth or nMinorWidth;
+        local nLineLength   = nX + nWidth;
+
+        --draw the line
+        D.DrawLineEx(nX, nY, nLineLength, nY, oColor);
+
+        --draw the position text
+        if (nY > 0) then
+            local sY = tostring(nY);
+            local nTextHeight = D.GetTextHeight(sY);
+            oRulerFS.Draw(sObject, D, hInternalDC, floor(nTextX), floor(Forge.CenterOnY(nY, nTextHeight)), sY);
+        end
+
+    end
+
+end
+
+
+
+
+local function DrawUtilObjects(sObject, D, hInternalDC)
+    ClearImage(D);
+
+    --draw utility objects
+    local bDrawRulerHor = MainMenu.IsChecked("Options:>Draw:>Horizontal Ruler");
+    local bDrawRulerVer = MainMenu.IsChecked("Options:>Draw:>Vertical Ruler");
+
+    D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+
+    if (bDrawRulerHor) then
+        DrawRulerHor(bDrawRulerVer, sObject, D, hInternalDC);
+    end
+
+    if (bDrawRulerVer) then
+        DrawRulerVer(bDrawRulerHor, sObject, D, hInternalDC);
+    end
+
+    if (MainMenu.IsChecked("Options:>Draw:>Horizontal Centerline")) then
+        DrawCenterLineHor(sObject, D, hInternalDC);
+    end
+
+    if (MainMenu.IsChecked("Options:>Draw:>Vertical Centerline")) then
+        DrawCenterLineVer(sObject, D, hInternalDC);
+    end
+
+    --TODO FINISH add options to turn these off and be sure to save them in INI when changed
+    DrawGuideHor(sObject, D, hInternalDC);
+
+    DrawGuideVer(sObject, D, hInternalDC);
+
+end
+
+
+
+--mouse event callback functions
+local function CanvasInputCallback(tEvent)
+    local nEventCode = tEvent.EventCode;
+
+    --update basic info
+    local nX     = floor(tEvent.Mouse.x * _CoVXW);
+    local nY     = floor(tEvent.Mouse.y * _CoVYH);
+    local nNegX  = floor(nX - _nCardWidth);
+    local nNegY  = floor(nY - _nCardHeight);
+
+    _bIsAltDown     = tEvent.Keyboard.Modifiers.Alt;
+    _bIsControlDown = tEvent.Keyboard.Modifiers.Control;
+    _bIsShiftDown   = tEvent.Keyboard.Modifiers.Shift;
+
+    if (nEventCode == CANVAS_MOUSE_MOVE) then
+        ParagraphSetText(_sStatusMouseObject,      nX..", "..nY);
+        ParagraphSetText(_sStatusMouseNegObject,   nNegX..", "..nNegY);
+
+    --[[!
+        @fqxn CFS.Bindings.Left-Click
+        @desc Left-clicking the canvas copies the X and Y coordinates to the clipboard as "X, Y".
+    !]]
+    elseif (nEventCode == CANVAS_MOUSE_LEFT_CLICK) then
+
+        --[[!
+            @fqxn CFS.Bindings.Left-Click_+_Control
+            @desc Holding Control and Left-clicking the canvas places a horizontal guide at clicked location and copies the Y coordinate and -Y (Y − CardHeight) to the clipboard as "Y, -Y".
+        !]]
+        if _bIsControlDown and not _bIsShiftDown then
+            _nGuideHorY         = floor(tEvent.Mouse.y * _CoVYH);
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+            ClipboardCopyText(nY..", "..nNegY);
+
+        --[[!
+            @fqxn CFS.Bindings.Left-Click_+_Control_+_Shift
+            @desc Holding Control and Shift and Left-clicking the canvas removes the horizontal guide and copies the X and Y coordinates to the clipboard as "X, Y".
+        !]]
+        elseif _bIsControlDown and _bIsShiftDown and _nGuideHorY > -1 then
+            _nGuideHorY         = -100;
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+            ClipboardCopyText(ParagraphGetText(_sStatusMouseObject));
+
+        else
+            ClipboardCopyText(ParagraphGetText(_sStatusMouseObject));
+        end
+
+    --[[!
+        @fqxn CFS.Bindings.Right-Click
+        @desc Left-clicking the canvas copies the -X (X - CardWidth) and -Y (Y - CardHeight) coordinates to the clipboard as "-X, -Y".
+    !]]
+    elseif (nEventCode == CANVAS_MOUSE_RIGHT_CLICK) then
+
+        --[[!
+            @fqxn CFS.Bindings.Right-Click_+_Control
+            @desc Holding Control and Right-clicking the canvas places a vertical guide at clicked location and copies the X coordinate and -X (X − CardWidth) to the clipboard as "X, -X".
+        !]]
+        if _bIsControlDown and not _bIsShiftDown then
+            _nGuideVerX         = floor(tEvent.Mouse.x * _CoVXW);
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+            ClipboardCopyText(nX..", "..nNegX);
+
+        --[[!
+            @fqxn CFS.Bindings.Right-Click_+_Control_+_Shift
+            @desc Holding Control and Shift and Right-clicking the canvas removes the vertical guide and copies the X and Y coordinates to the clipboard as "X, Y".
+        !]]
+        elseif _bIsControlDown and _bIsShiftDown and _nGuideVerX > -1 then
+            _nGuideVerX         = -100;
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+            ClipboardCopyText(ParagraphGetText(_sStatusMouseNegObject));
+
+        else
+            ClipboardCopyText(ParagraphGetText(_sStatusMouseNegObject));
+        end
+
+    --[[!
+        @fqxn CFS.Bindings.Middle-Click
+        @desc Middle-clicking the canvas copies the X and Y coordinates to the clipboard as "X, Y".
+    !]]
+    elseif (nEventCode == CANVAS_MOUSE_MIDDLE_DOWN) then
+
+        --[[!
+            @fqxn CFS.Bindings.Middle-Click_+_Control
+            @desc Holding Control and Middle-clicking the canvas places a both a vertical and horizontal guide at clicked location and copies the X and Y coordinates to the clipboard as "X, Y".
+        !]]
+        if _bIsControlDown and not _bIsShiftDown then
+            _nGuideVerX         = floor(tEvent.Mouse.x * _CoVXW);
+            _nGuideHorY         = floor(tEvent.Mouse.y * _CoVYH);
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+            ClipboardCopyText(nX..", "..nY);
+
+        --[[!
+            @fqxn CFS.Bindings.Middle-Click_+_Control_+_Shift
+            @desc Holding Control and Shift and Middle-clicking the canvas removes both the vertical and horizontal guide and copies the X and Y coordinates to the clipboard as "X, Y".
+        !]]
+        elseif _bIsControlDown and _bIsShiftDown and (_nGuideVerX > -1 or _nGuideHorY > -1) then
+            _nGuideVerX         = -100;
+            _nGuideHorY         = -100;
+            _bRedrawUtil        = true;
+            _bRedrawCanvas      = true;
+            ClipboardCopyText(nX..", "..nY);
+
+        else
+            ClipboardCopyText(ParagraphGetText(_sStatusMouseObject));
+        end
+
+    elseif (nEventCode == CANVAS_KEYBOARD_KEY_DOWN) then
+
+        if (tEvent.Keyboard.Key == KEY_CODES.left.dec) then
+
+            if (_bDrawBack) then
+                _bDrawBack      = false;
+                _bRedrawCard    = true;
+                _bRedrawCanvas  = true;
+            end
+
+        elseif (tEvent.Keyboard.Key == KEY_CODES.right.dec) then
+
+            if not (_bDrawBack) then
+                _bDrawBack      = true;
+                _bRedrawCard    = true;
+                _bRedrawCanvas  = true;
+            end
+
+        end
+
+    end
+
+end
+--TODO FINISH ADD Convas.Focus on mouse over window
+--[[!
+    @fqxn CFS.Classes.Forge.Methods.Draw
+    @desc Draws the currently selected card into the Forge canvas.
+
+    <p>
+      Executes the active CardSet’s live <code>Draw</code> script using the current row data,
+      renders editor utility overlays (rulers, centerlines, etc.) into a separate layer,
+      and composites all results onto the Forge canvas.
+    </p>
+
+    <h3>Behavior</h3>
+    <ul>
+      <li>Clears internal render targets to transparent before drawing.</li>
+      <li>Loads and executes the CardSet <code>Draw</code> chunk in the active UserEnv.</li>
+      <li>Invokes the CardSet-provided draw function to render card artwork.</li>
+      <li>Renders utility overlays into a dedicated utility image.</li>
+      <li>Composites the card image and utility image onto the canvas.</li>
+    </ul>
+
+    <h3>Notes</h3>
+    <ul>
+      <li>This method does not perform export; it is strictly for preview rendering.</li>
+      <li>Utility overlays are rendered independently of card artwork.</li>
+      <li>The most recently drawn row is cached to support deferred redraw after resizing.</li>
+      <li>Intended to be called by ProcSys in response to selection changes or redraw requests.</li>
+    </ul>
+
+    @param table tRow Final grid row data for the card being drawn.
+!]]
+local function Draw()--, bExport, fExport) --TODO move this out to private static to be used here and in new export function
+    --in case a resize happens
+    --_tActiveRow  = tRow;
+    if (_nImageID) then
+
+        --draw the card
+        local function ProcDraw(sObject, D, hInternalDC)
+            ClearImage(D);
+
+            D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+
+            --update private vars for use in DrawText and other functions
+            _Object      = sObject;
+            _D           = D;
+            _InternalDC  = hInternalDC;
+
+            --execute the proc's draw method
+            if (_bDrawBack) then
+                _fDrawBack(sObject, D, hInternalDC);
+            else
+                _fDraw(sObject, D, hInternalDC);
+            end
+
+        end
+
+        --reset the image size to its original size
+        --hImage:Resize(nWidth, nHeight, DRAW_RESIZE_RAW);
+
+        --clear the canvas
+        --if (_bClearCanvasEachDraw) then
+            Canvas.Clear(_sCanvas, _nColorClear); --TODO MOVE TO UTIL ON/OFF
+        --end
+
+        --draw on the card image
+        if (_bRedrawCard) then
+            _bRedrawCard = false;
+            _hImage:Draw(ProcDraw);
+        end
+
+        --draw on the util image
+        if (_bRedrawUtil) then
+            _bRedrawUtil = false;
+            _hImageUtil:Draw(DrawUtilObjects);
+        end
+
+        --draw the card and util images onto the canvas (since drawing directly on the canvas is no bueno)
+        Canvas.Draw(_sCanvas,
+            function(sObject, D, hInternalDC)
+                D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
+                D.DrawImage(_nImageID, 0, 0, _nCanvasWidth, _nCanvasHeight);
+
+                if MainMenu.IsChecked("Options:>Draw:>Utility Overlay") then--TODO FINISH Break this OUt of here so util and card can be drawn seperately and composited in a nother function...this will fix having to redraw the card whenever the util changes
+                    D.DrawImage(_nImageUtilID, 0, 0, _nCanvasWidth, _nCanvasHeight);
+                end
+
+            end
+        );
+        --Page.Redraw();
+        --if (bExport and fExport and type(fExport) == "function") then --TODO DO NOT CALL THIS HERE>..each export should not be displayed first
+        --    fExport(D, hImage, cProc, tRow); --TODO FINISH PCALL this and send erros to status
+        --end
+
+        --[[
+        --saves the entire canvas!
+        local hNew = Canvas.GrabImage(_sCanvas);
+        if(hNew)then
+            DrawingImage.Save(hNew, tRow.Name..".png", DRAW_FORMAT_PNG);
+            DrawingImage.Free(hNew);
+        end]]
+
+    end
+
+end
+
+
+
+local function UpdatePageLayout()
+
+    --build the rects
+    local tStatusMouseRect = {
+        x       = 0,
+        y       = 0,
+        width   = _nStatusMouseWidth,
+        height  = _nStatusHeight,
+    };
+
+    local tStatusMouseNegRect = {
+        x       = tStatusMouseRect.x + tStatusMouseRect.width,
+        y       = 0,
+        width   = _nStatusMouseWidth,
+        height  = _nStatusHeight,
+    };
+
+    local tStatusRect = {
+        x       = tStatusMouseNegRect.x + tStatusMouseNegRect.width,
+        y       = 0,
+        width   = _nPageWidth - tStatusMouseRect.width - tStatusMouseNegRect.width,
+        height  = _nStatusHeight,
+    };
+
+    local tOuter = {
+        x       = 0,
+        y       = _nStatusHeight,
+        width   = _nPageWidth,
+        height  = _nPageHeight - _nStatusHeight,
+    };
+
+    local tInner = {
+        x       = 0,
+        y       = 0,
+        width   = _nCardWidth,
+        height  = _nCardHeight,
+    };
+
+    local tRect = math.geometry.fitrect(tOuter, tInner, true);
+    Input.SetSize(      _sCanvas,               tRect.width,                tRect.height);
+    Input.SetPos(       _sCanvas,               tRect.x,                    tRect.y);
+    Paragraph.SetSize(  _sStatusMouseObject,    tStatusMouseRect.width,     tStatusMouseRect.height);
+    Paragraph.SetPos(   _sStatusMouseObject,    tStatusMouseRect.x,         tStatusMouseRect.y);
+    Paragraph.SetSize(  _sStatusMouseNegObject, tStatusMouseNegRect.width,  tStatusMouseNegRect.height);
+    Paragraph.SetPos(   _sStatusMouseNegObject, tStatusMouseNegRect.x,      tStatusMouseNegRect.y);
+    Paragraph.SetSize(  _sStatusObject,         tStatusRect.width,          tStatusRect.height);
+    Paragraph.SetPos(   _sStatusObject,         tStatusRect.x,              tStatusRect.y);
+
+    --store (and locally update) the canvas size info
+    local tSize     = Input.GetSize(_sCanvas);
+    _nCanvasWidth   = tSize.Width;
+    _nCanvasHeight  = tSize.Height;
+
+    --update the CoVs
+    _CoVXW = _nCardWidth    /   _nCanvasWidth;
+    _CoVYH = _nCardHeight   /   _nCanvasHeight;
+end
+
+local function XPCallError(vErr)
+    return debug.traceback(tostring(vErr), 2);
+end
+
+--[[tUserEnv.S = {}; --TODO INTEGRATE THIS INTO A FUNCTION!
+--local tStyles = INIFile.GetSectionNames(FS.Styles); --_TODO load this from forge, not from INI...too slow
+
+--if (tStyles) then
+
+    for _, sStyle in pairs(ProcSys.GetForge().STYLE) do
+        tUserEnv.S[sStyle] = setmetatable(
+        {
+            O = '<'..sStyle..'>',
+            C = '</'..sStyle..'>',
+        },
+        {
+            __call = function(t, vText)
+                return '<'..sStyle..'>'..tostring(vText)..'</'..sStyle..'>'
+            end,
+        }
+        );
+    end
+
+--end]]
+
+
+
+--[[!
+    @fqxn CFS.Classes.Forge
+    @desc <h2>Forge</h2>
+
+    <p>
+      The <strong>Forge</strong> is the card rendering and preview subsystem for Card Forge Studio.
+      It draws the currently selected card from ProcSys onto a dedicated canvas, maintains internal
+      render targets for composition, and provides editor-facing visual utilities (rulers, centerlines, etc.).
+    </p>
+
+    <h3>Responsibilities</h3>
+    <ul>
+      <li><strong>Card preview rendering</strong> – Draws the active card by executing the active CardSet’s live <code>Draw</code> script against the current row data.</li>
+      <li><strong>Offscreen composition</strong> – Renders card artwork and utility overlays into separate images, then composites them onto the canvas.</li>
+      <li><strong>Live scripting integration</strong> – Loads and executes the CardSet <code>Draw</code> chunk via the UserEnv, supporting a live-update workflow.</li>
+      <li><strong>Utility overlays</strong> – Draws editor aids such as horizontal/vertical rulers and centerlines as a separate overlay layer.</li>
+      <li><strong>Mouse feedback & status</strong> – Tracks mouse position over the canvas and updates dedicated status paragraph objects with scaled coordinates.</li>
+      <li><strong>Clipboard convenience</strong> – Supports copying mouse coordinate readouts via mouse click actions.</li>
+      <li><strong>Resize-aware redraw</strong> – Handles window/canvas resizing by deferring redraw until resizing stabilizes, then re-rendering the last active row.</li>
+      <li><strong>Style system</strong> – Loads FontStyle definitions from an INI source, exposes style lookup behavior, and supports optional auto-refresh of style state.</li>
+      <li><strong>Image caching</strong> – Caches user image handles/IDs to avoid redundant loads during repeated draws.</li>
+    </ul>
+
+    <h3>Render model</h3>
+    <ul>
+      <li>The Forge maintains multiple internal image targets: a primary card image, a utility overlay image, and an export image target.</li>
+      <li>Each draw clears to transparent, executes the CardSet draw routine, renders utility overlays, and composites the results onto the canvas.</li>
+      <li>Canvas mouse coordinates are scaled back into card-space using internally maintained conversion factors.</li>
+    </ul>
+
+    <h3>Lifecycle</h3>
+    <ol>
+      <li><strong>OnShow</strong> creates the canvas (one-time), restores window placement, installs mouse callbacks, and starts the redraw timer.</li>
+      <li><strong>SetActiveCardSet</strong> updates card dimensions and recreates internal render targets for the new set.</li>
+      <li><strong>DrawCard</strong> renders the active card row and overlay layers, then composites them to the canvas.</li>
+      <li><strong>OnSize</strong> recomputes layout for canvas + status objects and queues a deferred redraw when appropriate.</li>
+      <li><strong>OnTimer</strong> fulfills deferred redraw requests once resizing has settled.</li>
+    </ol>
+
+    <h3>Notes</h3>
+    <ul>
+      <li>Utility overlays are editor aids and are rendered separately from card artwork, allowing them to be enabled/disabled without modifying the CardSet draw script or affecting the exports.</li>
+      <li>CardSet draw logic is executed in the configured UserEnv, keeping drawing behavior set-specific while the Forge remains a generic renderer/compositor.</li>
+    </ul>
+!]]
+return class("Forge",
+    {--METAMETHODS
+    },
+    {--STATIC PUBLIC
+        --__INIT = function(stapub) end, --static initializer (runs before class object creation)
+        --Forge = function(cForge, sAuthCode) end, --static constructor (runs after class object creation)
+        LoadImage = LoadImage,
+        CenterOnX = function(nVal, nTextWidth) --TODO BUG FIX FINISH These functions NOT working properly on angled text
+            local nRet = nVal or 0;
+            nRet = nVal - nTextWidth / 2;
+            return nRet;
+        end,
+        CenterOnY = function(nVal, nTextHeight)
+            local nRet = nVal or 0;
+            nRet = nVal - nTextHeight / 2;
+            return nRet;
+        end,
+        CenterOn = function(nX, nY) --TODO FINISH
+
+        end,
+        --[[!
+            @fqxn CFS.Classes.Forge.Methods.DrawImage
+            @desc Draws an image onto the active card render target.
+
+            <p>
+              Loads (or retrieves from cache) an image from the active game directory and draws it
+              into the current card draw context. This method is primarily intended for use by
+              CardSet <code>Draw</code> scripts, but may also be used internally by the Forge.
+            </p>
+
+            <h3>Behavior</h3>
+            <ul>
+              <li>Resolves the image path relative to the active game folder.</li>
+              <li>Sanitizes the provided path to prevent invalid or unsafe access.</li>
+              <li>Caches image handles to avoid redundant loads across draw calls.</li>
+              <li>Draws the image using alpha blending.</li>
+            </ul>
+
+            <h3>Notes</h3>
+            <ul>
+              <li>This method must be called from within an active card draw pass.</li>
+              <li>Images are drawn into the card image layer, not the utility overlay layer.</li>
+              <li>Repeated calls with the same image path reuse cached image handles.</li>
+            </ul>
+
+            @param string pImage  Relative image path (from the game directory).
+            @param number nX      X position in card-space coordinates.
+            @param number nY      Y position in card-space coordinates.
+            @param number nWidth  Draw width in card-space units.
+            @param number nHeight Draw height in card-space units.
+            @param string sName   Optional image identifier used for error reporting.
+            @ex
+            -- Draw an image asset onto the card at a fixed position
+            local pOgre = "Images/Ogre.png";
+            Forge.DrawImage(pOgre, 100, 100, 32, 32);
+        !]]
+        DrawImage = function(pImage, nX, nY, nWidth, nHeight, sName)--TODO REMOVE THIS....user can load image as needed this is merely a shortcut and a problematic
+            --TODO assertions
+            local hImage, nImage = LoadImage(FS.Game.Root.."\\"..SanitizePath(pImage, pImage), sName);
+            --_D.SetFilteringMode(DRAW_BLEND_ALPHABLEND);
+            _D.DrawImage(nImage, nX, nY, nWidth, nHeight);
+        end,
+        --[[!
+            @fqxn CFS.Classes.Forge.Methods.DrawText
+            @desc Draws plain text onto the active card render target using a single style.
+
+            <p>
+              Renders text using the specified FontStyle during the active card draw pass.
+              This method is intended for use by CardSet <code>Draw</code> scripts and supports
+              optional centering, rotation, and custom wrapping behavior.
+            </p>
+
+            <h3>Behavior</h3>
+            <ul>
+              <li>Uses the specified style from <code>Forge.STYLE</code>.</li>
+              <li>Optionally centers text around the provided coordinates.</li>
+              <li>Supports rotated text via an angle parameter.</li>
+              <li>Supports custom line-wrapping through a user-supplied wrapper function.</li>
+            </ul>
+
+            <h3>Notes</h3>
+            <ul>
+              <li>Must be called from within an active card draw pass.</li>
+              <li>Text is drawn into the card image layer, not the utility overlay.</li>
+              <li>Returns the final draw position and measured size of the last rendered line.</li>
+            </ul>
+
+            @param string  sStyle   Name of the FontStyle to use.
+            @param number  nRawX    Base X position in card-space coordinates.
+            @param number  nRawY    Base Y position in card-space coordinates.
+            @param string  sText    Text to draw.
+            @param boolean vCenterX Optional horizontal centering flag.
+            @param boolean vCenterY Optional vertical centering flag.
+            @param number  vAngle   Optional rotation angle (degrees).
+            @param function|nil vWrap Optional wrapping function.
+            @return number nX       Final X position of the last line drawn.
+            @return number nY       Final Y position of the last line drawn.
+            @return number nWidth   Width of the rendered text block.
+            @return number nHeight  Height of the rendered text block.
+
+            @ex
+            -- Draw centered title text near the top of the card
+            Forge.DrawText(
+                "TITLE",
+                412, 60,
+                "Example Card",
+                true, true
+            );
+        !]]
+        DrawText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)
+            local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
+            local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
+            local bCenterY      = rawtype(vCenterY)     == "boolean"    and vCenterY    or false;
+            local oStyle        = GetFontStyle(sStyle); --TODO add default style as fallback???
+            local tLines        = {}; --used for text wrapping
+            local nStartOffsetX, nStartOffsetY = 0, 0;
+
+            if (_bAutoUpdateStyle) then --update the style (if requested)
+                oStyle.Update();
+            end
+
+            local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sText);
+
+            if (fWrap) then
+                tLines, nStartOffsetX, nStartOffsetY = fWrap(nTotalW, nTotalH, sText, vAngle, {...});
+                ---TODO verify table
+            else
+                tLines[1] = sText;
+            end
+
+            local nLastX, nLastY, nLastWidth, nLastHeight;
+
+            local bFirstLine, nBaseX, nBaseY, nTrueX, nTrueY, nLineYAdjuster;
+            local nLinePadding  = 2; --TODO FINISH PUT IN PRI AND ALLOW MUTATE
+            local nLineReturn   = nTotalH;
+            local nHalfHeight   = nTotalH / 3;
+
+            for nLine, sLine in ipairs(tLines) do
+                nLineYAdjuster = nHalfHeight * (nLine - 1);
+                bFirstLine = nLine == 1;
+
+                nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sLine, true);
+                nBaseX = bCenterX and (nRawX - (nTotalW / 2) - nMinX) or nRawX;
+                nBaseY = bCenterY and (nRawY - (nTotalH / 2) - nMinY) or nRawY;
+
+                nTrueX = nBaseX + (bFirstLine and nStartOffsetX or 0);
+                nTrueY = nBaseY + (bFirstLine and nStartOffsetY or 0) + nLineYAdjuster;
+
+                nLastX      = nTrueX;
+                nLastY      = nTrueY;
+                nLastWidth  = nTotalW;
+                nLastHeight = nTotalH;
+
+                --draw the text
+                --oStyle.Draw(_sObject, _D, _InternalDC, floor(nTrueX), floor(nTrueY), sLine, vAngle);
+                oStyle.Draw(_Object, _D, _InternalDC, floor(nTrueX), floor(nTrueY), sLine, vAngle);
+            end
+
+            return nLastX, nLastY, nLastWidth, nLastHeight;
+        end,
+        --[[!
+            @fqxn CFS.Classes.Forge.Methods.DrawStyledText
+            @desc Draws text containing inline style markup onto the active card render target.
+
+            <p>
+              Renders text that includes inline style tags (e.g. <code>&lt;BOLD&gt;</code>,
+              <code>&lt;ITALIC&gt;</code>) using multiple FontStyles in a single draw call.
+              This method is intended for CardSet <code>Draw</code> scripts that require
+              rich text composition.
+            </p>
+
+            <h3>Behavior</h3>
+            <ul>
+              <li>Parses inline style tags and resolves them against <code>Forge.STYLE</code>.</li>
+              <li>Preserves style runs across wrapped lines.</li>
+              <li>Uses ink-box layout to neutralize negative bearings and kerning artifacts.</li>
+              <li>Supports centering, rotation, and custom wrapping behavior.</li>
+            </ul>
+
+            <h3>Notes</h3>
+            <ul>
+              <li>Must be called from within an active card draw pass.</li>
+              <li>Tags that do not resolve to a known style fall back to the base style.</li>
+              <li>Returns the top-left position and total size of the rendered text block.</li>
+            </ul>
+
+            @param string  sStyle   Base FontStyle name.
+            @param number  nRawX    Base X position in card-space coordinates.
+            @param number  nRawY    Base Y position in card-space coordinates.
+            @param string  sText    Text with inline style markup.
+            @param boolean vCenterX Optional horizontal centering flag.
+            @param boolean vCenterY Optional vertical centering flag.
+            @param number  vAngle   Optional rotation angle (degrees).
+            @param function|nil vWrap Optional wrapping function.
+            @return number nX       Top-left X position of the rendered block.
+            @return number nY       Top-left Y position of the rendered block.
+            @return number nWidth   Total width of the rendered block.
+            @return number nHeight  Total height of the rendered block.
+
+            @ex
+            -- Draw a description line with inline emphasis
+            -- Note: there must exist a Style named "BOLD"
+            Forge.DrawStyledText(
+                "BODY",
+                60, 820,
+                "Deal <BOLD>3 damage</BOLD> to all enemy units.",
+                false, false
+            );
+        !]]
+        DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)--TODO BUG FIX USe HTML parser, not this
+            local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
+            local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
+            local bCenterY      = rawtype(vCenterY)     == "boolean"    and vCenterY    or false;
+
+            --------------------------------------------------------------------
+            -- PARSE HELPERS
+            --------------------------------------------------------------------
+            local function BuildRuns(sIn)
+                local tRuns  = {};
+                local sPlain = "";
+
+                local i = 1;
+                local n = #sIn;
+
+                while (i <= n) do
+                    local a = sIn:find("<", i, true);
+
+                    if not a then
+                        local s = sIn:sub(i);
+                        if (#s > 0) then
+                            tRuns[#tRuns + 1] = { Style = sStyle, Text = s };
+                            sPlain = sPlain .. s;
+                        end
+                        break;
+                    end
+
+                    if (a > i) then
+                        local s = sIn:sub(i, a - 1);
+                        tRuns[#tRuns + 1] = { Style = sStyle, Text = s };
+                        sPlain = sPlain .. s;
+                    end
+
+                    local b = sIn:find(">", a + 1, true);
+                    if not b then
+                        local s = sIn:sub(a);
+                        tRuns[#tRuns + 1] = { Style = sStyle, Text = s };
+                        sPlain = sPlain .. s;
+                        break;
+                    end
+
+                    local tag = sIn:sub(a + 1, b - 1):upper();
+                    local close = "</" .. tag .. ">";
+                    local c = sIn:find(close, b + 1, true);
+
+                    if not c then
+                        local s = sIn:sub(a);
+                        tRuns[#tRuns + 1] = { Style = sStyle, Text = s };
+                        sPlain = sPlain .. s;
+                        break;
+                    end
+
+                    local inner = sIn:sub(b + 1, c - 1);
+                    local use = GetFontStyle(tag) and tag or sStyle;
+
+                    tRuns[#tRuns + 1] = { Style = use, Text = inner };
+                    sPlain = sPlain .. inner;
+
+                    i = c + #close;
+                end
+
+                return tRuns, sPlain;
+            end
+
+            --------------------------------------------------------------------
+            -- PARSE (runs + plain string)
+            --------------------------------------------------------------------
+            local tRunsSrc, sPlain = BuildRuns(sText);
+
+            --------------------------------------------------------------------
+            -- UPDATE STYLES (if requested)
+            --------------------------------------------------------------------
+            if (_bAutoUpdateStyle) then
+                local oDef = GetFontStyle(sStyle);
+                if (oDef and oDef.Update) then
+                    oDef.Update();
+                end
+
+                for _, r in ipairs(tRunsSrc) do
+                    local o = GetFontStyle(r.Style);
+                    if (o and o.Update) then
+                        o.Update();
+                    end
+                end
+            end
+
+            --------------------------------------------------------------------
+            -- WRAP (wrapper contract is plain string)
+            --------------------------------------------------------------------
+            local tLines        = {};
+            local nStartOffsetX = 0;
+            local nStartOffsetY = 0;
+
+            if (fWrap) then
+                local oDef = GetFontStyle(sStyle);
+                local nW, nH = oDef.Prep(D, sPlain);
+                tLines, nStartOffsetX, nStartOffsetY = fWrap(nW, nH, sPlain, vAngle, {...});
+            else
+                tLines[1] = sPlain;
+            end
+
+            --------------------------------------------------------------------
+            -- BUILD PER-LINE SEGMENTS (preserves style runs across wrapped lines)
+            --------------------------------------------------------------------
+            local tLineSegs = {};
+            do
+                local nRun = 1;
+                local nPos = 1;
+
+                for iLine, sLine in ipairs(tLines) do
+                    local tSegs = {};
+                    local nRemain = #sLine;
+
+                    while (nRemain > 0) do
+                        local r = tRunsSrc[nRun];
+                        if not r then
+                            tSegs[#tSegs + 1] = { Style = sStyle, Text = sLine:sub(#sLine - nRemain + 1) };
+                            break;
+                        end
+
+                        local sRunText = r.Text;
+                        local nRunRemain = (#sRunText - nPos) + 1;
+
+                        if (nRunRemain <= 0) then
+                            nRun = nRun + 1;
+                            nPos = 1;
+                        else
+                            local nTake = math.min(nRunRemain, nRemain);
+                            local sPart = sRunText:sub(nPos, nPos + nTake - 1);
+
+                            tSegs[#tSegs + 1] = { Style = r.Style, Text = sPart };
+
+                            nPos = nPos + nTake;
+                            nRemain = nRemain - nTake;
+
+                            if (nPos > #sRunText) then
+                                nRun = nRun + 1;
+                                nPos = 1;
+                            end
+                        end
+                    end
+
+                    tLineSegs[iLine] = tSegs;
+                end
+            end
+
+            --------------------------------------------------------------------
+            -- MEASURE BLOCK (INK-BOX LAYOUT: neutralize negative bearings)
+            --------------------------------------------------------------------
+            local tLineInfo = {};
+            local nBlockW   = 0;
+            local nBlockH   = 0;
+
+            local nPadX = 1; -- keep your safety pad
+
+            for iLine, tSegs in ipairs(tLineSegs) do
+                local nX = 0;
+
+                local nLineMinX = 0;
+                local nLineMaxX = 0;
+                local nLineMinY = 0;
+                local nLineMaxY = 0;
+
+                for _, seg in ipairs(tSegs) do
+                    local oStyle = GetFontStyle(seg.Style) or GetFontStyle(sStyle);
+                    local sPart  = seg.Text;
+
+                    -- ensure correct font set
+                    oStyle.Prep(_D, sPart, false);
+
+                    -- true ink bounds (includes your shadow/outline/etc via Prep)
+                    local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sPart, true);
+
+                    -- LAYOUT RULE:
+                    -- place ink-box start at nX (so negative nMinX can't backtrack into previous segment)
+                    local nPartMinX = nX;
+                    local nPartMaxX = nX + nTotalW;
+
+                    local nPartMinY = nMinY;
+                    local nPartMaxY = nMinY + nTotalH;
+
+                    if (nLineMinX > nPartMinX) then nLineMinX = nPartMinX end
+                    if (nLineMaxX < nPartMaxX) then nLineMaxX = nPartMaxX end
+                    if (nLineMinY > nPartMinY) then nLineMinY = nPartMinY end
+                    if (nLineMaxY < nPartMaxY) then nLineMaxY = nPartMaxY end
+
+                    nX = nX + nTotalW + nPadX;
+                end
+
+                local nLineW = nLineMaxX - nLineMinX;
+                local nLineH = nLineMaxY - nLineMinY;
+
+                tLineInfo[iLine] = {
+                    MinX = nLineMinX,
+                    MinY = nLineMinY,
+                    W    = nLineW,
+                    H    = nLineH,
+                };
+
+                if (nBlockW < nLineW) then nBlockW = nLineW end
+                nBlockH = nBlockH + nLineH;
+            end
+
+            --------------------------------------------------------------------
+            -- BASE POSITION (top-left of the block)
+            --------------------------------------------------------------------
+            local nBaseX = bCenterX and (nRawX - (nBlockW / 2)) or nRawX;
+            local nBaseY = bCenterY and (nRawY - (nBlockH / 2)) or nRawY;
+
+            nBaseX = nBaseX + (nStartOffsetX or 0);
+            nBaseY = nBaseY + (nStartOffsetY or 0);
+
+            --------------------------------------------------------------------
+            -- DRAW PASS (INK-BOX LAYOUT: drawX = penX - nMinX)
+            --------------------------------------------------------------------
+            local nY = nBaseY;
+
+            for iLine, tSegs in ipairs(tLineSegs) do
+                local tInfo = tLineInfo[iLine] or { MinX = 0, MinY = 0, H = 0 };
+
+                local nX = nBaseX;                    -- pen x = ink-box start
+                local nLineY = nY - (tInfo.MinY or 0); -- align to real top
+
+                for _, seg in ipairs(tSegs) do
+                    local oStyle = GetFontStyle(seg.Style) or GetFontStyle(sStyle);
+                    local sPart  = seg.Text;
+
+                    oStyle.Prep(_D, sPart, false);
+
+                    local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sPart, true);
+
+                    -- KEY FIX:
+                    -- draw so that the ink-box starts at nX (neutralizes negative bearings / kerning tuck)
+                    local nDrawX = nX - (nMinX or 0);
+                    local nDrawY = nLineY;
+
+                    --TEST (keep it, but make it match the real ink-box)
+                    --local R = math.random;
+                    --D.DrawRectangle(floor(nX), floor(nY), floor(nTotalW), floor(nTotalH), ColorRGBA(R(1, 255),R(1, 255),R(1, 255),60));
+                    --TEST
+
+                    oStyle.Draw(_Object, _D, _InternalDC, floor(nDrawX), floor(nDrawY), sPart, vAngle);
+
+                    nX = nX + nTotalW + nPadX;
+                end
+
+                nY = nY + (tInfo.H or 0);
+            end
+
+            return nBaseX, nBaseY, nBlockW, nBlockH;
+        end,
+        OnShow = function()
+            --local nV = KEY_CODES.v.dec;
+            --local nH = KEY_CODES.h.dec;
+
+            --create the canvas
+            if not (_bCanvasCreated) then
+                local bCanvasCreated = Canvas.Create(_sCanvas, {Keyboard = true});
+                assert(bCanvasCreated, "Error in Forge, \"${game}\": Could not create canvas for object, \"${canvas}\"." % {game = "TODO GET GAME NAME", canvas = _sCanvas});
+                _bCanvasCreated = true; --TODO QUESTION does the canvas need created everytime the page loads? If os, remove this flag entirely.
+            end
+
+            if not (_hWndCard) then
+                _hWndCard = ProcSys.GetWindowHandle(PANE.MAIN);
+            end
+
+            Canvas.SetCallback(_sCanvas, CanvasInputCallback);
+
+            --set the Forge's window size and adjust the images
+            local sSection = "ForgeWindow";
+            local nX        = tonumber(INIFile.GetValue(_pAppCFG, sSection, "X"));
+            local nY        = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Y"));
+            local nWidth    = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Width"));
+            local nHeight   = tonumber(INIFile.GetValue(_pAppCFG, sSection, "Height"));
+
+            _bForgeAutoSizing = true;
+
+            if (nX and nY) then
+                Window.SetPos(HWND_APP, nX, nY);
+            end
+
+            if (nWidth and nHeight) then
+                Window.SetSize(HWND_APP, nWidth, nHeight);
+            end
+
+            _bForgeAutoSizing = false;
+
+            Page.StartTimer(_nRedrawTimerInterval, _nRedrawTimerID);
+        end,
+        OnSize = function(nWindowWidth, nWindowHeight, nPageWidth, nPageHeight, nType)
+            _nPageWidth     = nPageWidth;
+            _nPageHeight    = nPageHeight;
+
+            local tPos      = Window.GetPos(HWND_APP);
+            local sSection  = "ForgeWindow";
+
+            if not (_bForgeAutoSizing) then
+                INIFile.SetValue(_pAppCFG, sSection, "Width", tostring(nWindowWidth));
+                INIFile.SetValue(_pAppCFG, sSection, "Height", tostring(nWindowHeight));
+                INIFile.SetValue(_pAppCFG, sSection, "X", tostring(tPos.X));
+                INIFile.SetValue(_pAppCFG, sSection, "Y", tostring(tPos.Y));
+            end
+
+            --local nStatusYStart = nPageHeight - _nStatusHeight;
+
+            UpdatePageLayout();
+
+            if (_tActiveRow) then
+                _bRedrawCanvas = true;
+                _bIsResizing   = true;
+            end
+
+        end,
+        --STYLE = null, --public enum --TODO Does it need to be public still? It gets injected into the userenv so why make it public?
+        OnTimer = function(nID)
+
+            if (nID ~= _nRedrawTimerID or _bDrawBlocked or _bDrawTimerBusy) then
+                return;
+            end
+
+            _bDrawTimerBusy = true;
+
+            local bOK, sErr = xpcall(function()
+                --increment the delta time
+                _nTimeDelta = _nTimeDelta + _nRedrawTimerInterval;
+
+                --check if a redraw request was made and that we're done resizing
+                if (_bRedrawCanvas and not _bIsResizing) then
+                    --Log.Note("Redraw")
+                    --redraw the card
+                    Draw();
+                    --fulfill the request
+                    _bRedrawCanvas = false;--TODO QUESTION should this be above?
+                end
+
+                --if enough time has passed...
+                if (_nTimeDelta >= _nSizingDelta) then
+                    --...indicate resizing has stopped
+                    _bIsResizing = false;
+                    --...and reset the time delta
+                    _nTimeDelta = 0;
+                end
+            end, XPCallError);
+
+            _bDrawTimerBusy = false;
+
+            if not (bOK) then
+                error(sErr, 0);
+            end
+
+        end,
+        RequestCardRedraw = function()
+            _bRedrawCard    = true;
+            _bRedrawCanvas  = true;
+        end,
+        RequestUtilRedraw = function()
+            _bRedrawUtil    = true;
+            _bRedrawCanvas  = _bUtilVisible;
+        end,
+        SetDrawFunction = function(fDraw)
+
+            if not (rawtype(fDraw) == "function") then
+                error("Forge.SetDrawFunction: expected function at argument 1. Got "..rawtype(fDraw), 3);
+            end
+
+            _fDraw = fDraw;
+        end,
+            SetDrawBackFunction = function(fDrawBack)
+
+            if not (rawtype(fDrawBack) == "function") then
+                error("Forge.SetDrawBackFunction: expected function at argument 1. Got "..rawtype(fDrawBack), 3);
+            end
+
+            _fDrawBack = fDrawBack;
+        end,
+        SetActiveRow = function(tRow)
+            --TODO ASSERTIONS
+            if (type(tRow) == "FinalRow") then
+                _tActiveRow = tRow;
+            end
+
+        end,
+        SetActiveCardSet = function(oCardSet)
+
+            if not (type(oCardSet) == "CardSet") then
+                error("Forge.SetActiveCardSet: Expected type CardSet. Got "..type(oCardSet)..'.');
+            end
+
+            _oActiveCardSet = oCardSet;
+            _nCardWidth     = oCardSet.GetCardWidth();
+            _nCardHeight    = oCardSet.GetCardHeight();
+            _sCardSetName   = oCardSet.GetName();
+
+            --(re)create the Forge images
+            if (_hImage) then
+                _hImage:Free();
+                _hImage     = false;
+                _nImageID   = false;
+            end
+
+            if (_hImageExport) then
+                _hImageExport:Free();
+                _hImageExport   = false;
+                _nImageExportID = false;
+            end
+
+            if (_hImageUtil) then
+                _hImageUtil:Free();
+                _hImageUtil     = false;
+                _nImageUtilID   = false;
+            end
+
+            _hImage,        _nImageID       = CreateImage(_hImage,         _nImageID);
+            _hImageExport,  _nImageExportID = CreateImage(_hImageExport,   _nImageExportID);
+            _hImageUtil,    _nImageUtilID   = CreateImage(_hImageUtil,     _nImageUtilID);
+
+            UpdatePageLayout();
+        end,
+        --[[SetClearCanvasEachDraw = function(vFlag)
+            _bClearCanvasEachDraw = rawtype(vFlag) == "boolean" and vFlag or false;
+        end,]]
+        SetDrawEnabled = function(vFlag)
+            _bDrawBlocked = not (rawtype(vFlag) == "boolean" and vFlag or false);
+        end,
+        --[[SetDrawSide = function(nDrawside)
+            type.assert.number(nDrawside, true, false, false, true, false, 0, 1);
+            _bDrawBack = #nDrawside; --draws front on 0, back on 1
+        end,]]
+        SetUtilVisible = function(vFlag)
+            _bUtilVisible = rawtype(vFlag) == "boolean" and vFlag or false;
+            _bRedrawCanvas  = true;
+        end,
+    },
+    {--PRIVATE
+        Forge = function(this, cdat) end
+    },
+    {--PROTECTED
+
+    },
+    {},     --PUBLIC
+    nil,    --extending class
+    true,   --if the class is final
+    nil     --interface(s) (either nil, or interface(s))
+);
