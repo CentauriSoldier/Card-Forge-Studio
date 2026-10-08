@@ -40,23 +40,7 @@ end
 local _bOK, _sError = xpcall(initialize, debug.traceback);
 
 if (not _bOK) then
-    if (Log) then
-        Log.Error(_sError);
-        dLog.Show();
-    end
-
-    local hLog = io.open(_pRuntime.."editor-errors.log", "a");
-
-    if (hLog) then
-        hLog:write(_sError.."\n");
-        hLog:close();
-    end
-
-    if (wx) then
-        wx.wxMessageBox(_sError, "Card Forge Studio - Startup Error", wx.wxOK + wx.wxICON_ERROR);
-    else
-        io.stderr:write(_sError.."\n");
-    end
+    require("Errors").report(_sError);
 end
 
 os.exit(_bOK and 0 or 1);

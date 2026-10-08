@@ -11,10 +11,101 @@ local type          = type;
     local isnumber      = type.isnumber;
     local isstring      = type.isstring;
     local istable       = type.istable;
-local Color         = Color;
-local Drawing       = Drawing;
-local DrawingFont   = DrawingFont;
-local Ini           = Ini;
+local wx            = require("wx");
+local INI           = require("Plugins.INI");
+local Color         = {};
+local DrawingFont   = {};
+
+Color.RGBA = function(nR, nG, nB, nA) return (nR << 24) | (nG << 16) | (nB << 8) | nA end
+Color.GetRed = function(oColor) return (oColor >> 24) & 255 end
+Color.GetGreen = function(oColor) return (oColor >> 16) & 255 end
+Color.GetBlue = function(oColor) return (oColor >> 8) & 255 end
+Color.GetAlpha = function(oColor) return oColor & 255 end
+
+function Color.TryFromString(sValue)
+    if (rawtype(sValue) ~= "string") then return nil end
+
+    local sText     = sValue:match("^%s*(.-)%s*$");
+    local tChannels = {};
+
+    if (sText:find(",", 1, true)) then
+        for sChannel in sText:gmatch("[^,]+") do
+            local nChannel = tonumber(sChannel);
+            if (not nChannel or nChannel < 0 or nChannel > 255) then return nil end
+            tChannels[#tChannels + 1] = nChannel;
+        end
+
+        if (#tChannels == 3 or #tChannels == 4) then
+            return Color.RGBA(tChannels[1], tChannels[2], tChannels[3], tChannels[4] or 255);
+        end
+        return nil;
+    end
+
+    local sHex = sText:gsub("^#", "");
+
+    if ((#sHex == 6 or #sHex == 8) and sHex:match("^%x+$")) then
+        return Color.RGBA(tonumber(sHex:sub(1, 2), 16), tonumber(sHex:sub(3, 4), 16), tonumber(sHex:sub(5, 6), 16), #sHex == 8 and tonumber(sHex:sub(7, 8), 16) or 255);
+    end
+
+    return nil;
+end
+
+function DrawingFont.Load(sFamily, nSize, tOptions)
+    local oFont = wx.wxFont(nSize, wx.wxFONTFAMILY_DEFAULT, tOptions.Italic and wx.wxFONTSTYLE_ITALIC or wx.wxFONTSTYLE_NORMAL, tOptions.Bold and wx.wxFONTWEIGHT_BOLD or wx.wxFONTWEIGHT_NORMAL, tOptions.Underline or false, sFamily);
+
+    if (tOptions.StrikeOut) then
+        oFont:SetStrikethrough(true);
+    end
+
+    return oFont;
+end
+
+local function Ini(pFile)
+    local tSections = {};
+    local tNames    = {};
+    local oConfig   = wx.wxFileConfig("", "", pFile, "", wx.wxCONFIG_USE_LOCAL_FILE);
+    oConfig:DisableAutoSave();
+    oConfig:SetExpandEnvVars(false);
+    local bOK, sError = xpcall(function()
+        local bGroup, sSection, nGroup = oConfig:GetFirstGroup();
+        while (bGroup) do
+            tNames[#tNames + 1] = sSection;
+            tSections[sSection] = {};
+            oConfig:SetPath("/"..sSection);
+            local bEntry, sKey, nEntry = oConfig:GetFirstEntry();
+            while (bEntry) do
+                local bFound, sValue = oConfig:Read(sKey, "");
+                tSections[sSection][sKey] = bFound and sValue or "";
+                bEntry, sKey, nEntry = oConfig:GetNextEntry(nEntry);
+            end
+            oConfig:SetPath("/");
+            bGroup, sSection, nGroup = oConfig:GetNextGroup(nGroup);
+        end
+    end, debug.traceback);
+    oConfig:delete();
+    assert(bOK, sError);
+
+    return {
+        GetValue = function(sSection, sKey, bInherit)
+            local tSeen = {};
+            while (not tSeen[sSection]) do
+                tSeen[sSection] = true;
+                local sValue = tSections[sSection] and tSections[sSection][sKey] or "";
+                local sReference = sValue:match("^%s*<%s*(.-)%s*>%s*$");
+                if (not bInherit or not sReference) then return sValue end
+                sSection = sReference;
+            end
+            return "";
+        end,
+        GetValueNames = function(sSection)
+            local tKeys = {};
+            for sKey in pairs(tSections[sSection] or {}) do tKeys[#tKeys + 1] = sKey; end
+            table.sort(tKeys);
+            return tKeys;
+        end,
+        GetSectionNames = function() return tNames end,
+    };
+end
 local ipairs        = ipairs;
 local pairs         = pairs;
 local table         = table;
@@ -419,7 +510,7 @@ return class("FontStyle",
     },
     {--PRIVATE
         Name__AUTOA_                = "",
-        Font__AUTOA_                = 0,
+        Font__AUTOA_                = null,
         Color                       = _oBlack,
 
         ShadowEnabled__AUTOA_       = false,
@@ -585,6 +676,7 @@ return class("FontStyle",
                 pri.D3StepY             = floor(tParsed.D3StepY or 0);
                 pri.D3Color             = tParsed.D3Color or _oClear;
 
+                -- TODO Implement the archived glow settings; the original Draw method never applied them.
                 pri.GlowEnabled         = tParsed.GlowEnabled and true or false;
                 pri.GlowGradientEnabled = tParsed.GlowGradientEnabled and true or false;
                 pri.GlowColor           = tParsed.GlowColor or _oClear;

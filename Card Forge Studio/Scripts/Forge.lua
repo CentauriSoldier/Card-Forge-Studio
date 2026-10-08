@@ -1,3 +1,4 @@
+local function retainedAMSRenderer()
 -------------------------🅻🅾🅲🅰🅻🅸🆉🅰🆃🅸🅾🅽--------------------
 local class             = class;
 local math              = math;
@@ -1361,3 +1362,545 @@ return class("Forge",
     true,   --if the class is final
     nil     --interface(s) (either nil, or interface(s))
 );
+
+end
+-- Live WX renderer. Card pixels are rebuilt only when their dirty flag is set.
+-- The retained AMS implementation below documents the original UI and export paths.
+-- TODO Port export targets and ruler settings from the retained implementation.
+local wx            = require("wx");
+local FontStyle     = require("FontStyle");
+local GetFontStyle  = FontStyle.Get;
+local floor         = math.floor;
+local Forge         = {};
+local _tImages      = {};
+local _tActiveRow;
+local _oBitmap;
+local _D, _Object, _InternalDC;
+local _fDraw, _fDrawBack;
+local _bAutoUpdateStyle = false;
+local _bRedrawCard   = false;
+local _bRedrawUtil   = false;
+local _bRedrawCanvas = false;
+local _bDrawBlocked  = false;
+local _bDrawBusy     = false;
+local _bDrawBack     = false;
+local _nWidth       = 1;
+local _nHeight      = 1;
+local _nRevision    = 0;
+local _oAssetClock  = wx.wxStopWatch();
+
+local function nativeColour(vColour)
+    if (rawtype(vColour) == "number") then
+        return wx.wxColour((vColour >> 24) & 255, (vColour >> 16) & 255, (vColour >> 8) & 255, vColour & 255);
+    end
+    return vColour;
+end
+
+local function drawingContext(oGC, oDC)
+    local tContext = {};
+    local oFont    = wx.wxNORMAL_FONT;
+    local oColour  = wx.wxBLACK;
+
+    function tContext.SetDrawingFont(oNewFont)
+        oFont = oNewFont;
+        oGC:SetFont(oFont, oColour);
+        oDC:SetFont(oFont);
+    end
+
+    function tContext.SetFilteringMode()
+        -- WX graphics context uses alpha composition for the card layer.
+    end
+
+    function tContext.GetTextWidth(sText)
+        local nWidth = oGC:GetTextExtent(tostring(sText));
+        return nWidth;
+    end
+
+    function tContext.GetTextHeight(sText)
+        local nWidth, nHeight = oGC:GetTextExtent(tostring(sText));
+        return nHeight;
+    end
+
+    function tContext.DrawText(nX, nY, sText, oTextColour)
+        oColour = nativeColour(oTextColour) or oColour;
+        oGC:SetFont(oFont, oColour);
+        oGC:DrawText(tostring(sText), nX, nY);
+    end
+
+    function tContext.DrawAngledText(nX, nY, sText, nAngle, oTextColour)
+        oColour = nativeColour(oTextColour) or oColour;
+        oGC:SetFont(oFont, oColour);
+        oGC:DrawText(tostring(sText), nX, nY, math.rad(nAngle or 0));
+    end
+
+    function tContext.DrawRectangle(nX, nY, nWidth, nHeight, oFill)
+        oGC:SetPen(wx.wxTRANSPARENT_PEN);
+        oGC:SetBrush(wx.wxBrush(nativeColour(oFill)));
+        oGC:DrawRectangle(nX, nY, nWidth, nHeight);
+    end
+
+    function tContext.GetOutputInfo()
+        return {Width = _nWidth, Height = _nHeight,};
+    end
+
+    function tContext.DrawImage(oImage, nX, nY, nWidth, nHeight)
+        oGC:DrawBitmap(oImage, nX, nY, nWidth or oImage:GetWidth(), nHeight or oImage:GetHeight());
+    end
+
+    return tContext;
+end
+
+local function resolveImage(sRelative)
+    assert(rawtype(sRelative) == "string", "Image path must be a string.");
+    local sPath = sRelative:gsub("\\", "/");
+    assert(not sPath:match("^/") and not sPath:find(":", 1, true), "Image path must be relative to the game.");
+    local tParts = {};
+
+    for sPart in sPath:gmatch("[^/]+") do
+        if (sPart == "..") then
+            assert(#tParts > 0, "Image path leaves the game folder.");
+            tParts[#tParts] = nil;
+        elseif (sPart ~= ".") then
+            tParts[#tParts + 1] = sPart;
+        end
+    end
+
+    return io.normalizepath(FS.Game.Root.."/"..table.concat(tParts, "/"));
+end
+
+local function imageStamp(pFile)
+    local oFile = wx.wxFileName(pFile);
+    local oTime = oFile:GetModificationTime();
+    if (not oTime:IsValid()) then return "missing" end
+    return tostring(oTime:GetTicks())..":"..tostring(oTime:GetMillisecond())..":"..oFile:GetSize():ToString();
+end
+
+local function checkImages()
+    if (_oAssetClock:Time() < PROCSYS_LIVE_FILE_REPO_TIMER_INTERVAL) then return end
+    _oAssetClock:Start();
+    for pFile, tImage in pairs(_tImages) do
+        if (imageStamp(pFile) ~= tImage.stamp) then
+            _tImages[pFile] = nil;
+            Forge.RequestCardRedraw();
+        end
+    end
+end
+
+function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight)
+    assert(_D, "Forge drawing is only available during a render pass.");
+    local pImage = resolveImage(sPath);
+    local tImage = _tImages[pImage];
+    local oImage = tImage and tImage.bitmap;
+
+    if (not oImage) then
+        assert(wx.wxFileExists(pImage), "Card image does not exist: "..pImage);
+        oImage = wx.wxBitmap(pImage, wx.wxBITMAP_TYPE_ANY);
+        assert(oImage:IsOk(), "Could not decode card image: "..pImage);
+        _tImages[pImage] = {bitmap = oImage, stamp = imageStamp(pImage),};
+    end
+
+    _D.DrawImage(oImage, nX, nY, nWidth, nHeight);
+end
+
+function Forge.DrawRectangle(...)
+    assert(_D, "Forge drawing is only available during a render pass.");
+    return _D.DrawRectangle(...);
+end
+
+function Forge.GetOutputInfo()
+    return {Width = _nWidth, Height = _nHeight,};
+end
+
+function Forge.SetDrawFunction(fDraw)
+    assert(rawtype(fDraw) == "function", "Draw must return a function.");
+    _fDraw = fDraw;
+    Forge.RequestCardRedraw();
+end
+
+function Forge.SetDrawBackFunction(fDraw)
+    assert(rawtype(fDraw) == "function", "DrawBack must return a function.");
+    _fDrawBack = fDraw;
+    Forge.RequestCardRedraw();
+end
+
+function Forge.SetActiveRow(tRow)
+    _tActiveRow = tRow;
+    Forge.RequestCardRedraw();
+end
+
+function Forge.SetActiveCardSet(oCardSet)
+    _nWidth, _nHeight = oCardSet.GetCardWidth(), oCardSet.GetCardHeight();
+    assert(_nWidth > 0 and _nHeight > 0, "Invalid card dimensions.");
+    _tImages = {};
+    _oBitmap = nil;
+    _bDrawBack = false;
+    Forge.RequestCardRedraw();
+end
+
+function Forge.SetFace(sFace)
+    assert(sFace == "front" or sFace == "back", "Unknown card face.");
+    local bBack = sFace == "back";
+    if (_bDrawBack ~= bBack) then
+        _bDrawBack = bBack;
+        Forge.RequestCardRedraw();
+    end
+end
+
+function Forge.SetDrawEnabled(bEnabled)
+    _bDrawBlocked = not bEnabled;
+end
+
+function Forge.RequestCardRedraw()
+    _bRedrawCard, _bRedrawCanvas = true, true;
+end
+
+function Forge.RequestUtilRedraw()
+    _bRedrawUtil, _bRedrawCanvas = true, true;
+end
+
+function Forge.GetBitmap()
+    return _oBitmap, _nRevision;
+end
+
+function Forge.OnTimer()
+    checkImages();
+    if (_bDrawBusy or _bDrawBlocked or not _bRedrawCanvas) then return false end
+    if (not _tActiveRow or not _fDraw) then return false end
+    _bDrawBusy = true;
+    local oDC, oGC;
+    local bOK, sError = xpcall(function()
+        if (_bRedrawCard) then
+            local oBitmap = wx.wxBitmap(_nWidth, _nHeight, 32);
+            oDC = wx.wxMemoryDC();
+            oDC:SelectObject(oBitmap);
+            oDC:SetBackground(wx.wxWHITE_BRUSH);
+            oDC:Clear();
+            oGC = assert(wx.wxGraphicsContext.Create(oDC), "Could not create WX graphics context.");
+            _D, _Object, _InternalDC = drawingContext(oGC, oDC), "Card", oDC;
+            local fDraw = _bDrawBack and _fDrawBack or _fDraw;
+            assert(fDraw, "No draw function for this card face.")(_Object, _D, _InternalDC);
+            oGC:delete();
+            oGC = nil;
+            oDC:SelectObject(wx.wxNullBitmap);
+            oDC:delete();
+            oDC = nil;
+            _oBitmap = oBitmap;
+            _nRevision = _nRevision + 1;
+        end
+    end, debug.traceback);
+    _D, _Object, _InternalDC = nil, nil, nil;
+    if (oGC) then oGC:delete(); end
+    if (oDC) then oDC:SelectObject(wx.wxNullBitmap); oDC:delete(); end
+    _bDrawBusy = false;
+    _bRedrawCard, _bRedrawUtil, _bRedrawCanvas = false, false, false;
+    assert(bOK, sError);
+    return true;
+end
+
+function Forge.Release()
+    _tImages, _tActiveRow, _oBitmap = {}, nil, nil;
+    _bRedrawCard, _bRedrawUtil, _bRedrawCanvas = false, false, false;
+end
+Forge.DrawText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)
+    local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
+    local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
+    local bCenterY      = rawtype(vCenterY)     == "boolean"    and vCenterY    or false;
+    local oStyle        = GetFontStyle(sStyle); --TODO add default style as fallback???
+    local tLines        = {}; --used for text wrapping
+    local nStartOffsetX, nStartOffsetY = 0, 0;
+
+    if (_bAutoUpdateStyle) then --update the style (if requested)
+        oStyle.Update();
+    end
+
+    local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sText);
+
+    if (fWrap) then
+        tLines, nStartOffsetX, nStartOffsetY = fWrap(nTotalW, nTotalH, sText, vAngle, {...});
+        ---TODO verify table
+    else
+        tLines[1] = sText;
+    end
+
+    local nLastX, nLastY, nLastWidth, nLastHeight;
+
+    local bFirstLine, nBaseX, nBaseY, nTrueX, nTrueY, nLineYAdjuster;
+    local nLinePadding  = 2; --TODO FINISH PUT IN PRI AND ALLOW MUTATE
+    local nLineReturn   = nTotalH;
+    local nHalfHeight   = nTotalH / 3;
+
+    for nLine, sLine in ipairs(tLines) do
+        nLineYAdjuster = nHalfHeight * (nLine - 1);
+        bFirstLine = nLine == 1;
+
+        nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sLine, true);
+        nBaseX = bCenterX and (nRawX - (nTotalW / 2) - nMinX) or nRawX;
+        nBaseY = bCenterY and (nRawY - (nTotalH / 2) - nMinY) or nRawY;
+
+        nTrueX = nBaseX + (bFirstLine and nStartOffsetX or 0);
+        nTrueY = nBaseY + (bFirstLine and nStartOffsetY or 0) + nLineYAdjuster;
+
+        nLastX      = nTrueX;
+        nLastY      = nTrueY;
+        nLastWidth  = nTotalW;
+        nLastHeight = nTotalH;
+
+        --draw the text
+        --oStyle.Draw(_sObject, _D, _InternalDC, floor(nTrueX), floor(nTrueY), sLine, vAngle);
+        oStyle.Draw(_Object, _D, _InternalDC, floor(nTrueX), floor(nTrueY), sLine, vAngle);
+    end
+
+    return nLastX, nLastY, nLastWidth, nLastHeight;
+end
+Forge.DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)--TODO BUG FIX USe HTML parser, not this
+    local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
+    local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
+    local bCenterY      = rawtype(vCenterY)     == "boolean"    and vCenterY    or false;
+
+    --------------------------------------------------------------------
+    -- PARSE HELPERS
+    --------------------------------------------------------------------
+    local function BuildRuns(sIn)
+        local tRuns  = {};
+        local sPlain = "";
+
+        local i = 1;
+        local n = #sIn;
+
+        while (i <= n) do
+            local a = sIn:find("<", i, true);
+
+            if not a then
+                local s = sIn:sub(i);
+                if (#s > 0) then
+                    tRuns[#tRuns + 1] = { Style = sStyle, Text = s };
+                    sPlain = sPlain .. s;
+                end
+                break;
+            end
+
+            if (a > i) then
+                local s = sIn:sub(i, a - 1);
+                tRuns[#tRuns + 1] = { Style = sStyle, Text = s };
+                sPlain = sPlain .. s;
+            end
+
+            local b = sIn:find(">", a + 1, true);
+            if not b then
+                local s = sIn:sub(a);
+                tRuns[#tRuns + 1] = { Style = sStyle, Text = s };
+                sPlain = sPlain .. s;
+                break;
+            end
+
+            local tag = sIn:sub(a + 1, b - 1):upper();
+            local close = "</" .. tag .. ">";
+            local c = sIn:find(close, b + 1, true);
+
+            if not c then
+                local s = sIn:sub(a);
+                tRuns[#tRuns + 1] = { Style = sStyle, Text = s };
+                sPlain = sPlain .. s;
+                break;
+            end
+
+            local inner = sIn:sub(b + 1, c - 1);
+            local use = GetFontStyle(tag) and tag or sStyle;
+
+            tRuns[#tRuns + 1] = { Style = use, Text = inner };
+            sPlain = sPlain .. inner;
+
+            i = c + #close;
+        end
+
+        return tRuns, sPlain;
+    end
+
+    --------------------------------------------------------------------
+    -- PARSE (runs + plain string)
+    --------------------------------------------------------------------
+    local tRunsSrc, sPlain = BuildRuns(sText);
+
+    --------------------------------------------------------------------
+    -- UPDATE STYLES (if requested)
+    --------------------------------------------------------------------
+    if (_bAutoUpdateStyle) then
+        local oDef = GetFontStyle(sStyle);
+        if (oDef and oDef.Update) then
+            oDef.Update();
+        end
+
+        for _, r in ipairs(tRunsSrc) do
+            local o = GetFontStyle(r.Style);
+            if (o and o.Update) then
+                o.Update();
+            end
+        end
+    end
+
+    --------------------------------------------------------------------
+    -- WRAP (wrapper contract is plain string)
+    --------------------------------------------------------------------
+    local tLines        = {};
+    local nStartOffsetX = 0;
+    local nStartOffsetY = 0;
+
+    if (fWrap) then
+        local oDef = GetFontStyle(sStyle);
+        local nW, nH = oDef.Prep(_D, sPlain);
+        tLines, nStartOffsetX, nStartOffsetY = fWrap(nW, nH, sPlain, vAngle, {...});
+    else
+        tLines[1] = sPlain;
+    end
+
+    --------------------------------------------------------------------
+    -- BUILD PER-LINE SEGMENTS (preserves style runs across wrapped lines)
+    --------------------------------------------------------------------
+    local tLineSegs = {};
+    do
+        local nRun = 1;
+        local nPos = 1;
+
+        for iLine, sLine in ipairs(tLines) do
+            local tSegs = {};
+            local nRemain = #sLine;
+
+            while (nRemain > 0) do
+                local r = tRunsSrc[nRun];
+                if not r then
+                    tSegs[#tSegs + 1] = { Style = sStyle, Text = sLine:sub(#sLine - nRemain + 1) };
+                    break;
+                end
+
+                local sRunText = r.Text;
+                local nRunRemain = (#sRunText - nPos) + 1;
+
+                if (nRunRemain <= 0) then
+                    nRun = nRun + 1;
+                    nPos = 1;
+                else
+                    local nTake = math.min(nRunRemain, nRemain);
+                    local sPart = sRunText:sub(nPos, nPos + nTake - 1);
+
+                    tSegs[#tSegs + 1] = { Style = r.Style, Text = sPart };
+
+                    nPos = nPos + nTake;
+                    nRemain = nRemain - nTake;
+
+                    if (nPos > #sRunText) then
+                        nRun = nRun + 1;
+                        nPos = 1;
+                    end
+                end
+            end
+
+            tLineSegs[iLine] = tSegs;
+        end
+    end
+
+    --------------------------------------------------------------------
+    -- MEASURE BLOCK (INK-BOX LAYOUT: neutralize negative bearings)
+    --------------------------------------------------------------------
+    local tLineInfo = {};
+    local nBlockW   = 0;
+    local nBlockH   = 0;
+
+    local nPadX = 1; -- keep your safety pad
+
+    for iLine, tSegs in ipairs(tLineSegs) do
+        local nX = 0;
+
+        local nLineMinX = 0;
+        local nLineMaxX = 0;
+        local nLineMinY = 0;
+        local nLineMaxY = 0;
+
+        for _, seg in ipairs(tSegs) do
+            local oStyle = GetFontStyle(seg.Style) or GetFontStyle(sStyle);
+            local sPart  = seg.Text;
+
+            -- ensure correct font set
+            oStyle.Prep(_D, sPart, false);
+
+            -- true ink bounds (includes your shadow/outline/etc via Prep)
+            local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sPart, true);
+
+            -- LAYOUT RULE:
+            -- place ink-box start at nX (so negative nMinX can't backtrack into previous segment)
+            local nPartMinX = nX;
+            local nPartMaxX = nX + nTotalW;
+
+            local nPartMinY = nMinY;
+            local nPartMaxY = nMinY + nTotalH;
+
+            if (nLineMinX > nPartMinX) then nLineMinX = nPartMinX end
+            if (nLineMaxX < nPartMaxX) then nLineMaxX = nPartMaxX end
+            if (nLineMinY > nPartMinY) then nLineMinY = nPartMinY end
+            if (nLineMaxY < nPartMaxY) then nLineMaxY = nPartMaxY end
+
+            nX = nX + nTotalW + nPadX;
+        end
+
+        local nLineW = nLineMaxX - nLineMinX;
+        local nLineH = nLineMaxY - nLineMinY;
+
+        tLineInfo[iLine] = {
+            MinX = nLineMinX,
+            MinY = nLineMinY,
+            W    = nLineW,
+            H    = nLineH,
+        };
+
+        if (nBlockW < nLineW) then nBlockW = nLineW end
+        nBlockH = nBlockH + nLineH;
+    end
+
+    --------------------------------------------------------------------
+    -- BASE POSITION (top-left of the block)
+    --------------------------------------------------------------------
+    local nBaseX = bCenterX and (nRawX - (nBlockW / 2)) or nRawX;
+    local nBaseY = bCenterY and (nRawY - (nBlockH / 2)) or nRawY;
+
+    nBaseX = nBaseX + (nStartOffsetX or 0);
+    nBaseY = nBaseY + (nStartOffsetY or 0);
+
+    --------------------------------------------------------------------
+    -- DRAW PASS (INK-BOX LAYOUT: drawX = penX - nMinX)
+    --------------------------------------------------------------------
+    local nY = nBaseY;
+
+    for iLine, tSegs in ipairs(tLineSegs) do
+        local tInfo = tLineInfo[iLine] or { MinX = 0, MinY = 0, H = 0 };
+
+        local nX = nBaseX;                    -- pen x = ink-box start
+        local nLineY = nY - (tInfo.MinY or 0); -- align to real top
+
+        for _, seg in ipairs(tSegs) do
+            local oStyle = GetFontStyle(seg.Style) or GetFontStyle(sStyle);
+            local sPart  = seg.Text;
+
+            oStyle.Prep(_D, sPart, false);
+
+            local nTotalW, nTotalH, nMinX, nMinY = oStyle.Prep(_D, sPart, true);
+
+            -- KEY FIX:
+            -- draw so that the ink-box starts at nX (neutralizes negative bearings / kerning tuck)
+            local nDrawX = nX - (nMinX or 0);
+            local nDrawY = nLineY;
+
+            --TEST (keep it, but make it match the real ink-box)
+            --local R = math.random;
+            --D.DrawRectangle(floor(nX), floor(nY), floor(nTotalW), floor(nTotalH), ColorRGBA(R(1, 255),R(1, 255),R(1, 255),60));
+            --TEST
+
+            oStyle.Draw(_Object, _D, _InternalDC, floor(nDrawX), floor(nDrawY), sPart, vAngle);
+
+            nX = nX + nTotalW + nPadX;
+        end
+
+        nY = nY + (tInfo.H or 0);
+    end
+
+    return nBaseX, nBaseY, nBlockW, nBlockH;
+end
+return Forge;

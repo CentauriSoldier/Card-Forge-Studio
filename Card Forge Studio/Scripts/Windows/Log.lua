@@ -1,11 +1,16 @@
 -- Native message-card window; the Log service owns messages and disk operations.
--- TODO Required window persistence: save position and size on move, resize, and
--- close; restore them when this window is reopened.
 local wx = require("wx");
 local Log = require("Log");
 local Window = {};
+local WindowState = require("Windows.WindowState");
+local _tWindowState = {
+    savePosition = true,
+    saveSize     = true,
+    saveVisible  = true,
+};
+WindowState.register("Log", _tWindowState);
 
-local _dFrame, _oCards;
+local _dFrame, _oCards, _oWindowState;
 local _tLevelColours = {DEBUG = "#576575", NOTE = "#285a86", WARNING = "#805300", ERROR = "#a02525"};
 
 local function escapeHTML(sText)
@@ -25,7 +30,8 @@ local function refreshCards()
         tHTML[#tHTML + 1] = '<p>No log messages.</p>';
     end
 
-    for nIndex, tEntry in ipairs(_tEntries) do
+    for nIndex = #_tEntries, 1, -1 do
+        local tEntry = _tEntries[nIndex];
         local sBackground = nIndex % 2 == 1 and "#ffffff" or "#f7f8fa";
         local sLevelColour = _tLevelColours[tEntry.level];
         tHTML[#tHTML + 1] = '<table width="100%" cellspacing="0" cellpadding="12" bgcolor="'..sBackground..'"><tr><td>';
@@ -44,6 +50,7 @@ local function ensureWindow()
     end
 
     _dFrame = wx.wxFrame(wx.NULL, wx.wxID_ANY, "Card Forge Studio - Log", wx.wxDefaultPosition, wx.wxSize(720, 560));
+    _oWindowState = WindowState.bind(_dFrame, "Log");
     _dFrame:SetMinSize(wx.wxSize(420, 280));
     local dPanel = wx.wxPanel(_dFrame, wx.wxID_ANY);
     local oLayout = wx.wxBoxSizer(wx.wxVERTICAL);
@@ -65,8 +72,7 @@ local function ensureWindow()
         local bOK, sError = pcall(Log.ClearLog);
 
         if (not bOK) then
-            wx.wxMessageBox(tostring(sError), "Card Forge Studio - Log Error",
-                wx.wxOK + wx.wxICON_ERROR, _dFrame);
+            require("Errors").report(sError);
         end
     end);
     _dFrame:Connect(wx.wxEVT_CLOSE_WINDOW, function(oEvent)
@@ -74,6 +80,7 @@ local function ensureWindow()
             _dFrame:Hide();
             oEvent:Veto();
         else
+            _oWindowState.close();
             _dFrame:Destroy();
             _dFrame, _oCards = nil, nil;
         end
@@ -89,6 +96,7 @@ end
 
 function Window.Close()
     if (_dFrame) then
+        _oWindowState.close();
         _dFrame:Destroy();
         _dFrame, _oCards = nil, nil;
     end

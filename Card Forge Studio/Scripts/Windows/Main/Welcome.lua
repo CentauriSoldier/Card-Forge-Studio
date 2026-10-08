@@ -4,6 +4,9 @@ local wx = require("wx");
 local Welcome = {};
 
 function Welcome.create(pApplication)
+    local sVersion = INIFile.GetValue(FS.AppCFG, "Settings", "Version");
+    local oVersionFont = wx.wxFont(18, wx.wxFONTFAMILY_DEFAULT, wx.wxFONTSTYLE_NORMAL, wx.wxFONTWEIGHT_NORMAL, false, "CRYSTAL");
+    assert(oVersionFont:IsOk(), "Cannot create the Welcome version font.");
     local oQuiet = wx.wxLogNull();
     local tLayers = {
         {file = "BG Welcome.png", x = -202, y = 0, width = 1804, height = 1200},
@@ -35,37 +38,67 @@ function Welcome.create(pApplication)
             oBitmap:delete();
         end
 
+        oDC:SetFont(oVersionFont);
+        oDC:SetBrush(wx.wxBrush(wx.wxColour(45, 45, 45)));
+        oDC:SetPen(wx.wxPen(wx.wxColour(75, 75, 75), 1, wx.wxPENSTYLE_SOLID));
+
+        for nIndex = 1, 2 do
+            oDC:DrawRoundedRectangle(math.max(0, oSize:GetWidth() - 20 - (3 - nIndex) * 76), math.max(0, oSize:GetHeight() - 84), 64, 64, 12);
+        end
+
+        oDC:SetTextForeground(wx.wxColour(255, 255, 255));
+        oDC:DrawText(sVersion, 8, 8);
+
         oDC:delete();
     end
 
-    local function addLinks(oParent, oLayout, fProtect)
-        local oLinks = wx.wxBoxSizer(wx.wxHORIZONTAL);
+    local function addLinks(dCanvas, fProtect)
+        local tButtons = {};
         local tLinks = {
             {image = "patreon", url = APP_PATREON, label = "Patreon"},
             {image = "github", url = APP_GITHUB, label = "GitHub"},
         };
-
-        oLinks:AddStretchSpacer(1);
 
         for _, tLink in ipairs(tLinks) do
             local pImage = pApplication.."Images/Buttons/"..tLink.image;
             local oNormal = wx.wxImage(pImage..".png", wx.wxBITMAP_TYPE_ANY);
             local oHover = wx.wxImage(pImage.." hover.png", wx.wxBITMAP_TYPE_ANY);
             assert(oNormal:IsOk() and oHover:IsOk(), "Cannot load Welcome link images.");
-            local oButton = wx.wxBitmapButton(oParent, wx.wxID_ANY,
-                wx.wxBitmap(oNormal:Scale(48, 48, wx.wxIMAGE_QUALITY_HIGH)));
+            local oButton = wx.wxBitmapButton(dCanvas, wx.wxID_ANY,
+                wx.wxBitmap(oNormal:Scale(48, 48, wx.wxIMAGE_QUALITY_HIGH)), wx.wxDefaultPosition, wx.wxSize(48, 48), wx.wxBORDER_NONE);
             oButton:SetBitmapCurrent(wx.wxBitmap(oHover:Scale(48, 48, wx.wxIMAGE_QUALITY_HIGH)));
+            oButton:SetBackgroundColour(wx.wxColour(45, 45, 45));
             oButton:SetToolTip(tLink.label);
             local sURL = tLink.url;
             oButton:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, fProtect(function()
                 assert(wx.wxLaunchDefaultBrowser(sURL), "Could not open the browser.");
             end));
-            oLinks:Add(oButton, 0, wx.wxALL, 4);
+            tButtons[#tButtons + 1] = oButton;
         end
 
-        oLayout:Add(oLinks, 0, wx.wxEXPAND);
+        local function layout()
+            local oSize = dCanvas:GetClientSize();
 
-        return oLinks;
+            for nIndex, oButton in ipairs(tButtons) do
+                oButton:Move(math.max(0, oSize:GetWidth() - 12 - (#tButtons - nIndex + 1) * 76), math.max(0, oSize:GetHeight() - 76));
+            end
+        end
+
+        dCanvas:Connect(wx.wxEVT_SIZE, function(oEvent)
+            layout();
+            oEvent:Skip();
+        end);
+        layout();
+
+        return {
+            ShowItems = function(_, bShow)
+                for _, oButton in ipairs(tButtons) do
+                    oButton:Show(bShow);
+                end
+
+                layout();
+            end,
+        };
     end
 
     return {draw = draw, addLinks = addLinks};

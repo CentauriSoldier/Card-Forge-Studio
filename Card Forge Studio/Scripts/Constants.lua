@@ -9,6 +9,7 @@ local pScripts = io.normalizepath(pRoot.."/Scripts");
 
 constant("_Scripts",      pScripts);
 constant("_Images",       pRoot.."/Images");
+constant("_Fonts",        pRoot.."/Fonts");
 constant("_Bin",          pRoot.."/Bin");
 constant("_ExeFolder",    pRoot);
 -- Documentation has not been migrated; use the existing archive read-only.

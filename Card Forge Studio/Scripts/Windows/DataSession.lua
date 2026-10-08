@@ -23,7 +23,20 @@ function DataSession.create(tOptions)
         dirty           = false,
         options         = tOptions,
     };
-    local tListeners = {};
+    local tListeners       = {};
+    local tScrollListeners = {};
+    local nScrollX         = 0;
+    local nScrollY         = 0;
+
+    function tSession.subscribeScroll(fListener)
+        tScrollListeners[#tScrollListeners + 1] = fListener;
+    end
+
+    function tSession.scroll(nX, nY)
+        if (nX == nScrollX and nY == nScrollY) then return; end
+        nScrollX, nScrollY = nX, nY;
+        for _, fListener in ipairs(tScrollListeners) do fListener(nX, nY); end
+    end
 
     local function notify()
         for _, fListener in ipairs(tListeners) do
@@ -124,6 +137,19 @@ function DataSession.create(tOptions)
         if (tOptions.onSelection) then
             tOptions.onSelection(nSourceRow, nColumn);
         end
+    end
+
+    function tSession.save()
+        assert(not tSession.editing, "Finish code editing before saving.");
+        assert(type(tOptions.onSave) == "function", "Saving is not connected.");
+
+        if (not tSession.dirty) then
+            return;
+        end
+
+        assert(tOptions.onSave(tSession.base) ~= false, "Saving failed.");
+        tSession.dirty = false;
+        notify();
     end
 
     function tSession.edit(nSourceRow, sHeader, sValue)

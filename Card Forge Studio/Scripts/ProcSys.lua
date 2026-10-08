@@ -1297,6 +1297,15 @@ local _oActiveGame  = false;
 local _oActiveCardSet = false;
 local _tData = nil;
 local _tSession = nil;
+local _pActiveCSV;
+local _pActiveBackup;
+local _sCSVOriginal;
+local _nSelectedRow;
+local wx = require("wx");
+local LiveFileRepo = require("LiveFileRepo");
+local _oLiveFiles = LiveFileRepo();
+local _tLiveChanges = {};
+local _bLiveBusy = false;
 
 local function readFile(pFile)
     local hFile = assert(io.open(io.normalizepath(pFile), "rb"));
@@ -1307,23 +1316,180 @@ local function readFile(pFile)
     return sText;
 end
 
+local function captureWatchFiles()
+    _oLiveFiles.Reset();
+    _tLiveChanges = {};
+    local tFiles = {
+        [FS.Game.Styles] = "Styles",
+    };
+
+    if (_oActiveCardSet) then
+        tFiles[FS.CardSet.Draw] = "Draw";
+        tFiles[FS.CardSet.DrawBack] = "DrawBack";
+        tFiles[FS.CardSet.RowProc] = "RowProc";
+        tFiles[FS.CardSet.CodeColumns] = "CodeColumns";
+        tFiles[FS.CardSet.Data] = "Data";
+        if (FS.CardSet.Info) then tFiles[FS.CardSet.Info] = "Info"; end
+    end
+    if (FS.Game.RowFilters) then tFiles[FS.Game.RowFilters] = "RowFilters"; end
+
+    local function scripts(pFolder)
+        local oFolder = wx.wxDir(pFolder);
+        if (oFolder:IsOpened()) then
+            local bFound, sName = oFolder:GetFirst("*.lua", wx.wxDIR_FILES);
+            while (bFound) do
+                tFiles[pFolder.."/"..sName] = "Environment";
+                bFound, sName = oFolder:GetNext();
+            end
+            local bDirectory, sDirectory = oFolder:GetFirst("", wx.wxDIR_DIRS);
+            while (bDirectory) do
+                scripts(pFolder.."/"..sDirectory);
+                bDirectory, sDirectory = oFolder:GetNext();
+            end
+        end
+        oFolder:delete();
+    end
+
+    scripts(FS.Game.Scripts);
+    local nID = 0;
+    for pFile, sKind in pairs(tFiles) do
+        nID = nID + 1;
+        local sCategory = sKind;
+        _oLiveFiles.Add(tostring(nID), pFile, PROCSYS_LIVE_FILE_REPO_TIMER_INTERVAL, function(tFile, sOldText, sNewText)
+            _tLiveChanges[sCategory] = sNewText;
+        end);
+    end
+    _oLiveFiles.StartAll();
+end
+
+function ProcSys.OnTimer()
+    if (_bLiveBusy or (_tSession and _tSession.editing) or next(_tLiveChanges) == nil) then return end
+    _bLiveBusy = true;
+    local tChanged = _tLiveChanges;
+    _tLiveChanges = {};
+    local bOK, sError = xpcall(function()
+        local function runFile(pFile)
+            return assert(load(readFile(pFile), "@"..pFile, "t", UserEnv.Get()))();
+        end
+
+        if (tChanged.Data and tChanged.Data ~= _sCSVOriginal and _oActiveCardSet) then
+            local bReload = true;
+            if (_tSession and _tSession.options.onExternalCSV) then
+                bReload = _tSession.options.onExternalCSV(_tSession.dirty);
+            elseif (_tSession and _tSession.dirty) then
+                bReload = false;
+            end
+
+            if (bReload) then
+                local nSelected = _tSession and _tSession.selected;
+                ProcSys.LoadCardSet(_oActiveCardSet);
+                if (nSelected and _tSession and _tSession.base[nSelected]) then _tSession.select(nSelected, 1); end
+                Log.Note("External CSV changes loaded.");
+                return;
+            end
+            Log.Warning("External CSV changed; current edits were retained.");
+        end
+
+        if (tChanged.Info) then
+            _oActiveCardSet.RefreshInfo();
+            UserEnv.ProcSysUpdateRoot({
+                _sCardSetName = _oActiveCardSet.GetName(),
+                _nCardWidth   = _oActiveCardSet.GetCardWidth(),
+                _nCardHeight  = _oActiveCardSet.GetCardHeight(),
+            }, true);
+            Forge.SetActiveCardSet(_oActiveCardSet);
+            if (_tSession and _tSession.options.onMetadataChanged) then
+                _tSession.options.onMetadataChanged(_oActiveCardSet);
+            end
+            Log.Note("Card-set metadata updated: ".._oActiveCardSet.GetName());
+        end
+        if (tChanged.RowFilters) then
+            -- TODO Port named row filters and their UI before applying live RowFilters.lua changes.
+            Log.Note("Named row-filter file changed; its legacy UI is not ported yet.");
+        end
+        if (tChanged.Styles and FontStyle) then FontStyle.UpdateINI(FS.Game.Styles); end
+        if (not _tData) then return end
+
+        if (tChanged.Environment) then
+            local tCFG = runFile(FS.Game.Scripts.."/"..FILESPEC_GAME_CFG.Full);
+            assert(rawtype(tCFG) == "table", "CFG must return a table.");
+            UserEnv.UserUpdateCFG(tCFG);
+            local tENV = runFile(FS.Game.Scripts.."/"..FILESPEC_GAME_ENV.Full);
+            assert(rawtype(tENV) == "table", "ENV must return a table.");
+            UserEnv.UserUpdateENV(tENV);
+        end
+        if (tChanged.RowProc) then _tData.setRowProcessor(runFile(FS.CardSet.RowProc)); end
+
+        if (tChanged.CodeColumns) then
+            local tCodeColumns = {};
+            for sColumn in tChanged.CodeColumns:gmatch("[^\\r\\n]+") do
+                sColumn = sColumn:match("^%s*(.-)%s*$");
+                for _, sHeader in ipairs(_tData.headers) do
+                    if (sHeader:upper() == sColumn:upper()) then tCodeColumns[sHeader] = true; end
+                end
+            end
+            for sHeader in pairs(_tData.codeColumns) do _tData.codeColumns[sHeader] = nil; end
+            for sHeader in pairs(tCodeColumns) do _tData.codeColumns[sHeader] = true; end
+            if (_tSession) then _tSession.codeColumns = _tData.codeColumns; end
+        end
+
+        if (tChanged.Environment or tChanged.RowProc or tChanged.Styles or tChanged.CodeColumns or tChanged.Info) then
+            for nRow in ipairs(_tData.base) do _tData.processRow(nRow); end
+            if (_tSession) then
+                for nRow, tRow in ipairs(_tData.final) do
+                    for _, sHeader in ipairs(_tData.headers) do
+                        _tSession.final[nRow][sHeader] = tostring(tRow[sHeader] or "");
+                    end
+                end
+                _tSession.refresh();
+            end
+        end
+
+        if (tChanged.Draw) then Forge.SetDrawFunction(runFile(FS.CardSet.Draw)); end
+        if (tChanged.DrawBack) then Forge.SetDrawBackFunction(runFile(FS.CardSet.DrawBack)); end
+        local nRow = _tSession and _tSession.selected or 1;
+        if (nRow and _tData.final[nRow]) then _tData.select(nRow); end
+        Forge.RequestCardRedraw();
+        Log.Note("Live card scripts or styles updated.");
+    end, debug.traceback);
+    _bLiveBusy = false;
+    if (not bOK) then Log.Error(sError); end
+end
+
+function ProcSys.Shutdown()
+    _oLiveFiles.Reset();
+    _tLiveChanges = {};
+end
+
 function ProcSys.BindSession(tSession)
     _tSession = tSession;
     tSession.options.onEdit = function(nRow, sHeader, sValue)
-        return assert(_tData, "No card set is loaded.").edit(nRow, sHeader, sValue);
+        local tResult = assert(_tData, "No card set is loaded.").edit(nRow, sHeader, sValue);
+        if (tSession.selected == nRow) then _tData.select(nRow); end
+        return tResult;
     end
     tSession.options.onSelection = function(nRow)
-        if (_tData) then _tData.select(nRow); end
+        if (_tData and _nSelectedRow ~= nRow) then
+            _nSelectedRow = nRow;
+            _tData.select(nRow);
+        end
     end
     tSession.options.onReprocess = function(nRow)
         local tFinalRow = assert(_tData, "No card set is loaded.").processRow(nRow);
         for _, sHeader in ipairs(tSession.headers) do
             tSession.final[nRow][sHeader] = tostring(tFinalRow[sHeader] or "");
         end
+        if (tSession.selected == nRow) then _tData.select(nRow); end
         tSession.refresh();
     end
-    -- TODO Restore saving, backup, file watching, and dirty-row timer scheduling
-    -- after the read-only card-set loading stage is verified.
+    tSession.options.onSave = function(tRows)
+        assert(_oActiveCardSet and _pActiveCSV, "No card set is loaded.");
+        _sCSVOriginal = require("ProcSys.Save").write(_pActiveCSV, _pActiveBackup, tSession.headers, tRows, _sCSVOriginal);
+        pcall(Log.Note, "Card set saved: ".._oActiveCardSet.GetName().." ("..#tRows.." rows).");
+
+        return true;
+    end
+    -- TODO Restore batched dirty-row processing.
 end
 
 function ProcSys.LoadCardSet(oCardSet, fProgress)
@@ -1332,9 +1498,13 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
     FS.CardSet.Prep(oCardSet);
     local ImportSystem = require("Globals.ImportSystem");
     Import = ImportSystem.Import;
+    FontStyle = FontStyle or require("FontStyle");
+    FontStyle.UpdateINI(FS.Game.Styles);
+    Forge = Forge or require("Forge");
     UserEnv = UserEnv or require("Globals.UserEnv");
     UserEnv.UserUpdateENV({});
     UserEnv.ProcSysUpdateRoot({
+        STYLE         = STYLE,
         _TABLE        = PROCSYS_TO_TABLE,
         _NUMBER       = PROCSYS_TO_NUMBER,
         _sCardSetName = oCardSet.GetName(),
@@ -1352,7 +1522,8 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
     UserEnv.UserUpdateENV(tENV);
     local fRowProc = runFile(FS.CardSet.RowProc);
     assert(rawtype(fRowProc) == "function", "RowProc must return a function.");
-    local tBase, tHeaders = FTCSV.parse(readFile(FS.CardSet.Data), CSV_DELIMITER, {loadFromString = true});
+    local sCSVOriginal = readFile(FS.CardSet.Data);
+    local tBase, tHeaders = FTCSV.parse(sCSVOriginal, CSV_DELIMITER, {loadFromString = true});
     local tCodeColumns = {};
     local sColumns = readFile(FS.CardSet.CodeColumns);
     for sColumn in sColumns:gmatch("[^\r\n]+") do
@@ -1361,12 +1532,19 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
             if (sHeader:upper() == sColumn:upper()) then tCodeColumns[sHeader] = true; end
         end
     end
+    Forge.SetActiveCardSet(oCardSet);
+    Forge.SetDrawFunction(runFile(FS.CardSet.Draw));
+    Forge.SetDrawBackFunction(runFile(FS.CardSet.DrawBack));
     local CSV = require("ProcSys.CSV");
     local tData = CSV.create(tHeaders, tBase, fRowProc, tCodeColumns, UserEnv, fProgress);
     if (_tSession) then _tSession.setData(tHeaders, tBase, tData.final, tCodeColumns); end
     _tData, _oActiveCardSet = tData, oCardSet;
+    _pActiveCSV, _sCSVOriginal = FS.CardSet.Data, sCSVOriginal;
+    _pActiveBackup = FS.Game.CSVBackup.."/"..oCardSet.GetUUID();
+    captureWatchFiles();
     Log.Note("Card set loaded: "..oCardSet.GetName().." ("..#tBase.." rows).");
-    -- TODO Connect Forge rendering without restoring the AMS drawing dependency.
+    _nSelectedRow = #tBase > 0 and 1 or nil;
+    if (_nSelectedRow) then tData.select(_nSelectedRow); end
     return tData;
 end
 
@@ -1377,9 +1555,12 @@ end
 function ProcSys.PrepGame(oGame)
     assert(type(oGame) == "Game", "ProcSys.PrepGame requires a Game object.");
     _oActiveGame = oGame;
-    _oActiveCardSet, _tData = false, nil;
+    _oActiveCardSet, _tData, _nSelectedRow = false, nil, nil;
+    _pActiveCSV, _pActiveBackup, _sCSVOriginal = nil, nil, nil;
     Log.Note("ProcSys: active game prepared.");
-    -- TODO Restore LiveFileRepo registration when file watching is ported.
+    captureWatchFiles();
+    if (Forge) then Forge.Release(); end
+    -- Metadata application and named row-filter UI remain tracked in OnTimer.
 end
 
 function ProcSys.GetActiveGame()

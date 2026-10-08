@@ -1502,6 +1502,11 @@ function CSV.create(tHeaders, tBase, fRowProc, tCodeColumns, UserEnv, fProgress)
         return tFinalRow;
     end
 
+    function tData.setRowProcessor(fProcessor)
+        assert(rawtype(fProcessor) == "function", "RowProc must return a function.");
+        fRowProc = fProcessor;
+    end
+
     function tData.edit(nRow, sHeader, sValue)
         assert(tHeaderMap[sHeader:upper()] == sHeader, "Unknown editable column.");
         local sOldValue = tBase[nRow][sHeader];
@@ -1516,8 +1521,18 @@ function CSV.create(tHeaders, tBase, fRowProc, tCodeColumns, UserEnv, fProgress)
 
     function tData.select(nRow)
         local tFinalRow = assert(tData.final[nRow]);
-        UserEnv.ProcSysUpdateRoot({_tRow = rowView(tFinalRow, nRow)});
-        -- TODO Forward the processed row and code returns to Forge when rendering is ported.
+        local tRenderRow = {};
+        for _, sHeader in ipairs(tHeaders) do
+            if (tCodeColumns[sHeader]) then
+                tRenderRow[sHeader] = tData.codeReturns[nRow][sHeader];
+            else
+                tRenderRow[sHeader] = tFinalRow[sHeader];
+            end
+        end
+        local tRow = rowView(tRenderRow, nRow);
+        UserEnv.ProcSysUpdateRoot({_tRow = tRow});
+        Forge.SetActiveRow(tRow);
+
     end
 
     local nLastProgress = os.clock();

@@ -1,11 +1,23 @@
 -- Native grid window shared by the editable and processed data views.
--- TODO Required window persistence: independently save Base Data and Final Data
--- position and size on move, resize, and close; restore each on reopening.
 local wx = require("wx");
 local dCodeEditor = require("Windows.CodeEditor");
 local dLog = require("Windows.Log");
 local Log = require("Log");
 local DataGrid = {};
+local WindowState = require("Windows.WindowState");
+local _tWindowStates = {
+    BaseData = {
+        savePosition = true,
+        saveSize     = true,
+        saveVisible  = true,
+    },
+    FinalData = {
+        savePosition = true,
+        saveSize     = true,
+        saveVisible  = true,
+    },
+};
+for sName, tOptions in pairs(_tWindowStates) do WindowState.register(sName, tOptions); end
 
 function DataGrid.create(tSession, bFinal)
     local sTitle        = bFinal and "Final Data" or "Base Data";
@@ -24,11 +36,13 @@ function DataGrid.create(tSession, bFinal)
     local oReprocess    = wx.wxButton(dPanel, wx.wxID_ANY, "Reprocess Row");
     local oSave         = wx.wxButton(dPanel, wx.wxID_ANY, "Save");
     local oEditCode     = wx.wxButton(dPanel, wx.wxID_ANY, "Edit Code");
+    local oWindowState  = WindowState.bind(dFrame, bFinal and "FinalData" or "BaseData");
     local bRefreshing   = false;
     local bClosed       = false;
     local tLastVisible  = nil;
     local tLastHeaders  = nil;
     local tCellValues   = {};
+    local oScrollTimer;
 
     dFrame:SetMinSize(wx.wxSize(700, 400));
     dFrame:CreateStatusBar();
@@ -74,8 +88,7 @@ function DataGrid.create(tSession, bFinal)
             end, debug.traceback);
 
             if (not bOK) then
-                Log.Error(sError);
-                wx.wxMessageBox(sError, sTitle.." - Error", wx.wxOK + wx.wxICON_ERROR, dFrame);
+                require("Errors").report(sError);
             end
         end
     end
@@ -235,7 +248,7 @@ function DataGrid.create(tSession, bFinal)
         assert(not bFinal and nSource and tSession.codeColumns[sHeader] ~= nil, "Select a base code cell.");
         tSession.editing = true;
         local bOK, sResult = pcall(dCodeEditor.edit, dFrame,
-            tSession.base[nSource][sHeader], "Code Editor - "..sHeader.." - Row "..nSource);
+            tSession.base[nSource][sHeader], "Code Editor - Row "..nSource.." - "..tSession.base[nSource].Name.." - "..sHeader);
         tSession.editing = false;
         assert(bOK, sResult);
         if (sResult ~= nil) then tSession.edit(nSource, sHeader, sResult); end
@@ -255,14 +268,29 @@ function DataGrid.create(tSession, bFinal)
         tSession.options.onReprocess(tSession.selected);
     end));
     oSave:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(function()
-        tSession.options.onSave(tSession.base);
-        tSession.dirty = false;
-        refresh();
+        tSession.save();
     end));
     dFrame:Connect(wx.wxEVT_CLOSE_WINDOW, function(oEvent)
         if (oEvent:CanVeto()) then dFrame:Hide(); oEvent:Veto();
-        else bClosed = true; oEvent:Skip(); end
+        else bClosed = true; oScrollTimer:Stop(); oWindowState.close(); oEvent:Skip(); end
     end);
+    oScrollTimer = wx.wxTimer(dFrame, wx.wxNewId());
+    local nLastX, nLastY = oGrid:GetViewStart();
+    local function syncScroll(nX, nY)
+        if (bClosed) then return; end
+        oGrid:Scroll(nX, nY);
+        nLastX, nLastY = oGrid:GetViewStart();
+    end
+    tSession.subscribeScroll(syncScroll);
+    dFrame:Connect(oScrollTimer:GetId(), wx.wxEVT_TIMER, function()
+        if (bClosed or bRefreshing or not dFrame:IsShown()) then return; end
+        local nX, nY = oGrid:GetViewStart();
+        if (nX ~= nLastX or nY ~= nLastY) then
+            nLastX, nLastY = nX, nY;
+            tSession.scroll(nX, nY);
+        end
+    end);
+    oScrollTimer:Start(30);
     tSession.subscribe(refresh);
     refresh();
 
@@ -270,7 +298,7 @@ function DataGrid.create(tSession, bFinal)
         filterColumn = oFilterColumn, filterText = oFilterText, sort = oSort,
         descending = oDescending, editCode = editCode, sortHeader = sortHeader,
         show = function() dFrame:Show(true); dFrame:Layout(); dPanel:Layout(); dFrame:Raise(); end,
-        close = function() bClosed = true; dFrame:Destroy(); end};
+        close = function() oScrollTimer:Stop(); oWindowState.close(); bClosed = true; dFrame:Destroy(); end};
 end
 
 return DataGrid;

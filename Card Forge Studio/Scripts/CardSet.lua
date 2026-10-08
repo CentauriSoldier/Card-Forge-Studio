@@ -19,8 +19,8 @@ return class("CardSet",
         --CardSet = function(this, sAuthCode) end, --static constructor (runs after class object creation)
     },
     {--PRIVATE
-        CardWidth__AUTOR_       = null,
-        CardHeight__AUTOR_      = null,
+        CardWidth               = null,
+        CardHeight              = null,
         GameUUID__AUTOR_        = null,
         --DataPath__AUTOR_        = null,
         --DrawPath__AUTOR_        = null,
@@ -96,6 +96,28 @@ return class("CardSet",
             pri.UUID            = sUUID:upper(); --TODO validate these
             pri.CardWidth       = abs(nCardWidth);
             pri.CardHeight      = abs(nCardHeight);
+        end,
+        RefreshInfo = function(this, cdat)
+            local pri         = cdat.pri;
+            local pInfo       = FS.CardSet.GetInfoINIPath(pri.GameUUID, pri.UUID);
+            local sName       = GetValue(pInfo, "SETTINGS", "Name");
+            local nCardWidth  = tonumber(GetValue(pInfo, "SETTINGS", "CardWidth"));
+            local nCardHeight = tonumber(GetValue(pInfo, "SETTINGS", "CardHeight"));
+
+            assert(sName:match("%S"), "Card-set Name must not be blank.");
+            assert(nCardWidth and nCardWidth > 0 and nCardWidth < math.huge and nCardWidth == math.floor(nCardWidth), "CardWidth must be a positive finite integer.");
+            assert(nCardHeight and nCardHeight > 0 and nCardHeight < math.huge and nCardHeight == math.floor(nCardHeight), "CardHeight must be a positive finite integer.");
+
+            local bChanged = pri.Name ~= sName or pri.CardWidth ~= nCardWidth or pri.CardHeight ~= nCardHeight;
+            pri.Name, pri.CardWidth, pri.CardHeight = sName, nCardWidth, nCardHeight;
+
+            return bChanged;
+        end,
+        GetCardWidth = function(this, cdat)
+            return cdat.pri.CardWidth;
+        end,
+        GetCardHeight = function(this, cdat)
+            return cdat.pri.CardHeight;
         end,
         GetCardSize = function(this, cdat)
             local pri = cdat.pri;

@@ -3,6 +3,8 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <wchar.h>
+#include <stdio.h>
+#include <string.h>
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
@@ -26,13 +28,46 @@ static const LauncherConstant LAUNCHER_CONSTANTS[] = {
 
 /* Dynamic constants: APP_PATH is this EXE's folder; _AppDataLocal comes from WX. */
 
+static void writeError(const char *message)
+{
+    wchar_t folder[32768];
+    wchar_t path[32768];
+    wchar_t *separator;
+    FILE *file = NULL;
+    DWORD length = GetModuleFileNameW(NULL, folder, 32768);
+
+    if (length > 0 && length < 32768 && (separator = wcsrchr(folder, L'\\')) != NULL)
+    {
+        *separator = L'\0';
+        if (swprintf_s(path, 32768, L"%ls\\log.log", folder) >= 0)
+        {
+            _wfopen_s(&file, path, L"ab");
+        }
+    }
+
+    if (file == NULL && GetTempPathW(32768, folder) > 0 &&
+        swprintf_s(path, 32768, L"%lsCard Forge Studio-errors.log", folder) >= 0)
+    {
+        _wfopen_s(&file, path, L"ab");
+    }
+
+    if (file != NULL)
+    {
+        fprintf(file, "[ERROR] %s\n", message);
+        fclose(file);
+    }
+}
+
 static int showError(const wchar_t *message, DWORD errorCode)
 {
-    wchar_t details[2048];
-
-    swprintf_s(details, 2048, L"%ls\n\nWindows error: %lu", message, errorCode);
-    MessageBoxW(NULL, details, L"Card Forge Studio", MB_OK | MB_ICONERROR);
-
+    char encoded[8192];
+    char details[9216];
+    if (WideCharToMultiByte(CP_UTF8, 0, message, -1, encoded, sizeof(encoded), NULL, NULL) == 0)
+    {
+        strcpy_s(encoded, sizeof(encoded), "Launcher error.");
+    }
+    sprintf_s(details, sizeof(details), "%s Windows error: %lu", encoded, errorCode);
+    writeError(details);
     return 1;
 }
 
@@ -221,7 +256,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR arguments, int
     if (status != LUA_OK)
     {
         message = lua_tostring(state, -1);
-        MessageBoxA(NULL, message == NULL ? "Lua startup failed." : message, "Card Forge Studio", MB_OK | MB_ICONERROR);
+        writeError(message == NULL ? "Lua startup failed." : message);
     }
 
     lua_close(state);

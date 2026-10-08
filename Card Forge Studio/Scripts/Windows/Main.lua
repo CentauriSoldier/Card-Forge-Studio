@@ -1,6 +1,4 @@
 -- Native editor window. Studio and game services are connected by callbacks.
--- TODO Required window persistence: save position and size on move, resize, and
--- close; restore them when this window is reopened. Apply to every application window.
 local _sSource = debug.getinfo(1, "S").source;
 local _pWindows = assert(_sSource:match("^@(.+[/\\])"));
 local _pRuntime = _pWindows.."../../";
@@ -8,6 +6,26 @@ local _pRuntime = _pWindows.."../../";
 package.cpath = _pRuntime.."Bin/?.dll;"..package.cpath;
 local wx = require("wx");
 local Main = {};
+local WindowState = require("Windows.WindowState");
+local _tWindowState = {
+    savePosition = true,
+    saveSize     = true,
+    saveVisible  = false,
+};
+WindowState.register("Main", _tWindowState);
+local _tDialogStates = {
+    LoadGame = {
+        savePosition = false,
+        saveSize     = false,
+        saveVisible  = false,
+    },
+    LoadCardSet = {
+        savePosition = false,
+        saveSize     = false,
+        saveVisible  = false,
+    },
+};
+for sName, tOptions in pairs(_tDialogStates) do WindowState.register(sName, tOptions); end
 local dLog = require("Windows.Log");
 local Log = require("Log");
 local Welcome = require("Windows.Main.Welcome");
@@ -18,9 +36,8 @@ local dFinalData = require("Windows.FinalData");
 function Main.create(tOptions)
     tOptions = tOptions or {};
     wx.wxInitAllImageHandlers();
-    local oImage = wx.wxImage(tOptions.imagePath or (_pRuntime.."card-test.png"), wx.wxBITMAP_TYPE_PNG);
-    assert(oImage:IsOk(), "Editor preview image could not be loaded.");
-    local nCardWidth, nCardHeight = oImage:GetWidth(), oImage:GetHeight();
+    local oImage;
+    local nCardWidth, nCardHeight = 1, 1;
     local sTitle = "Card Forge Studio";
 
     if (tOptions.gameName) then
@@ -28,6 +45,7 @@ function Main.create(tOptions)
     end
 
     local dFrame = wx.wxFrame(wx.NULL, wx.wxID_ANY, sTitle, wx.wxDefaultPosition, wx.wxSize(760, 940));
+    local oWindowState = WindowState.bind(dFrame, "Main");
     local oIcon = wx.wxIcon(_pRuntime.."icon.ico", wx.wxBITMAP_TYPE_ICO);
 
     if (oIcon:IsOk()) then
@@ -53,7 +71,7 @@ function Main.create(tOptions)
     local bDataLoaded = false;
     ProcSys.BindSession(tDataSession);
 
-    oBack:Enable(type(tOptions.onFaceChanged) == "function");
+    oBack:Enable(true);
     oControls:Add(oFront, 0, wx.wxALL, 4);
     oControls:Add(oBack, 0, wx.wxALL, 4);
     oControls:Add(wx.wxStaticText(dPanel, wx.wxID_ANY, "Ctrl + click: guides   |   Ctrl + Shift + click: remove"), 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxALL, 4);
@@ -67,12 +85,7 @@ function Main.create(tOptions)
     dFrame:SetMinClientSize(wx.wxSize(360, 240));
 
     local function reportError(sError)
-        Log.Error(sError);
-        dLog.Show();
-        local hLog = assert(io.open(_pRuntime.."editor-errors.log", "a"));
-        hLog:write(sError.."\n");
-        hLog:close();
-        wx.wxMessageBox(sError, "Card Forge Studio - Error", wx.wxOK + wx.wxICON_ERROR, dFrame);
+        require("Errors").report(sError);
     end
 
     local function protect(fCallback)
@@ -95,7 +108,7 @@ function Main.create(tOptions)
         tView.height = math.max(1, math.floor(nCardHeight * nScale));
         tView.x = math.floor((oSize:GetWidth() - tView.width) / 2);
         tView.y = math.floor((oSize:GetHeight() - tView.height) / 2);
-        oScaled = wx.wxBitmap(oImage:Scale(tView.width, tView.height, wx.wxIMAGE_QUALITY_HIGH));
+        oScaled = oImage and wx.wxBitmap(oImage:Scale(tView.width, tView.height, wx.wxIMAGE_QUALITY_HIGH)) or nil;
         dCanvas:Refresh(false);
     end
 
@@ -111,12 +124,7 @@ function Main.create(tOptions)
         oDC:SetBackground(wx.wxBrush(wx.wxColour(35, 35, 35)));
         oDC:Clear();
 
-        if (bDataLoaded) then
-            oDC:SetTextForeground(wx.wxColour(235, 235, 235));
-            oDC:DrawText("Card set loaded. Card rendering is not connected yet.", 16, 16);
-            oDC:delete();
-            return;
-        end
+
 
         if (oScaled) then
             oDC:DrawBitmap(oScaled, tView.x, tView.y, true);
@@ -237,7 +245,8 @@ function Main.create(tOptions)
         if (type(tOptions.onFaceChanged) == "function") then
             tOptions.onFaceChanged(sFace);
             tState.face = sFace;
-        elseif (sFace == "front") then
+        elseif (Forge and bDataLoaded) then
+            Forge.SetFace(sFace);
             tState.face = sFace;
         end
     end
@@ -257,14 +266,14 @@ function Main.create(tOptions)
     end));
 
     local oMenuBar = wx.wxMenuBar();
-    local oWelcomeLinks = tWelcome.addLinks(dPanel, oLayout, protect);
+    local oWelcomeLinks = tWelcome.addLinks(dCanvas, protect);
 
     local function addMenu(sTitle, tItems)
         local oMenu = wx.wxMenu();
 
         for _, tItem in ipairs(tItems) do
             local nID = wx.wxNewId();
-            local oItem = oMenu:Append(nID, tItem[1]);
+            local oItem = tItem[3] == "check" and oMenu:AppendCheckItem(nID, tItem[1]) or oMenu:Append(nID, tItem[1]);
             local fAction = tItem[2];
             tMenuItems[sTitle..":"..tItem[1]] = {item = oItem, action = fAction};
             oItem:Enable(type(fAction) == "function");
@@ -279,6 +288,76 @@ function Main.create(tOptions)
     end
 
     addMenu("File", {{"Export"}, {"Exit", function() dFrame:Close(); end}});
+    local function selectItem(sMessage, sTitle, tNames, sStateName)
+        local dDialog    = wx.wxDialog(dFrame, wx.wxID_ANY, sTitle);
+        local oState     = WindowState.bind(dDialog, sStateName);
+        local oLayout    = wx.wxBoxSizer(wx.wxVERTICAL);
+        local oMessage   = wx.wxStaticText(dDialog, wx.wxID_ANY, sMessage);
+        local oList      = wx.wxListBox(dDialog, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxDefaultSize, tNames);
+        local oDisplay   = wx.wxDisplay(0);
+        local oScreen    = oDisplay:GetClientArea();
+        local nWidth     = 1;
+        local nRowHeight = 1;
+
+        for _, sName in ipairs(tNames) do
+            local nTextWidth, nTextHeight = oList:GetTextExtent(sName);
+            nWidth = math.max(nWidth, nTextWidth);
+            nRowHeight = math.max(nRowHeight, nTextHeight);
+        end
+
+        oList:SetMinSize(wx.wxSize(math.min(nWidth + 40, math.max(100, oScreen:GetWidth() - 64)), (nRowHeight + 6) * math.min(#tNames, 10) + 12));
+        oList:SetSelection(0);
+        oLayout:Add(oMessage, 0, wx.wxALL, 12);
+        oLayout:Add(oList, 1, wx.wxEXPAND + wx.wxLEFT + wx.wxRIGHT, 12);
+        oLayout:Add(dDialog:CreateButtonSizer(wx.wxOK + wx.wxCANCEL), 0, wx.wxEXPAND + wx.wxALL, 12);
+        dDialog:SetSizerAndFit(oLayout);
+        oList:Connect(wx.wxEVT_COMMAND_LISTBOX_DOUBLECLICKED, function()
+            dDialog:EndModal(wx.wxID_OK);
+        end);
+
+        local oSize = dDialog:GetSize();
+        local nX, nY;
+
+        if (dFrame:IsIconized() or not dFrame:IsShown()) then
+            nX = oScreen:GetX() + (oScreen:GetWidth() - oSize:GetWidth()) / 2;
+            nY = oScreen:GetY() + (oScreen:GetHeight() - oSize:GetHeight()) / 2;
+        else
+            local oPosition = dFrame:GetPosition();
+            local oParentSize = dFrame:GetSize();
+            nX = oPosition:GetX() + (oParentSize:GetWidth() - oSize:GetWidth()) / 2;
+            nY = oPosition:GetY() + (oParentSize:GetHeight() - oSize:GetHeight()) / 2;
+        end
+
+        dDialog:Move(math.floor(nX), math.floor(nY));
+        oDisplay:delete();
+        local nResult = dDialog:ShowModal();
+        local nSelection = nResult == wx.wxID_OK and oList:GetSelection() or -1;
+        oState.close();
+        dDialog:Destroy();
+
+        return nSelection;
+    end
+    local function saveCardSet()
+        tDataSession.save();
+        dFrame:SetStatusText("Card set saved.", 0);
+    end
+
+    local function allowDiscard()
+        if (not tDataSession.dirty) then
+            return true;
+        end
+
+        local nAnswer = wx.wxMessageBox("You have unsaved card-set changes. Save them now?", APP_NAME, wx.wxYES_NO + wx.wxCANCEL + wx.wxICON_QUESTION, dFrame);
+
+        if (nAnswer == wx.wxYES) then
+            saveCardSet();
+
+            return true;
+        end
+
+        return nAnswer == wx.wxNO;
+    end
+
     local function selectGame()
         Game.Refresh();
         local tGames    = Game.GetAll();
@@ -294,10 +373,10 @@ function Main.create(tOptions)
             return;
         end
 
-        local nSelection = wx.wxGetSingleChoiceIndex("Select a game to load.", "Load Game", tNames, dFrame);
+        local nSelection = selectItem("Select a game to load.", "Load Game", tNames, "LoadGame");
 
         if (nSelection >= 0) then
-            assert(not tDataSession.dirty, "Close and reopen the application before discarding unsaved test edits.");
+            if (not allowDiscard()) then return; end
             local oGame = tGames[nSelection + 1];
             Game.Activate(oGame);
             bDataLoaded = false;
@@ -309,19 +388,27 @@ function Main.create(tOptions)
     end
 
     local function loadCardSet(oCardSet)
-        assert(not tDataSession.dirty, "Close and reopen the application before discarding unsaved test edits.");
+        if (not allowDiscard()) then return; end
         local tData = ProcSys.LoadCardSet(oCardSet, function(nRow, nTotal)
             dFrame:SetStatusText("Processing row "..nRow.." of "..nTotal, 0);
             dFrame:GetStatusBar():Update();
         end);
+        nCardWidth, nCardHeight = oCardSet.GetCardWidth(), oCardSet.GetCardHeight();
+        tState.face = "front";
         bDataLoaded = true;
         showPage("Editor");
         dFrame:SetStatusText("Card set: "..oCardSet.GetName().." - "..#tData.base.." rows", 0);
         dBaseWindow = dBaseWindow or dBaseData.create(tDataSession);
         dFinalWindow = dFinalWindow or dFinalData.create(tDataSession);
-        dBaseWindow.show();
-        dFinalWindow.show();
+        if (WindowState.isOpen("BaseData") ~= false) then dBaseWindow.show(); end
+        if (WindowState.isOpen("FinalData") ~= false) then dFinalWindow.show(); end
         return tData;
+    end
+
+    tDataSession.options.onMetadataChanged = function(oCardSet)
+        nCardWidth, nCardHeight = oCardSet.GetCardWidth(), oCardSet.GetCardHeight();
+        Forge.SetFace(tState.face);
+        dFrame:SetStatusText("Card set: "..oCardSet.GetName().." - "..#tDataSession.base.." rows", 0);
     end
 
     local function selectCardSet()
@@ -333,16 +420,32 @@ function Main.create(tOptions)
             wx.wxMessageBox("This game has no card sets.", APP_NAME, wx.wxOK + wx.wxICON_INFORMATION, dFrame);
             return;
         end
-        local nSelection = wx.wxGetSingleChoiceIndex("Select a card set to load.", "Load Card Set", tNames, dFrame);
+        local nSelection = selectItem("Select a card set to load.", "Load Card Set", tNames, "LoadCardSet");
         if (nSelection >= 0) then loadCardSet(tSets[nSelection + 1]); end
     end
 
     addMenu("Game", {{"New"}, {"Load", selectGame}, {"Browse"}});
-    addMenu("Card Set", {{"New"}, {"Load", selectCardSet}, {"Save"}, {"Browse"}, {"Edit CSV"}});
+    addMenu("Card Set", {{"New"}, {"Load", selectCardSet}, {"Save", saveCardSet}, {"Browse"}, {"Edit CSV"}});
     addMenu("Filters", {{"Filters"}});
-    addMenu("Options", {{"Utility Overlay", function() tState.overlay = not tState.overlay; dCanvas:Refresh(false); end},
+    local bAutomaticCSV = INIFile.GetValue(FS.AppCFG, "Settings", "ExternalCSVChanges") == "automatic";
+    tDataSession.options.onExternalCSV = function(bUnsaved)
+        if (bAutomaticCSV) then return true end
+        local sMessage = "The CSV changed outside Card Forge Studio. Reload it now?";
+        if (bUnsaved) then sMessage = sMessage.."\\n\\nReloading will discard your unsaved Base Data edits."; end
+        return wx.wxMessageBox(sMessage, APP_NAME, wx.wxYES_NO + wx.wxICON_QUESTION, dFrame) == wx.wxYES;
+    end
+
+    local function toggleAutomaticCSV()
+        local bAutomatic = not bAutomaticCSV;
+        INIFile.SetValue(FS.AppCFG, "Settings", "ExternalCSVChanges", bAutomatic and "automatic" or "prompt");
+        bAutomaticCSV = bAutomatic;
+        tMenuItems["Options:Automatically Reload External CSV Changes"].item:Check(bAutomaticCSV);
+    end
+
+    addMenu("Options", {{"Automatically Reload External CSV Changes", toggleAutomaticCSV, "check",}, {"Utility Overlay", function() tState.overlay = not tState.overlay; dCanvas:Refresh(false); end},
         {"Horizontal Centerline", function() tState.horizontalCenter = not tState.horizontalCenter; dCanvas:Refresh(false); end},
         {"Vertical Centerline", function() tState.verticalCenter = not tState.verticalCenter; dCanvas:Refresh(false); end}});
+    tMenuItems["Options:Automatically Reload External CSV Changes"].item:Check(bAutomaticCSV);
     addMenu("Tools", {{"Rebuild Dox"}, {"Style Editor"}, {"Mechanics Viewer"}});
     addMenu("Window", {{"Base Data", function()
         dBaseWindow = dBaseWindow or dBaseData.create(tDataSession);
@@ -351,23 +454,42 @@ function Main.create(tOptions)
         dFinalWindow = dFinalWindow or dFinalData.create(tDataSession);
         dFinalWindow.show();
     end}, {"Log", dLog.Show}});
-    addMenu("Help", {{"Game Documentation"}, {"Draw API"}, {"Tutorials"}, {"About"}});
+    local function openDocument(pFile)
+        assert(wx.wxFileExists(pFile), "Documentation file is unavailable: "..pFile);
+        local oFile = wx.wxFileName(pFile);
+        local sURL  = wx.wxFileSystem.FileNameToURL(oFile);
+        oFile:delete();
+        assert(wx.wxLaunchDefaultBrowser(sURL), "Could not open the documentation browser.");
+    end
+
+    addMenu("Help", {
+        {"Game Documentation", function()
+            assert(Game.GetActive(), "Load a game first.");
+            openDocument(FS.Game.Docs.."/"..DOX_EXPORT_FILENAME..".html");
+        end,},
+        {"Tutorials", function()
+            local Tutorial = require("Tutorial");
+            Tutorial.Init();
+            openDocument(Tutorial.PATH_INDEX);
+        end,},
+        {"About", function() require("Windows.Main.About").show(dFrame); end,},
+    });
 
     showPage = function(sName)
         assert(sName == "Welcome" or sName == "Editor", "Unknown Main page.");
         sPage = sName;
-        -- TODO Restore card controls when the real renderer is connected.
-        oControls:ShowItems(sPage == "Editor" and not bDataLoaded);
+        oControls:ShowItems(sPage == "Editor");
         oWelcomeLinks:ShowItems(sPage == "Welcome");
 
         for sPath, tMenuItem in pairs(tMenuItems) do
             local bAvailable = type(tMenuItem.action) == "function";
 
-            if (sPath:match("^Options:")) then
-                bAvailable = bAvailable and sPage == "Editor" and not bDataLoaded;
+            if (sPath:match("^Options:") and sPath ~= "Options:Automatically Reload External CSV Changes") then
+                bAvailable = bAvailable and sPage == "Editor";
             end
 
-            if (sPath == "Card Set:Load") then bAvailable = not not Game.GetActive(); end
+            if (sPath == "Card Set:Load" or sPath == "Help:Game Documentation") then bAvailable = not not Game.GetActive(); end
+            if (sPath == "Card Set:Save") then bAvailable = tDataSession.dirty and not tDataSession.editing; end
 
             if (sPath == "Window:Base Data" or sPath == "Window:Final Data") then
                 bAvailable = sPage == "Editor" and #tDataSession.headers > 0;
@@ -383,7 +505,45 @@ function Main.create(tOptions)
         resizeCanvas();
     end
 
+    tDataSession.subscribe(function()
+        tMenuItems["Card Set:Save"].item:Enable(tDataSession.dirty and not tDataSession.editing);
+    end);
+
+    local oRenderTimer = wx.wxTimer(dFrame, wx.wxNewId());
+    dFrame:Connect(oRenderTimer:GetId(), wx.wxEVT_TIMER, protect(function()
+        ProcSys.OnTimer();
+        local bRendered = false;
+        if (Forge and bDataLoaded and not tDataSession.editing) then
+            local bOK, vResult = xpcall(Forge.OnTimer, debug.traceback);
+            if (bOK) then bRendered = vResult;
+            else require("Errors").report(vResult, true); end
+        end
+        if (bRendered) then
+            local oBitmap = Forge.GetBitmap();
+            if (oBitmap) then
+                oImage = oBitmap:ConvertToImage();
+                resizeCanvas();
+            end
+        end
+    end));
+    oRenderTimer:Start(FORGE_REDRAW_TIMER_INTERVAL);
+
     dFrame:Connect(wx.wxEVT_CLOSE_WINDOW, function(oEvent)
+        if (oEvent:CanVeto()) then
+            local bOK, bContinue = pcall(allowDiscard);
+
+            if (not bOK or not bContinue) then
+                oEvent:Veto();
+                if (not bOK) then reportError(bContinue); end
+
+                return;
+            end
+        end
+
+        oWindowState.close();
+        oRenderTimer:Stop();
+        ProcSys.Shutdown();
+        if (Forge) then Forge.Release(); end
         if (dBaseWindow) then dBaseWindow.close(); end
         if (dFinalWindow) then dFinalWindow.close(); end
         dLog.Close();
@@ -395,6 +555,7 @@ function Main.create(tOptions)
     dFrame:Show(true);
     dPanel:Layout();
     resizeCanvas();
+    if (WindowState.isOpen("Log")) then dLog.Show(); end
     Log.Note("Main window ready: Welcome.");
 
     return {frame = dFrame, canvas = dCanvas, state = tState, view = tView, menus = tMenus,
@@ -410,8 +571,3 @@ if (... == nil) then
 end
 
 return Main;
-
-
-
-
-

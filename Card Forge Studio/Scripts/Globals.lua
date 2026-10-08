@@ -36,6 +36,9 @@ end
 
 require("Constants");
 
+local wx = require("wx");
+assert(wx.wxFont.AddPrivateFont(_Fonts.."/CRYSTAL-Regular.ttf"), "Cannot load the bundled CRYSTAL font.");
+
 CFG     = {};
 FTCSV   = require("Plugins.FTCSV.ftcsv");
 dLog    = require("Windows.Log");
@@ -162,11 +165,11 @@ function OnStartUp(dMainFrame)
         sError = tostring(sError);
 
         if (sError ~= sLastError) then
-            Log.Error(sError);
+            require("Errors").report(sError);
             sLastError = sError;
         end
 
-        dLog.Show();
+
     end
 
     -- TODO Restore the development startup copy of Docs/Changelog.md to the repository's Changelog.md using the new file paths and Lua file operations.

@@ -3,6 +3,14 @@
 -- data loading, RGB/RGBA construct WX colours for the game's configuration.
 local wx = require("wx");
 local Color = {RGBA = wx.wxColour, RGB = wx.wxColour};
+local function p(...)
+    local tValues = {};
+    for nIndex = 1, select("#", ...) do
+        local vValue = select(nIndex, ...);
+        tValues[nIndex] = rawtype(vValue) == "table" and serialize(vValue) or tostring(vValue);
+    end
+    Log.Debug(table.concat(tValues, "\t"));
+end
                                                                                     --[[
                                                                                     ██╗   ██╗███████╗███████╗██████╗ ███████╗███╗   ██╗██╗   ██╗
                                                                                     ██║   ██║██╔════╝██╔════╝██╔══██╗██╔════╝████╗  ██║██║   ██║
@@ -861,6 +869,8 @@ if (Forge ~= nil) then
 InjectEnv("Forge", {
     --[[!@fqxn CFS.UserEnv.Forge.DrawImage
         @inheritdoc CFS.Classes.Forge.Methods.DrawImage!]]
+    DrawRectangle   = Forge.DrawRectangle,
+    GetOutputInfo   = Forge.GetOutputInfo,
     DrawImage       = Forge.DrawImage,
     --[[!@fqxn CFS.UserEnv.Forge.DrawText
         @inheritdoc CFS.Classes.Forge.Methods.DrawText!]]
