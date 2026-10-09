@@ -1439,6 +1439,13 @@ local function drawingContext(oGC, oDC)
         oGC:DrawRectangle(nX, nY, nWidth, nHeight);
     end
 
+    function tContext.DrawTextBackground(nX, nY, nWidth, nHeight, nPadding, oFill, nAngle)
+        oGC:PushState();
+        oGC:Translate(nX, nY);
+        oGC:Rotate(-math.rad(nAngle));
+        tContext.DrawRectangle(-nPadding, -nPadding, nWidth + 2 * nPadding, nHeight + 2 * nPadding, oFill);
+        oGC:PopState();
+    end
     function tContext.GetOutputInfo()
         return {Width = _nWidth, Height = _nHeight,};
     end

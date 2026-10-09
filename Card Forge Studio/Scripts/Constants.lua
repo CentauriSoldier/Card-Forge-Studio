@@ -35,6 +35,7 @@ constant("BIT_DEPTH_32", 32);
 
 
 
+constant("FOLDER_WIKI", "Wiki");
 constant("FOLDER_CARD_SETS", "CardSets"); --this must be here since it needs to be accessed before the game is prepped
 
 --constant("TIMER_HTML_PROCESS_INTERVAL", 3200);

@@ -94,6 +94,10 @@ function Window.Show()
     _dFrame:Raise();
 end
 
+function Window.IsShown()
+    return _dFrame ~= nil and _dFrame:IsShown();
+end
+
 function Window.Close()
     if (_dFrame) then
         _oWindowState.close();

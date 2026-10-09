@@ -134,7 +134,7 @@ end
 
 local function GetEffectBounds(nW, nH,
     bShadow, nShadowX, nShadowY,
-    b3D, n3DStepX, n3DStepY, n3DDepth)
+    b3D, n3DStepX, n3DStepY, n3DDepth, bGlow, nGlowRadius)
 
     local nMinX = 0;
     local nMaxX = nW;
@@ -151,7 +151,7 @@ local function GetEffectBounds(nW, nH,
         nMaxX = math.max(nMaxX, nX0, nX1);
         nMinY = math.min(nMinY, nY0, nY1);
         nMaxY = math.max(nMaxY, nY0, nY1);
-    end;
+    end
 
     if (bShadow) then
         ApplyDelta(floor(nShadowX or 0), floor(nShadowY or 0));
@@ -165,7 +165,41 @@ local function GetEffectBounds(nW, nH,
         );
     end
 
+    if (bGlow) then
+        local nRadius = math.max(0, floor(nGlowRadius or 0));
+        ApplyDelta(-nRadius, -nRadius);
+        ApplyDelta(nRadius, nRadius);
+    end
+
     return nMinX, nMinY, nMaxX - nMinX, nMaxY - nMinY;
+end
+
+local function DrawTextRun(pri, D, nX, nY, sText, nAngle, nColor)
+    if (pri.LetterSpacing == 0) then
+        if (nAngle) then D.DrawAngledText(nX, nY, sText, nAngle, nColor);
+        else D.DrawText(nX, nY, sText, nColor); end
+        return;
+    end
+    local nOffset = 0;
+    local nRadians = math.rad(nAngle or 0);
+    for _, nCodePoint in utf8.codes(sText) do
+        local sCharacter = utf8.char(nCodePoint);
+        local nDrawX = nX + math.cos(nRadians) * nOffset;
+        local nDrawY = nY - math.sin(nRadians) * nOffset;
+        if (nAngle) then D.DrawAngledText(nDrawX, nDrawY, sCharacter, nAngle, nColor);
+        else D.DrawText(nDrawX, nDrawY, sCharacter, nColor); end
+        nOffset = nOffset + D.GetTextWidth(sCharacter) + pri.LetterSpacing;
+    end
+end
+
+local function MeasureTextRun(pri, D, sText)
+    if (pri.LetterSpacing == 0) then return D.GetTextWidth(sText); end
+    local nWidth, nCount = 0, 0;
+    for _, nCodePoint in utf8.codes(sText) do
+        nWidth = nWidth + D.GetTextWidth(utf8.char(nCodePoint));
+        nCount = nCount + 1;
+    end
+    return nWidth + math.max(0, nCount - 1) * pri.LetterSpacing;
 end
 
 local function ReadStyleFile()
@@ -205,6 +239,12 @@ local function BuildEffectSignature(tParsed)
 
     sRet = table.concat({
         tostring(tParsed.FontColor),
+        tostring(tParsed.LetterSpacing),
+        tostring(tParsed.BackgroundEnabled),
+        tostring(tParsed.BackgroundColor),
+        tostring(tParsed.BackgroundPadding),
+        tostring(tParsed.ShadowRadius),
+        tostring(tParsed.ShadowSoftness),
 
         tostring(tParsed.ShadowEnabled),
         tostring(tParsed.ShadowX),
@@ -232,19 +272,20 @@ local function BuildEffectSignature(tParsed)
     return sRet;
 end
 
-local function ParseFontStyleINI(sSectionName)
+local function ParseFontStyleINI(sSectionName, oReader)
+    local oSource = oReader or _oINI;
     local tRet = nil;
     local tValueNames = nil;
 
-    if (_oINI and isstring(sSectionName) and not sSectionName:isempty()) then
+    if (oSource and isstring(sSectionName) and not sSectionName:isempty()) then
         sSectionName = isstring(sSectionName) and sSectionName:upper() or "";
-        tValueNames = _oINI.GetValueNames(sSectionName);
+        tValueNames = oSource.GetValueNames(sSectionName);
 
         if (istable(tValueNames) and #tValueNames > 0) then
 
             local function val(sValName)
                 local sRet = "";
-                local sVal = _oINI.GetValue(sSectionName, sValName, true);
+                local sVal = oSource.GetValue(sSectionName, sValName, true);
 
                 if (isstring(sVal)) then
                     sRet = sVal;
@@ -299,6 +340,12 @@ local function ParseFontStyleINI(sSectionName)
                 FontSize            = nFontSize,
                 FontColor           = nFontColor,
                 FontOptions         = tFontOptions,
+                LetterSpacing       = tonumber(val("LetterSpacing")) or 0,
+                BackgroundEnabled   = toboolean(val("BackgroundEnabled")) and true or false,
+                BackgroundColor     = Color.TryFromString(val("BackgroundColor"), true) or _oClear,
+                BackgroundPadding   = math.max(0, tonumber(val("BackgroundPadding")) or 0),
+                ShadowRadius        = math.max(0, tonumber(val("ShadowRadius")) or 2),
+                ShadowSoftness      = val("ShadowRadius") ~= "",
 
                 ShadowEnabled       = isnumber(nShadowX) and isnumber(nShadowY) and bShadowEnabled,
                 ShadowX             = floor(nShadowX or 0),
@@ -447,6 +494,10 @@ return class("FontStyle",
             @param string sName The name of the font style to retrieve.
             @return FontStyle|nil oFontStyle The matching FontStyle object, or nil if not found.
         !]]
+        Parse = function(sName, oReader)
+            return ParseFontStyleINI(sName, oReader);
+        end,
+
         Get = function(sName)
             local oRet;
 
@@ -512,6 +563,12 @@ return class("FontStyle",
         Name__AUTOA_                = "",
         Font__AUTOA_                = null,
         Color                       = _oBlack,
+        LetterSpacing               = 0,
+        BackgroundEnabled           = false,
+        BackgroundColor             = _oClear,
+        BackgroundPadding           = 0,
+        ShadowRadius                = 2,
+        ShadowSoftness              = false,
 
         ShadowEnabled__AUTOA_       = false,
         ShadowColor__AUTOA_         = _oClear,
@@ -535,6 +592,38 @@ return class("FontStyle",
         OutlineColor__AUTOA_        = _oClear,
         OutlineThickness__AUTOA_    = 0,
 
+        DrawGlow = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
+            local pri = cdat.pri;
+            local nRadius = math.max(0, floor(pri.GlowRadius));
+            local nAlphaMax = clamp(floor(pri.GlowAlphaMax), 0, 255);
+            if (nRadius == 0 or nAlphaMax == 0) then return; end
+            local nInner = pri.GlowColor;
+            local nOuter = pri.GlowGradientEnabled and pri.GlowOuterColor or nInner;
+            -- Sample translucent rings behind the glyphs. Outer rings fade out;
+            -- per-sample opacity avoids making the overlapping passes opaque.
+            for nDistance = nRadius, 1, -1 do
+                local nMix = nDistance / nRadius;
+                local function channel(fChannel)
+                    return floor(fChannel(nInner) * (1 - nMix) + fChannel(nOuter) * nMix + 0.5);
+                end
+                local nSamples = math.min(32, math.max(8, math.ceil(2 * math.pi * nDistance)));
+                local nAlpha = floor(nAlphaMax * (channel(Color.GetAlpha) / 255) * math.exp(-2 * nMix * nMix) / nSamples + 0.5);
+                if (nAlpha > 0) then
+                    local nColor = Color.RGBA(channel(Color.GetRed), channel(Color.GetGreen), channel(Color.GetBlue), nAlpha);
+                    for nSample = 0, nSamples - 1 do
+                        local nRadians = 2 * math.pi * nSample / nSamples;
+                        local nDrawX = nX + math.cos(nRadians) * nDistance;
+                        local nDrawY = nY + math.sin(nRadians) * nDistance;
+                        if (nAngle) then
+                            DrawTextRun(pri, D, nDrawX, nDrawY, sText, nAngle, nColor);
+                        else
+                            DrawTextRun(pri, D, nDrawX, nDrawY, sText, nil, nColor);
+                        end
+                    end
+                end
+            end
+        end,
+
         Draw3D = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
             local pri = cdat.pri;
             local nER = Color.GetRed(pri.D3Color);
@@ -548,22 +637,7 @@ return class("FontStyle",
                 nAlpha = clamp(20 + (nI * 12), 0, 255);
                 o3DCol = Color.RGBA(nER, nEG, nEB, nAlpha);
 
-                if (nAngle) then
-                    D.DrawAngledText(
-                        floor(nX + (nI * pri.D3StepX)),
-                        floor(nY + (nI * pri.D3StepY)),
-                        sText,
-                        nAngle,
-                        o3DCol
-                    );
-                else
-                    D.DrawText(
-                        floor(nX + (nI * pri.D3StepX)),
-                        floor(nY + (nI * pri.D3StepY)),
-                        sText,
-                        o3DCol
-                    );
-                end
+                DrawTextRun(pri, D, floor(nX + nI * pri.D3StepX), floor(nY + nI * pri.D3StepY), sText, nAngle, o3DCol);
 
             end
         end,
@@ -593,9 +667,9 @@ return class("FontStyle",
 
                     if (nD2 > 0 and nD2 <= nRadius2) then
                         if (nAngle) then
-                            D.DrawAngledText(nBaseX + nDX, nBaseY + nDY, sText, nAngle, pri.OutlineColor);
+                            DrawTextRun(pri, D, nBaseX + nDX, nBaseY + nDY, sText, nAngle, pri.OutlineColor);
                         else
-                            D.DrawText(nBaseX + nDX, nBaseY + nDY, sText, pri.OutlineColor);
+                            DrawTextRun(pri, D, nBaseX + nDX, nBaseY + nDY, sText, nil, pri.OutlineColor);
                         end
                     end
                 end
@@ -609,7 +683,7 @@ return class("FontStyle",
             local nSR = Color.GetRed(pri.ShadowColor);
             local nSG = Color.GetGreen(pri.ShadowColor);
             local nSB = Color.GetBlue(pri.ShadowColor);
-            local nRadius = 2;
+            local nRadius = pri.ShadowRadius;
             local nShadowAlpha = Color.GetAlpha(pri.ShadowColor);
             local oBlurCol = Color.RGBA(nSR, nSG, nSB, clamp(nShadowAlpha, 0, 255));
             local nDY = 0;
@@ -618,10 +692,14 @@ return class("FontStyle",
             for nDY = -nRadius, nRadius do
                 for nDX = -nRadius, nRadius do
                     if ((nDX * nDX) + (nDY * nDY)) <= (nRadius * nRadius) then
+                        local nWeight = nRadius == 0 and 1 or math.exp(-2 * (nDX * nDX + nDY * nDY) / (nRadius * nRadius));
+                        if (pri.ShadowSoftness) then
+                            oBlurCol = Color.RGBA(nSR, nSG, nSB, floor(nShadowAlpha * nWeight / math.max(1, nRadius * nRadius)));
+                        end
                         if (nAngle) then
-                            D.DrawAngledText(nBaseX + nDX, nBaseY + nDY, sText, nAngle, oBlurCol);
+                            DrawTextRun(pri, D, nBaseX + nDX, nBaseY + nDY, sText, nAngle, oBlurCol);
                         else
-                            D.DrawText(nBaseX + nDX, nBaseY + nDY, sText, oBlurCol);
+                            DrawTextRun(pri, D, nBaseX + nDX, nBaseY + nDY, sText, nil, oBlurCol);
                         end
                     end
                 end
@@ -664,6 +742,12 @@ return class("FontStyle",
                 end
 
                 pri.Color               = tParsed.FontColor or _oBlack;
+                pri.LetterSpacing       = tParsed.LetterSpacing or 0;
+                pri.BackgroundEnabled   = tParsed.BackgroundEnabled and true or false;
+                pri.BackgroundColor     = tParsed.BackgroundColor or _oClear;
+                pri.BackgroundPadding   = math.max(0, tParsed.BackgroundPadding or 0);
+                pri.ShadowRadius        = math.max(0, floor(tParsed.ShadowRadius or 2));
+                pri.ShadowSoftness      = tParsed.ShadowSoftness ~= false;
 
                 pri.ShadowEnabled       = tParsed.ShadowEnabled and true or false;
                 pri.ShadowX             = floor(tParsed.ShadowX or 0);
@@ -676,7 +760,7 @@ return class("FontStyle",
                 pri.D3StepY             = floor(tParsed.D3StepY or 0);
                 pri.D3Color             = tParsed.D3Color or _oClear;
 
-                -- TODO Implement the archived glow settings; the original Draw method never applied them.
+                -- Glow is rendered before the other text effects.
                 pri.GlowEnabled         = tParsed.GlowEnabled and true or false;
                 pri.GlowGradientEnabled = tParsed.GlowGradientEnabled and true or false;
                 pri.GlowColor           = tParsed.GlowColor or _oClear;
@@ -732,6 +816,19 @@ return class("FontStyle",
             D.SetDrawingFont(pri.Font);
             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
 
+            if (pri.BackgroundEnabled) then
+                local nPadding = pri.BackgroundPadding;
+                if (nAngle and D.DrawTextBackground) then
+                    D.DrawTextBackground(nX, nY, MeasureTextRun(pri, D, sText), D.GetTextHeight(sText), nPadding, pri.BackgroundColor, nAngle);
+                else
+                    D.DrawRectangle(nX - nPadding, nY - nPadding,
+                        MeasureTextRun(pri, D, sText) + 2 * nPadding, D.GetTextHeight(sText) + 2 * nPadding, pri.BackgroundColor);
+                end
+            end
+            if (pri.GlowEnabled) then
+                pri.DrawGlow(sObject, D, hInternalDC, nX, nY, sText, nAngle);
+            end
+
             if (pri.ShadowEnabled) then
                 pri.DrawShadow(sObject, D, hInternalDC, nX, nY, sText, nAngle);
             end
@@ -745,9 +842,9 @@ return class("FontStyle",
             end
 
             if (nAngle) then
-                D.DrawAngledText(nX, nY, sText, nAngle, pri.Color);
+                DrawTextRun(pri, D, nX, nY, sText, nAngle, pri.Color);
             else
-                D.DrawText(nX, nY, sText, pri.Color);
+                DrawTextRun(pri, D, nX, nY, sText, nil, pri.Color);
             end
         end,
 
@@ -765,16 +862,23 @@ return class("FontStyle",
                 D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
             end
 
-            nTextWidth = D.GetTextWidth(sText);
+            nTextWidth = MeasureTextRun(pri, D, sText);
             nTextHeight = D.GetTextHeight(sText);
 
             nMinX, nMinY, nTotalW, nTotalH =
                 GetEffectBounds(
                     nTextWidth, nTextHeight,
                     pri.ShadowEnabled, pri.ShadowX, pri.ShadowY,
-                    pri.D3Enabled, pri.D3StepX, pri.D3StepY, pri.D3Depth
+                    pri.D3Enabled, pri.D3StepX, pri.D3StepY, pri.D3Depth,
+                    pri.GlowEnabled, pri.GlowRadius
                 );
 
+            local nPadding = pri.BackgroundEnabled and pri.BackgroundPadding or 0;
+            local nShadowRadius = pri.ShadowEnabled and pri.ShadowRadius or 0;
+            local nOutlineRadius = pri.OutlineEnabled and pri.OutlineThickness or 0;
+            local nExtra = math.max(nPadding, nShadowRadius, nOutlineRadius);
+            nMinX, nMinY = nMinX - nExtra, nMinY - nExtra;
+            nTotalW, nTotalH = nTotalW + 2 * nExtra, nTotalH + 2 * nExtra;
             return nTotalW, nTotalH, nMinX, nMinY;
         end,
     },

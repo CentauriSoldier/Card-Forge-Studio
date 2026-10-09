@@ -66,7 +66,7 @@ function Main.create(tOptions)
     local tWelcome = Welcome.create(_pRuntime);
     local sPage = "Welcome";
     local tDataSession = tOptions.dataSession or DataSession.create();
-    local dBaseWindow, dFinalWindow;
+    local dBaseWindow, dFinalWindow, dStyleWindow, dSourceWindow, dWikiWindow;
     local showPage;
     local bDataLoaded = false;
     ProcSys.BindSession(tDataSession);
@@ -278,8 +278,19 @@ function Main.create(tOptions)
             tMenuItems[sTitle..":"..tItem[1]] = {item = oItem, action = fAction};
             oItem:Enable(type(fAction) == "function");
 
+            local fChecked = tItem[4];
+            if (fChecked) then
+                oItem:Check(not not fChecked());
+                dFrame:Connect(nID, wx.wxEVT_UPDATE_UI, protect(function(oEvent)
+                    oEvent:Check(not not fChecked());
+                end));
+            end
+
             if (fAction) then
-                dFrame:Connect(nID, wx.wxEVT_COMMAND_MENU_SELECTED, protect(fAction));
+                dFrame:Connect(nID, wx.wxEVT_COMMAND_MENU_SELECTED, protect(function(...)
+                    fAction(...);
+                    if (fChecked) then oItem:Check(not not fChecked()); end
+                end));
             end
         end
 
@@ -377,7 +388,10 @@ function Main.create(tOptions)
 
         if (nSelection >= 0) then
             if (not allowDiscard()) then return; end
+            if (dStyleWindow and not dStyleWindow.close()) then return; end
+            if (dSourceWindow and not dSourceWindow.close()) then return; end
             local oGame = tGames[nSelection + 1];
+            if (dWikiWindow and not dWikiWindow.close()) then return; end
             Game.Activate(oGame);
             bDataLoaded = false;
             tDataSession.setData({}, {}, {}, {});
@@ -389,6 +403,7 @@ function Main.create(tOptions)
 
     local function loadCardSet(oCardSet)
         if (not allowDiscard()) then return; end
+        if (dSourceWindow and not dSourceWindow.close()) then return; end
         local tData = ProcSys.LoadCardSet(oCardSet, function(nRow, nTotal)
             dFrame:SetStatusText("Processing row "..nRow.." of "..nTotal, 0);
             dFrame:GetStatusBar():Update();
@@ -425,8 +440,16 @@ function Main.create(tOptions)
     end
 
     addMenu("Game", {{"New"}, {"Load", selectGame}, {"Browse"}});
-    addMenu("Card Set", {{"New"}, {"Load", selectCardSet}, {"Save", saveCardSet}, {"Browse"}, {"Edit CSV"}});
-    addMenu("Filters", {{"Filters"}});
+    addMenu("Card Set", {{"New"}, {"Load", selectCardSet}, {"Save", saveCardSet}, {"Browse"}, {"Edit CSV"}, {"Edit Source...", function()
+        assert(bDataLoaded, "Load a card set first.");
+        if (dSourceWindow) then dSourceWindow.show(); return; end
+        dSourceWindow = require("Windows.SourceEditor").create(dFrame, {
+            {name = FILESPEC_CARDSET_DRAW.Full, path = FS.CardSet.Draw, kind = "lua"},
+            {name = FILESPEC_CARDSET_ROWPROC.Full, path = FS.CardSet.RowProc, kind = "lua"},
+            {name = FILESPEC_CARDSET_CODECOLUMMS.Full, path = FS.CardSet.CodeColumns, kind = "text"},
+            {name = FILESPEC_CARDSET_INFO.Full, path = FS.CardSet.Info, kind = "ini"},
+        }, "Source Editor", {onClose = function() dSourceWindow = nil; end});
+    end}});
     local bAutomaticCSV = INIFile.GetValue(FS.AppCFG, "Settings", "ExternalCSVChanges") == "automatic";
     tDataSession.options.onExternalCSV = function(bUnsaved)
         if (bAutomaticCSV) then return true end
@@ -442,18 +465,30 @@ function Main.create(tOptions)
         tMenuItems["Options:Automatically Reload External CSV Changes"].item:Check(bAutomaticCSV);
     end
 
-    addMenu("Options", {{"Automatically Reload External CSV Changes", toggleAutomaticCSV, "check",}, {"Utility Overlay", function() tState.overlay = not tState.overlay; dCanvas:Refresh(false); end},
-        {"Horizontal Centerline", function() tState.horizontalCenter = not tState.horizontalCenter; dCanvas:Refresh(false); end},
-        {"Vertical Centerline", function() tState.verticalCenter = not tState.verticalCenter; dCanvas:Refresh(false); end}});
+    addMenu("Options", {{"Automatically Reload External CSV Changes", toggleAutomaticCSV, "check",}, {"Utility Overlay", function() tState.overlay = not tState.overlay; dCanvas:Refresh(false); end, "check", function() return tState.overlay; end},
+        {"Horizontal Centerline", function() tState.horizontalCenter = not tState.horizontalCenter; dCanvas:Refresh(false); end, "check", function() return tState.horizontalCenter; end},
+        {"Vertical Centerline", function() tState.verticalCenter = not tState.verticalCenter; dCanvas:Refresh(false); end, "check", function() return tState.verticalCenter; end}});
     tMenuItems["Options:Automatically Reload External CSV Changes"].item:Check(bAutomaticCSV);
-    addMenu("Tools", {{"Rebuild Dox"}, {"Style Editor"}, {"Mechanics Viewer"}});
+    addMenu("Tools", {{"Rebuild Dox"}, {"Style Editor", function()
+        assert(Game.GetActive(), "Load a game first.");
+        if (dStyleWindow) then dStyleWindow.show(); return; end
+        dStyleWindow = require("Windows.StyleEditor").create(dFrame, FS.Game.Styles, {
+            onClose = function() dStyleWindow = nil; end,
+        });
+    end}, {"Game Wiki", function()
+        assert(Game.GetActive(), "Load a game first.");
+        if (dWikiWindow) then dWikiWindow.show(); return; end
+        dWikiWindow = require("Windows.Wiki").create(dFrame, FS.Game.Wiki, {
+            onClose = function() dWikiWindow = nil; end,
+        });
+    end}, {"Mechanics Viewer"}});
     addMenu("Window", {{"Base Data", function()
         dBaseWindow = dBaseWindow or dBaseData.create(tDataSession);
         dBaseWindow.show();
-    end}, {"Final Data", function()
+    end, "check", function() return dBaseWindow ~= nil and dBaseWindow.frame:IsShown(); end}, {"Final Data", function()
         dFinalWindow = dFinalWindow or dFinalData.create(tDataSession);
         dFinalWindow.show();
-    end}, {"Log", dLog.Show}});
+    end, "check", function() return dFinalWindow ~= nil and dFinalWindow.frame:IsShown(); end}, {"Log", dLog.Show, "check", dLog.IsShown}});
     local function openDocument(pFile)
         assert(wx.wxFileExists(pFile), "Documentation file is unavailable: "..pFile);
         local oFile = wx.wxFileName(pFile);
@@ -488,7 +523,8 @@ function Main.create(tOptions)
                 bAvailable = bAvailable and sPage == "Editor";
             end
 
-            if (sPath == "Card Set:Load" or sPath == "Help:Game Documentation") then bAvailable = not not Game.GetActive(); end
+            if (sPath == "Card Set:Load" or sPath == "Help:Game Documentation" or sPath == "Tools:Style Editor" or sPath == "Tools:Game Wiki") then bAvailable = not not Game.GetActive(); end
+            if (sPath == "Card Set:Edit Source...") then bAvailable = bDataLoaded; end
             if (sPath == "Card Set:Save") then bAvailable = tDataSession.dirty and not tDataSession.editing; end
 
             if (sPath == "Window:Base Data" or sPath == "Window:Final Data") then
@@ -540,6 +576,19 @@ function Main.create(tOptions)
             end
         end
 
+        if (dStyleWindow and not dStyleWindow.close()) then
+            if (oEvent:CanVeto()) then oEvent:Veto(); end
+            return;
+        end
+
+        if (dSourceWindow and not dSourceWindow.close()) then
+            if (oEvent:CanVeto()) then oEvent:Veto(); end
+            return;
+        end
+        if (dWikiWindow and not dWikiWindow.close()) then
+            if (oEvent:CanVeto()) then oEvent:Veto(); end
+            return;
+        end
         oWindowState.close();
         oRenderTimer:Stop();
         ProcSys.Shutdown();

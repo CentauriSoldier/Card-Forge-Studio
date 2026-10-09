@@ -15,6 +15,7 @@ local _sOriginalPackagePath = package.path;
 ╰─╯╵ ╵╵ ╵╰─╴--]]
 local tGame     = {
     Root        = "",
+    Wiki        = "",
     Docs        = "",
     Temp        = "",
     CardSets    = "",
@@ -210,6 +211,7 @@ tGame.Prep = function(oGame)
     --TODO USE FILESPECs WHERE POSSIBLE
 
     --setup the game's folder
+    tGame.Wiki             = pGame.."/"..FOLDER_WIKI;
     tGame.Root             = pGame;                                        --CheckFolder(pGame);
     tGame.Docs             = pGame             .."\\Docs";                 CheckFolder(tGame.Docs);
     tGame.Temp             = pGame             .."\\Temp";                 CheckFolder(tGame.Temp);
