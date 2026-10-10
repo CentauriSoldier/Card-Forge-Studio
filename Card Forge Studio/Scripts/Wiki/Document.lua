@@ -1,13 +1,29 @@
+--[[!
+@fqxn CFS.Modules.Wiki.Document
+@desc Rich-text XML serialization, headings, lists, checkboxes, code boxes, syntax highlighting, and theme application.
+!]]
+
 -- Native rich-text documents and stable section anchors.
 local wx = require("wx");
 local Document = {};
 local _oXMLHandler;
+--[[!
+@fqxn CFS.Modules.Wiki.Document.Private.ensureHandler
+@desc Registers the native rich-text XML handler when it is not already available.
+@vis private
+!]]
 local function ensureHandler()
     if (not wx.wxRichTextBuffer.FindHandler(wx.wxRICHTEXT_TYPE_XML)) then
         _oXMLHandler = wx.wxRichTextXMLHandler("XML", "xml", wx.wxRICHTEXT_TYPE_XML);
         wx.wxRichTextBuffer.AddHandler(_oXMLHandler);
     end
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.Private.temporary
+@desc Runs a callback with a temporary file and removes the file before returning or propagating failure.
+@vis private
+@param any fCallback Callback function.
+!]]
 local function temporary(fCallback)
     local oFile = wx.wxFile();
     local pFile = wx.wxFileName.CreateTempFileName(wx.wxFileName.GetTempDir().."/CFS-Wiki-", oFile);
@@ -18,6 +34,12 @@ local function temporary(fCallback)
     assert(bOK, vResult);
     return vResult;
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.capture
+@pulsarlua function Document.capture
+@desc Serializes the rich-text buffer to XML while preserving its modified flag.
+@param any oEditor Editor.
+!]]
 function Document.capture(oEditor)
     ensureHandler();
     return temporary(function(pFile)
@@ -34,6 +56,13 @@ function Document.capture(oEditor)
         return sXML;
     end);
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.load
+@pulsarlua function Document.load
+@desc Loads XML into the editor or clears it for an empty page.
+@param any oEditor Editor.
+@param any sXML Serialized rich-text XML.
+!]]
 function Document.load(oEditor, sXML)
     ensureHandler();
     oEditor:SetFocusObject(oEditor:GetBuffer());
@@ -45,6 +74,12 @@ function Document.load(oEditor, sXML)
     end);
     oEditor:DiscardEdits();
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.sections
+@pulsarlua function Document.sections
+@desc Collects unique heading anchors and their positions.
+@param any oEditor Editor.
+!]]
 function Document.sections(oEditor)
     local tSections, tSeen = {}, {};
     local oAttribute = wx.wxRichTextAttr();
@@ -61,6 +96,13 @@ function Document.sections(oEditor)
     oAttribute:delete();
     return tSections;
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.jump
+@pulsarlua function Document.jump
+@desc Moves the caret and scrolls to a matching heading anchor, reporting whether it was found.
+@param any oEditor Editor.
+@param any sAnchor Anchor.
+!]]
 function Document.jump(oEditor, sAnchor)
     for _, tSection in ipairs(Document.sections(oEditor)) do
         if (tSection.anchor == sAnchor) then
@@ -71,6 +113,13 @@ function Document.jump(oEditor, sAnchor)
     end
     return false;
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.heading
+@pulsarlua function Document.heading
+@desc Applies heading formatting and a page-local anchor to the current paragraph or selection.
+@param any oEditor Editor.
+@param any nLevel Level.
+!]]
 function Document.heading(oEditor, nLevel)
     local oSelection = oEditor:GetSelectionRange();
     local nPosition = oEditor:HasSelection() and oSelection:GetStart() or oEditor:GetInsertionPoint();
@@ -97,6 +146,13 @@ function Document.heading(oEditor, nLevel)
         a:delete(); oCurrent:delete(); nPosition = oRange:GetEnd() + 1;
     until (nPosition >= nEnd)
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.Private.listParagraph
+@desc Returns the paragraph range, text, and attributes for list operations.
+@vis private
+@param any oEditor Editor.
+@param any nPosition Position.
+!]]
 local function listParagraph(oEditor, nPosition)
     local oParagraph = oEditor:GetFocusObject():GetParagraphAtPosition(nPosition or oEditor:GetInsertionPoint());
     if (not oParagraph) then return; end
@@ -104,9 +160,24 @@ local function listParagraph(oEditor, nPosition)
     local a = wx.wxRichTextAttr(); oEditor:GetStyle(oRange:GetStart(), a);
     return oRange, oParagraph:GetTextForRange(oRange), a;
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.Private.paragraphStyle
+@desc Applies paragraph-only attributes as an undoable operation.
+@vis private
+@param any oEditor Editor.
+@param any oRange Range.
+@param any a A.
+!]]
 local function paragraphStyle(oEditor, oRange, a)
     oEditor:SetStyleEx(wx.wxRichTextRange(oRange:GetStart(), oRange:GetEnd() + 1), a, wx.wxRICHTEXT_SETSTYLE_WITH_UNDO + wx.wxRICHTEXT_SETSTYLE_PARAGRAPHS_ONLY);
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.Private.checkboxFont
+@desc Uses the symbol font for checkbox glyphs while adapting their size to surrounding text.
+@vis private
+@param any oEditor Editor.
+@param any nPosition Position.
+!]]
 local function checkboxFont(oEditor, nPosition)
     local a = wx.wxRichTextAttr(); oEditor:GetStyle(nPosition, a);
     if (a:GetFontFaceName() ~= "Segoe UI Symbol") then
@@ -121,9 +192,21 @@ local function checkboxFont(oEditor, nPosition)
     end
     a:delete();
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.checkboxes
+@pulsarlua function Document.checkboxes
+@desc Normalizes checkbox glyph formatting in nested content outside code boxes.
+@param any oEditor Editor.
+!]]
 function Document.checkboxes(oEditor)
     local oOriginal = oEditor:GetFocusObject(); local nCaret = oEditor:GetInsertionPoint(); local oSelection = oEditor:GetSelectionRange();
     local oBoxClass = wx.wxClassInfo.FindClass("wxRichTextParagraphLayoutBox"); local oCompositeClass = wx.wxClassInfo.FindClass("wxRichTextCompositeObject");
+    --[[!
+    @fqxn CFS.Modules.Wiki.Document.Private.visit
+    @desc Traverses nested rich-text objects for the enclosing document-formatting operation.
+    @param any oObject Object.
+    @vis private
+    !]]
     local function visit(oObject)
         local oBox = oObject:IsKindOf(oBoxClass) and oObject:DynamicCast("wxRichTextParagraphLayoutBox") or nil;
         if (oBox and not oBox:GetAttributes():GetParagraphStyleName():match("^WikiCode|")) then
@@ -141,6 +224,12 @@ function Document.checkboxes(oEditor)
     visit(oEditor:GetBuffer()); oEditor:SetFocusObject(oOriginal); oEditor:SetInsertionPoint(nCaret);
     if (oSelection:GetEnd() > oSelection:GetStart()) then oEditor:SetSelection(oSelection:GetStart(), oSelection:GetEnd()); end
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.checkbox
+@pulsarlua function Document.checkbox
+@desc Inserts an unchecked checkbox at the paragraph start unless one already exists.
+@param any oEditor Editor.
+!]]
 function Document.checkbox(oEditor)
     local oRange, sText, a = listParagraph(oEditor);
     if (sText:sub(1, 3) == "☐" or sText:sub(1, 3) == "☑") then a:delete(); return; end
@@ -149,6 +238,14 @@ function Document.checkbox(oEditor)
     oEditor:SetInsertionPoint(oRange:GetStart()); oEditor:WriteText("☐ "); checkboxFont(oEditor, oRange:GetStart());
     oEditor:EndBatchUndo(); a:delete(); oEditor:SetFocus();
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.toggleCheck
+@pulsarlua function Document.toggleCheck
+@desc Toggles a paragraph checkbox, optionally requiring a hit on its glyph.
+@param any oEditor Editor.
+@param any nPosition Position.
+@param any bHitOnly Hit only.
+!]]
 function Document.toggleCheck(oEditor, nPosition, bHitOnly)
     local oRange, sText, a = listParagraph(oEditor, nPosition); if (not oRange) then return false; end a:delete();
     local sMark = sText:sub(1, 3);
@@ -164,6 +261,12 @@ function Document.toggleCheck(oEditor, nPosition, bHitOnly)
     oEditor:GetBuffer():Invalidate(wx.wxRICHTEXT_ALL); oEditor:LayoutContent(); oEditor:Thaw(); oEditor:Refresh(false);
     return true;
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.listEnter
+@pulsarlua function Document.listEnter
+@desc Continues a list or checkbox item, or exits an empty item, as an undoable operation.
+@param any oEditor Editor.
+!]]
 function Document.listEnter(oEditor)
     local oRange, sText, a = listParagraph(oEditor); if (not oRange) then return false; end
     local bCheck = sText:sub(1, 3) == "☐" or sText:sub(1, 3) == "☑";
@@ -182,6 +285,13 @@ function Document.listEnter(oEditor)
     end
     oEditor:EndBatchUndo(); a:delete(); return true;
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.listIndent
+@pulsarlua function Document.listIndent
+@desc Adjusts list indentation and ordered-list numbering style while preserving checkbox behavior.
+@param any oEditor Editor.
+@param any bOutdent Outdent.
+!]]
 function Document.listIndent(oEditor, bOutdent)
     local oRange, sText, a = listParagraph(oEditor); if (not oRange) then return false; end
     local bCheck = sText:sub(1, 3) == "☐" or sText:sub(1, 3) == "☑";
@@ -202,6 +312,12 @@ function Document.listIndent(oEditor, bOutdent)
     end
     paragraphStyle(oEditor, oRange, a); a:delete(); return true;
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.Private.codePadding
+@desc Applies ten-pixel padding on all sides of a code box.
+@vis private
+@param any oStyle Style.
+!]]
 local function codePadding(oStyle)
     local oPadding = oStyle:GetTextBoxAttr():GetPadding();
     oPadding:GetLeft():SetValue(10, wx.wxTEXT_ATTR_UNITS_PIXELS);
@@ -209,6 +325,13 @@ local function codePadding(oStyle)
     oPadding:GetTop():SetValue(10, wx.wxTEXT_ATTR_UNITS_PIXELS);
     oPadding:GetBottom():SetValue(10, wx.wxTEXT_ATTR_UNITS_PIXELS);
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.code
+@pulsarlua function Document.code
+@desc Creates or updates a code box carrying its explicit language marker.
+@param any oEditor Editor.
+@param any sLanguage Code language.
+!]]
 function Document.code(oEditor, sLanguage)
     local oFocus = oEditor:GetFocusObject();
     if (oFocus:GetAttributes():GetParagraphStyleName():match("^WikiCode|")) then
@@ -228,6 +351,12 @@ function Document.code(oEditor, sLanguage)
     if (sCode ~= "") then oEditor:WriteText(sCode); end
     a:delete(); oEditor:SetFocus();
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.exitCode
+@pulsarlua function Document.exitCode
+@desc Moves editing from a code box into a normal paragraph.
+@param any oEditor Editor.
+!]]
 function Document.exitCode(oEditor)
     local oFocus = oEditor:GetFocusObject();
     if (not oFocus:GetAttributes():GetParagraphStyleName():match("^WikiCode|")) then return false; end
@@ -237,6 +366,13 @@ function Document.exitCode(oEditor)
     oEditor:SetDefaultStyle(wx.wxRichTextAttr()); oEditor:Newline(); oEditor:SetFocus();
     return true;
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.highlight
+@pulsarlua function Document.highlight
+@desc Uses a styled-text lexer to color code boxes while preserving selection and modified state.
+@param any oEditor Editor.
+@param any oLexer Lexer.
+!]]
 function Document.highlight(oEditor, oLexer)
     local stc = wxstc;
     local tLexers = {Lua = "LUA", JavaScript = "CPP", Python = "PYTHON", HTML = "HTML", CSS = "CSS", SQL = "SQL", C = "CPP", ["C++"] = "CPP"};
@@ -246,6 +382,12 @@ function Document.highlight(oEditor, oLexer)
     local oOriginal = oEditor:GetFocusObject(); local oSelection = oEditor:GetSelectionRange(); local nCaret = oEditor:GetInsertionPoint(); local bModified = oEditor:IsModified();
     local oBoxClass = wx.wxClassInfo.FindClass("wxRichTextParagraphLayoutBox");
     local oCompositeClass = wx.wxClassInfo.FindClass("wxRichTextCompositeObject");
+    --[[!
+    @fqxn CFS.Modules.Wiki.Document.Private.visit2
+    @desc Traverses nested rich-text objects for the enclosing document-formatting operation.
+    @param any oObject Object.
+    @vis private
+    !]]
     local function visit(oObject)
         local oBox = oObject:IsKindOf(oBoxClass) and oObject:DynamicCast("wxRichTextParagraphLayoutBox") or nil;
         local sLanguage = oBox and oBox:GetAttributes():GetParagraphStyleName():match("^WikiCode|(.*)$");
@@ -255,6 +397,13 @@ function Document.highlight(oEditor, oLexer)
             local sText = oBox:GetText(); oLexer:SetLexer(stc["wxSTC_LEX_"..(tLexers[sLanguage] or "NULL")]);
             oLexer:SetKeyWords(0, tKeywords[sLanguage] or ""); oLexer:SetText(sText); oLexer:Colourise(0, -1);
             local tColors = {}; local sPrefix = tPrefixes[sLanguage];
+            --[[!
+            @fqxn CFS.Modules.Wiki.Document.Private.colors
+            @desc Maps language token-style constants to the configured syntax colors.
+            @param any tNames Names.
+            @param any sColor Color.
+            @vis private
+            !]]
             local function colors(tNames, sColor)
                 for _, sName in ipairs(tNames) do local nStyle = sPrefix and stc["wxSTC_"..sPrefix.."_"..sName]; if (nStyle) then tColors[nStyle] = sColor; end end
             end
@@ -263,6 +412,12 @@ function Document.highlight(oEditor, oLexer)
             colors({"STRING", "CHARACTER", "LITERALSTRING", "STRINGEOL", "TRIPLE", "TRIPLEDOUBLE", "DOUBLESTRING", "SINGLESTRING"}, "#ECC48D");
             colors({"NUMBER", "VALUE"}, "#F78C6C"); colors({"OPERATOR", "ATTRIBUTE", "PREPROCESSOR"}, "#89DDFF");
             local nPosition, nStart, sLast = 0, 0, nil;
+            --[[!
+            @fqxn CFS.Modules.Wiki.Document.Private.apply
+            @desc Applies syntax color attributes to a nonempty run of rich-text characters.
+            @param any nEnd End.
+            @vis private
+            !]]
             local function apply(nEnd)
                 if (nEnd > nStart) then
                     local a = wx.wxRichTextAttr(); a:SetTextColour(wx.wxColour(sLast));
@@ -284,10 +439,24 @@ function Document.highlight(oEditor, oLexer)
     Document.checkboxes(oEditor);
     oEditor:GetBuffer():Modify(bModified);
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Document.theme
+@pulsarlua function Document.theme
+@desc Applies background and foreground colors to normal content outside code boxes.
+@param any oEditor Editor.
+@param any sBackground Background color.
+@param any sForeground Foreground color.
+!]]
 function Document.theme(oEditor, sBackground, sForeground)
     local oBackground, oForeground = wx.wxColour(sBackground), wx.wxColour(sForeground);
     local oBoxClass = wx.wxClassInfo.FindClass("wxRichTextParagraphLayoutBox");
     local oCompositeClass = wx.wxClassInfo.FindClass("wxRichTextCompositeObject");
+    --[[!
+    @fqxn CFS.Modules.Wiki.Document.Private.visit3
+    @desc Traverses nested rich-text objects for the enclosing document-formatting operation.
+    @param any oObject Object.
+    @vis private
+    !]]
     local function visit(oObject)
         local oBox = oObject:IsKindOf(oBoxClass) and oObject:DynamicCast("wxRichTextParagraphLayoutBox") or nil;
         if (oBox and not oBox:GetAttributes():GetParagraphStyleName():match("^WikiCode|")) then

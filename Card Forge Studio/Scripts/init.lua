@@ -1,3 +1,8 @@
+--[[!
+@fqxn CFS.Modules.init
+@desc Launcher entry script that initializes native Studio services and supports verification and smoke modes.
+!]]
+
 -- The launcher creates and protects APP_PATH (and other constants) before loading this script.
 local _pRuntime = assert(APP_PATH, "Start Card Forge Studio through its launcher.");
 
@@ -12,6 +17,11 @@ local _dMain, _oTestTimer;
 package.path = _pScripts.."?.lua;".._pScripts.."?/init.lua;"..package.path;
 package.cpath = _pRuntime.."Bin/?.dll;"..package.cpath;
 
+--[[!
+@fqxn CFS.Modules.init.Private.initialize
+@desc Loads runtime services and the main window, supports verification and smoke modes, and enters the native event loop.
+@vis private
+!]]
 local function initialize()
     wx = require("wx");
     require("Globals");

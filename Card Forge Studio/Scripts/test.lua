@@ -1,3 +1,9 @@
+--[[!
+@fqxn CFS.Modules.test
+@desc Development test harness; not a public application API.
+@vis private
+!]]
+
 local _tWx = require("wx");
 local _tWindows = {};
 local _nMessageCount = 0;

@@ -1,3 +1,9 @@
+--[[!
+@fqxn CFS.Modules.card-test
+@desc Development test harness; not a public application API.
+@vis private
+!]]
+
 -- Standalone wxLua rendering experiment. All game inputs are read-only.
 local _pScripts = assert(debug.getinfo(1, "S").source:match("^@(.+[/\\])"));
 local _pRuntime = _pScripts.."../";

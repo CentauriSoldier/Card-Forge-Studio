@@ -4,6 +4,14 @@ local tTimers = {};
 local dTimerOwner = wx.wxEvtHandler();
 local GlobalTimer = {};
 
+--[[!
+@fqxn CFS.Classes.LiveFileRepo.Private.GlobalTimer_Start
+@desc Replaces any timer with the same ID, binds its callback to a native event handler, and starts periodic monitoring.
+@param any nInterval Interval.
+@param any nID Id.
+@param any fCallback Callback.
+@vis private
+!]]
 function GlobalTimer.Start(nInterval, nID, fCallback)
     GlobalTimer.Stop(nID);
     local oTimer = wx.wxTimer(dTimerOwner, nID);
@@ -16,6 +24,12 @@ function GlobalTimer.Start(nInterval, nID, fCallback)
     assert(oTimer:Start(nInterval), "Cannot start live-file timer.");
 end
 
+--[[!
+@fqxn CFS.Classes.LiveFileRepo.Private.GlobalTimer_Stop
+@desc Stops and deletes a registered native timer and disconnects its event callback.
+@param any nID Id.
+@vis private
+!]]
 function GlobalTimer.Stop(nID)
     local tTimer = tTimers[nID];
     if (tTimer) then
@@ -26,6 +40,12 @@ function GlobalTimer.Stop(nID)
     end
 end
 
+--[[!
+@fqxn CFS.Classes.LiveFileRepo.Private.ReadToString
+@desc Reads a normalized file path in binary mode and checks read and close success.
+@param any pFile File.
+@vis private
+!]]
 local function ReadToString(pFile)
     local hFile = assert(io.open(io.normalizepath(pFile), "rb"));
     local sText, sError = hFile:read("a");
@@ -44,6 +64,12 @@ for nByte = 0, 255 do
     tCRC[nByte] = nCRC;
 end
 
+--[[!
+@fqxn CFS.Classes.LiveFileRepo.Private.GetCRC
+@desc Computes a CRC-32 checksum over the file text.
+@param any sText Text.
+@vis private
+!]]
 local function GetCRC(sText)
     local nCRC = 0xFFFFFFFF;
     for nIndex = 1, #sText do
@@ -51,7 +77,17 @@ local function GetCRC(sText)
     end
     return (nCRC ~ 0xFFFFFFFF) & 0xFFFFFFFF;
 end
+--[[!
+@fqxn CFS.Constants.LIVECODE_TIMER_ID_MIN
+@pulsarlua number LIVECODE_TIMER_ID_MIN
+@desc Inclusive lower bound for allocated live-file timer IDs.
+!]]
 constant("LIVECODE_TIMER_ID_MIN", 1000000);
+--[[!
+@fqxn CFS.Constants.LIVECODE_TIMER_ID_MAX
+@pulsarlua number LIVECODE_TIMER_ID_MAX
+@desc Inclusive upper bound for allocated live-file timer IDs.
+!]]
 constant("LIVECODE_TIMER_ID_MAX", 1999999);
 local LIVECODE_TIMER_ID_MIN = LIVECODE_TIMER_ID_MIN;
 local LIVECODE_TIMER_ID_MAX = LIVECODE_TIMER_ID_MAX;
@@ -61,13 +97,19 @@ local _nNextTimerID = LIVECODE_TIMER_ID_MIN - 1;
 
 
 ----------------------------------------------------
+--[[!
+@fqxn CFS.Classes.LiveFileRepo.Private.sink
+@desc Provides a no-operation callback for files without a change handler.
+@vis private
+!]]
 local function sink() end
 ----------------------------------------------------
 -- The local timer adapter above uses WX and requires no AMS plugin.
 ----------------------------------------------------
 --[[!
-    @fqxn AMSExt.LiveFileRepo
-    @desc Stuff here
+    @fqxn CFS.Classes.LiveFileRepo
+    @pulsarlua table LiveFileRepo
+    @desc Monitors registered files with native timers, maintains read-only file views, and invokes callbacks when file text changes.
 !]]
 return class("LiveFileRepo",
     {--METAMETHODS
@@ -76,9 +118,7 @@ return class("LiveFileRepo",
     {--STATIC PUBLIC
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
         --LiveFileRepo = function(this, sAuthCode) end, --static constructor (runs after class object creation)\
-        --[[!
-        @fqxn AMSExt.LiveFileRepo
-        !]]
+
         --[[SetActive = function(vID, vFlag)
             type.assert.string(vID, "%S", "LiveFileRepo.Start: ID must be a non-blank string.");
             local sID           = vID:upper();
@@ -93,6 +133,12 @@ return class("LiveFileRepo",
         LiveFilesByID       = {}, --indexed by user-set id
         LiveFilesByTimerID  = {}, --indexed by timer id
 
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Private.OnTimer
+        @desc Reads a watched file, updates text and CRC on change, invokes its callback, and retains read or callback errors on the file record.
+        @param any nID Id.
+        @vis private
+        !]]
         OnTimer = function(this, cdat, nID)
             local pri       = cdat.pri;
             local tLiveFile = pri.LiveFilesByTimerID[nID];
@@ -148,9 +194,24 @@ return class("LiveFileRepo",
 
     },
     {--PUBLIC
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Methods.LiveFileRepo
+        @pulsarlua function LiveFileRepo
+        @desc Creates an empty live-file repository using the class system's per-instance storage.
+        @ret LiveFileRepo Created instance.
+        !]]
         LiveFileRepo = function(this, cdat)
 
         end,
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Methods.Add
+        @pulsarlua function LiveFileRepo.Add
+        @desc Registers an existing file with a unique case-insensitive ID and an allocated timer; returns a read-only file view without starting monitoring.
+        @param any vID Id.
+        @param any pFile File.
+        @param any nTimerInterval Timer interval.
+        @param any fCallback Callback.
+        !]]
         Add = function(this, cdat, vID, pFile, nTimerInterval, fCallback)--bStart TODO Add this option, also allow error callback
             type.assert.string(vID, "%S", "LiveFileRepo.Add: ID must be a non-blank string.");
             type.assert.string(pFile, "%S", "LiveFileRepo.Add: File must be a non-blank string.");
@@ -218,6 +279,12 @@ return class("LiveFileRepo",
 
             return tLiveFileDecoy;
         end,
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Methods.Get
+        @pulsarlua function LiveFileRepo.Get
+        @desc Returns the read-only file view for a registered case-insensitive ID; unknown IDs raise an error.
+        @param any vID Id.
+        !]]
         Get = function(this, cdat, vID)
             type.assert.string(vID, "%S", "LiveFileRepo.Get: ID must be a non-blank string.");
             local sID       = vID:upper();
@@ -229,12 +296,22 @@ return class("LiveFileRepo",
 
             return tDecoy;
         end,
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Methods.GetIDs
+        @pulsarlua function LiveFileRepo.GetIDs
+        @desc Returns sorted registered file IDs.
+        !]]
         GetIDs = function(this, cdat)
             local tIDs = {};
             for sID in pairs(cdat.pri.LiveFilesByID) do tIDs[#tIDs + 1] = sID; end
             table.sort(tIDs);
             return tIDs;
         end,
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Methods.Reset
+        @pulsarlua function LiveFileRepo.Reset
+        @desc Stops all timers, invalidates existing file views, and clears repository records.
+        !]]
         Reset = function(this, cdat)
             local pri = cdat.pri;
 
@@ -268,6 +345,13 @@ return class("LiveFileRepo",
 
             return true;
         end,
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Methods.SetCallback
+        @pulsarlua function LiveFileRepo.SetCallback
+        @desc Replaces a watched file's change callback; non-function values restore the no-operation callback.
+        @param any vID Id.
+        @param any fCallback Callback.
+        !]]
         SetCallback = function(this, cdat, vID, fCallback)--IS FINISH ED
             type.assert.string(vID, "%S", "LiveFileRepo.SetCallback: ID must be a non-blank string.");
             local sID           = vID:upper();
@@ -284,6 +368,12 @@ return class("LiveFileRepo",
             local tRepo = _tRepos[oRepo];
             _tErrorCallbacks[oRepo] = rawtype(fCallback) == "function" and fCallback or nil;
         end,]]
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Methods.Start
+        @pulsarlua function LiveFileRepo.Start
+        @desc Starts monitoring one registered file if it is not already active.
+        @param any vID Id.
+        !]]
         Start = function(this, cdat, vID)--IS FINISH ED
             type.assert.string(vID, "%S", "LiveFileRepo.Start: ID must be a non-blank string.");
             local sID = vID:upper();
@@ -300,6 +390,11 @@ return class("LiveFileRepo",
             end
 
         end,
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Methods.StartAll
+        @pulsarlua function LiveFileRepo.StartAll
+        @desc Starts monitoring all inactive registered files.
+        !]]
         StartAll = function(this, cdat)
             local pri = cdat.pri;
 
@@ -313,6 +408,12 @@ return class("LiveFileRepo",
             end
 
         end,
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Methods.Stop
+        @pulsarlua function LiveFileRepo.Stop
+        @desc Stops monitoring one registered file while retaining its record.
+        @param any vID Id.
+        !]]
         Stop = function(this, cdat, vID)
             type.assert.string(vID, "%S", "LiveFileRepo.Stop: ID must be a non-blank string.");
             local sID = vID:upper();
@@ -328,6 +429,11 @@ return class("LiveFileRepo",
             end
 
         end,
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Methods.StopAll
+        @pulsarlua function LiveFileRepo.StopAll
+        @desc Stops all active file timers while retaining repository records.
+        !]]
         StopAll = function(this, cdat)
             local pri = cdat.pri;
 

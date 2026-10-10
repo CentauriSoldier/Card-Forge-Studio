@@ -3,6 +3,12 @@
 -- data loading, RGB/RGBA construct WX colours for the game's configuration.
 local wx = require("wx");
 local Color = {RGBA = wx.wxColour, RGB = wx.wxColour};
+--[[!
+@fqxn CFS.UserEnv.Private.p
+@desc Formats supplied values into a logged user-environment message.
+@param any ... Additional drawing arguments.
+@vis private
+!]]
 local function p(...)
     local tValues = {};
     for nIndex = 1, select("#", ...) do
@@ -96,6 +102,7 @@ end
 local tEnv = { --TODO QUESTION do i need to protect this?
     --[[!
     @fqxn CFS.UserEnv.ipairs
+    @pulsarlua function ipairs
     @desc Returns an iterator that traverses a table by increasing integer keys, starting at index 1 and continuing until a nil value is encountered. Intended for array-like tables.
     @example
     local t = { "a", "b", "c" }
@@ -106,6 +113,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     ipairs           = ipairs,
     --[[!
     @fqxn CFS.UserEnv.pairs
+    @pulsarlua function pairs
     @desc Returns an iterator that visits all key–value pairs in a table. The traversal order is unspecified and should not be relied upon.
     @example
     local t = { x = 10, y = 20 }
@@ -116,6 +124,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     pairs            = pairs,
     --[[!
     @fqxn CFS.UserEnv.tonumber
+    @pulsarlua function tonumber
     @desc Attempts to convert its argument to a number. If the conversion is not possible, it returns nil. An optional base may be supplied for string conversion.
     @example
     local n = tonumber("10")
@@ -124,6 +133,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     tonumber         = tonumber,
     --[[!
     @fqxn CFS.UserEnv.tostring
+    @pulsarlua function tostring
     @desc Converts a value to its human-readable string form. This function never fails and always returns a string.
     @example
     local s = tostring(123)
@@ -132,6 +142,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     tostring         = tostring,
     --[[!
     @fqxn CFS.UserEnv.type
+    @pulsarlua function type
     @desc Returns a string describing the type of its argument, such as "number", "string", or "table".
     @example
     print(type(42))        -- "number"
@@ -140,12 +151,14 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     type             = rawtype,
     --[[!
     @fqxn CFS.UserEnv.p
+    @pulsarlua function p
     @desc An alias of <a href="#CFS.UserEnv.print">print</a>
     @inheritdoc CFS.UserEnv.print
     !]]
     p                = p,
     --[[!
     @fqxn CFS.UserEnv.print
+    @pulsarlua function print
     @desc Outputs a textual representation of its arguments, separated by tabs and followed by a newline.
     @example
     print("hello", 123, true)
@@ -153,6 +166,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     print            = p,
     --[[!
     @fqxn CFS.UserEnv.serialize
+    @pulsarlua function serialize
     @desc Serializes a Lua value into a Lua-expression string that can later be reconstructed using the deserializer. Supported primitive types are emitted directly, while registered or metatable-enabled objects are encoded in a packed form. Tables are walked recursively, preserving structure and detecting circular references.
     @param any vInput The value to serialize.
     @ret string sSerialized Lua expression representing the serialized value.
@@ -167,6 +181,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     serialize        = serialize,
     --[[!
     @fqxn CFS.UserEnv.deserialize
+    @pulsarlua function deserialize
     @desc Reconstructs a Lua value from a serialized Lua-expression string produced by serialize. The input string is executed in a controlled manner to recreate the original value, including complex tables and registered object types.
     @param string sRawData Serialized Lua expression.
     @ret any vResult Deserialized Lua value.
@@ -177,6 +192,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     deserialize      = deserialize,
     --[[!
     @fqxn CFS.UserEnv.select
+    @pulsarlua function select
     @desc Provides access to variable argument lists. Can be used to count arguments or extract values by position.
     @example
     local a, b = select(1, "x", "y", "z");
@@ -186,6 +202,12 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     --Forge            = tForgeDecoy,
     --ProcSys          = tProcSysDecoy,
     --TODO FINISH this function and add Dox Note (update it with Game load)
+    --[[!
+    @fqxn CFS.UserEnv.Private.Exists
+    @desc Retained file-existence hook; currently has no implementation.
+    @param any sPath Path.
+    @vis private
+    !]]
     Exists           = function(sPath)
         --TextFile.DoesExist
     end,
@@ -212,6 +234,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     --User             = {}, --from Init
     --[[!
     @fqxn CFS.UserEnv.Uptime
+    @pulsarlua function Uptime
     @desc
     <p>Returns the number of seconds elapsed since the UserEnv (sandbox) was created.
     <br><br>
@@ -231,6 +254,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     --TODO UPDATE THESE DOX 
     --[[!
     @fqxn CFS.UserEnv.STYLE
+    @pulsarlua table STYLE
     @inheritdoc CFS.Classes.FontStyle.Methods.Get
     !]]
     STYLE           = STYLE,
@@ -239,6 +263,13 @@ local tEnv = { --TODO QUESTION do i need to protect this?
 -- decoy -> real backing table map (weak keys so nothing is kept alive)
 local tEnvBacking = setmetatable({}, { __mode = "k" })
 
+--[[!
+@fqxn CFS.UserEnv.Private.InjectEnv
+@desc Validates the environment name and publishes a protected view over the supplied table.
+@param any sName Name.
+@param any tActual Actual.
+@vis private
+!]]
 local function InjectEnv(sName, tActual)
 
     if not (rawtype(sName) == "string" and not sName:isempty()) then
@@ -282,6 +313,7 @@ end
                                                                             ]]
 --[[!
 @fqxn CFS.UserEnv.base64
+@pulsarlua table base64
 @desc
 <div class="mb-4">
 
@@ -307,6 +339,7 @@ end
 InjectEnv("base64", {
     --[[!
     @fqxn CFS.UserEnv.base64.enc
+    @pulsarlua function base64.enc
     @desc Encodes a string to Base64.
     @param string sInput The sting to encode.
     @ret string sEncoded The encoded Base64 string.
@@ -318,6 +351,7 @@ InjectEnv("base64", {
     dec = base64.dec,
     --[[!
     @fqxn CFS.UserEnv.base64.dec
+    @pulsarlua function base64.dec
     @desc Encodes a string to Base64.
     @param string sInput The sting to encode.
     @ret string sEncoded The encoded Base64 string.
@@ -342,6 +376,7 @@ InjectEnv("base64", {
                                                                             ]]
 --[[!
 @fqxn CFS.UserEnv.Color
+@pulsarlua table Color
 @desc
 <div class="mb-4">
 
@@ -472,6 +507,7 @@ InjectEnv("Color", {
     HexToRGBA          = Color.HexToRGBA,
     --[[!
     @fqxn CFS.UserEnv.Color.RGBA
+    @pulsarlua table Color.RGBA
     @desc
     Calculates a 32-bit RGBA color value composed of red, green, blue, and alpha components.
     The alpha channel controls opacity, allowing the color to be fully opaque or fully transparent.
@@ -543,6 +579,7 @@ InjectEnv("Color", {
     RGBAGradientColors = Color.RGBAGradientColors,
     --[[!
     @fqxn CFS.UserEnv.Color.RGB
+    @pulsarlua table Color.RGB
     @desc
     Calculates a 24-bit RGB color value composed of red, green, and blue components with no alpha channel.
     Use this when opacity is not required; for colors with transparency, use Color.RGBA instead.
@@ -745,109 +782,161 @@ The, previously developed by RizlaUK, Canvas plugin will also be a part of Draw.
 </section>!]]
 if (Drawing ~= nil) then
 InjectEnv("Drawing",{--TODO add real description to these
-    --[[!@fqxn CFS.UserEnv.Drawing.ClearGradientColors @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.ClearGradientColors
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     ClearGradientColors          = Drawing.ClearGradientColors,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawAlphaImage @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawAlphaImage
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawAlphaImage               = Drawing.DrawAlphaImage,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawAngledText @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawAngledText
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawAngledText               = Drawing.DrawAngledText,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawArc @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawArc
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawArc                      = Drawing.DrawArc,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawBoldLine @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawBoldLine
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawBoldLine                 = Drawing.DrawBoldLine,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawCircle @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawCircle
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawCircle                   = Drawing.DrawCircle,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawEllipse @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawEllipse
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawEllipse                  = Drawing.DrawEllipse,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawImage @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawImage
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawImage                    = Drawing.DrawImage,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawLine @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawLine
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawLine                     = Drawing.DrawLine,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawLineEx @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawLineEx
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawLineEx                   = Drawing.DrawLineEx,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawPie @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawPie
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawPie                      = Drawing.DrawPie,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawPixel @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawPixel
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawPixel                    = Drawing.DrawPixel,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawPolygon @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawPolygon
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawPolygon                  = Drawing.DrawPolygon,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawRectangle @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawRectangle
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawRectangle                = Drawing.DrawRectangle,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawRoundedRectangle @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawRoundedRectangle
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawRoundedRectangle         = Drawing.DrawRoundedRectangle,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawText @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DrawText
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DrawText                     = Drawing.DrawText,
-    --[[!@fqxn CFS.UserEnv.Drawing.FillOutlinedRegion @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.FillOutlinedRegion
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     FillOutlinedRegion           = Drawing.FillOutlinedRegion,
-    --[[!@fqxn CFS.UserEnv.Drawing.GetAvailableCollibFilters @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.GetAvailableCollibFilters
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     GetAvailableCollibFilters    = Drawing.GetAvailableCollibFilters,
-    --[[!@fqxn CFS.UserEnv.Drawing.GetPixel @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.GetPixel
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     GetPixel                     = Drawing.GetPixel,
-    --[[!@fqxn CFS.UserEnv.Drawing.GetTextHeight @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.GetTextHeight
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     GetTextHeight                = Drawing.GetTextHeight,
-    --[[!@fqxn CFS.UserEnv.Drawing.GetTextWidth @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.GetTextWidth
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     GetTextWidth                 = Drawing.GetTextWidth,
-    --[[!@fqxn CFS.UserEnv.Drawing.PrepareCircularGradient @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.PrepareCircularGradient
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     PrepareCircularGradient      = Drawing.PrepareCircularGradient,
-    --[[!@fqxn CFS.UserEnv.Drawing.PrepareConicalGradient @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.PrepareConicalGradient
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     PrepareConicalGradient       = Drawing.PrepareConicalGradient,
-    --[[!@fqxn CFS.UserEnv.Drawing.PrepareEllipticalGradient @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.PrepareEllipticalGradient
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     PrepareEllipticalGradient    = Drawing.PrepareEllipticalGradient,
-    --[[!@fqxn CFS.UserEnv.Drawing.PrepareLinearGradient @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.PrepareLinearGradient
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     PrepareLinearGradient        = Drawing.PrepareLinearGradient,
-    --[[!@fqxn CFS.UserEnv.Drawing.PrepareRectangularGradient @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.PrepareRectangularGradient
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     PrepareRectangularGradient   = Drawing.PrepareRectangularGradient,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetBackColor @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.SetBackColor
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     SetBackColor                 = Drawing.SetBackColor,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetCollibFilter @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.SetCollibFilter
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     SetCollibFilter              = Drawing.SetCollibFilter,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetDrawingFont @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.SetDrawingFont
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     SetDrawingFont               = Drawing.SetDrawingFont,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetFilteringMode @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.SetFilteringMode
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     SetFilteringMode             = Drawing.SetFilteringMode,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetFrontColor @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.SetFrontColor
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     SetFrontColor                = Drawing.SetFrontColor,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetGradientColors @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.SetGradientColors
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     SetGradientColors            = Drawing.SetGradientColors,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetSingleGradientColor @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.SetSingleGradientColor
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     SetSingleGradientColor       = Drawing.SetSingleGradientColor,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_JPEG @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_JPEG
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_JPEG             = DRAW_FORMAT_JPEG,
-    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_JPEG2000 @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_JPEG2000
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_JPEG2000         = DRAW_FORMAT_JPEG2000,
-    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_BMP @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_BMP
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_BMP              = DRAW_FORMAT_BMP,
-    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_ICON @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_ICON
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_ICON             = DRAW_FORMAT_ICON,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_PNG @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_PNG
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_PNG              = DRAW_FORMAT_PNG,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_TGA @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_TGA
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_TGA              = DRAW_FORMAT_TGA,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_TIFF @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_TIFF
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FORMAT_TIFF             = DRAW_FORMAT_TIFF,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_MIRROR_HORIZONTAL @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_MIRROR_HORIZONTAL
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_MIRROR_HORIZONTAL       = DRAW_MIRROR_HORIZONTAL,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_MIRROR_VERTICAL @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_MIRROR_VERTICAL
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_MIRROR_VERTICAL         = DRAW_MIRROR_VERTICAL,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_DEFAULT @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_DEFAULT
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_DEFAULT           = DRAW_BLEND_DEFAULT,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_TEXT_TRANSPARENT @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_TEXT_TRANSPARENT
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_TEXT_TRANSPARENT  = DRAW_BLEND_TEXT_TRANSPARENT,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_XOR @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_XOR
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_XOR               = DRAW_BLEND_XOR,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_OUTLINE @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_OUTLINE
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_OUTLINE           = DRAW_BLEND_OUTLINE,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHABLEND @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHABLEND
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_ALPHABLEND        = DRAW_BLEND_ALPHABLEND,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHACLIP @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHACLIP
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_ALPHACLIP         = DRAW_BLEND_ALPHACLIP,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHACHANNEL @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHACHANNEL
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_ALPHACHANNEL      = DRAW_BLEND_ALPHACHANNEL,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALLCHANNELS @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALLCHANNELS
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_BLEND_ALLCHANNELS       = DRAW_BLEND_ALLCHANNELS,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FILTER_GRADIENT @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FILTER_GRADIENT
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FILTER_GRADIENT         = DRAW_FILTER_GRADIENT,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FILTER_COLLIB @see <strong>Help->Drawing</strong> in the application's main menu. !]]
+    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FILTER_COLLIB
+    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
     DRAW_FILTER_COLLIB           = DRAW_FILTER_COLLIB,
 });
 end
@@ -862,21 +951,21 @@ end
                                                                                 ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
                                                                                 ]]
 --[[!@fqxn CFS.UserEnv.Forge
-    @inheritdoc CFS.Classes.Forge!]]
+    @inheritdoc CFS.Modules.Forge!]]
 local tForge        = {};
 local tForgeKeys    = {};
 if (Forge ~= nil) then
 InjectEnv("Forge", {
     --[[!@fqxn CFS.UserEnv.Forge.DrawImage
-        @inheritdoc CFS.Classes.Forge.Methods.DrawImage!]]
+        @inheritdoc CFS.Modules.Forge.DrawImage!]]
     DrawRectangle   = Forge.DrawRectangle,
     GetOutputInfo   = Forge.GetOutputInfo,
     DrawImage       = Forge.DrawImage,
     --[[!@fqxn CFS.UserEnv.Forge.DrawText
-        @inheritdoc CFS.Classes.Forge.Methods.DrawText!]]
+        @inheritdoc CFS.Modules.Forge.DrawText!]]
     DrawText        = Forge.DrawText,
     --[[!@fqxn CFS.UserEnv.Forge.DrawStyledText
-        @inheritdoc CFS.Classes.Forge.Methods.DrawStyledText!]]
+        @inheritdoc CFS.Modules.Forge.DrawStyledText!]]
     DrawStyledText  = Forge.DrawStyledText,
 });
 end
@@ -884,6 +973,7 @@ end
 
 --[[!
 @fqxn CFS.UserEnv.geometry
+@pulsarlua table geometry
 @desc
 <div class="card border-0 shadow-sm bg-dark text-light mb-3">
   <div class="card-body">
@@ -909,6 +999,7 @@ end
 InjectEnv("geometry", {
     --[[!
     @fqxn CFS.UserEnv.geometry.fitrect
+    @pulsarlua function geometry.fitrect
     @desc Calculates the largest rectangle that fits inside an outer rectangle
     while preserving the aspect ratio of an inner rectangle.
     Optionally centers the result within the outer rectangle.
@@ -922,6 +1013,7 @@ InjectEnv("geometry", {
     fitrect             = math.geometry.fitrect,
     --[[!
     @fqxn CFS.UserEnv.geometry.rectcontains
+    @pulsarlua function geometry.rectcontains
     @desc Tests whether two rectangles overlap with a positive intersection area.
     Returns true only when the rectangles share a non-zero overlapping region.
     @param table tMe First rectangle (x, y, width, height).
@@ -933,6 +1025,7 @@ InjectEnv("geometry", {
     rectcontains        = math.geometry.rectcontains,
     --[[!
     @fqxn CFS.UserEnv.geometry.rectcontainsfully
+    @pulsarlua function geometry.rectcontainsfully
     @desc Tests whether one rectangle intersects or encloses another.
     Unlike rectcontains, edge contact is considered a valid intersection.
     @param table tMe First rectangle (x, y, width, height).
@@ -955,6 +1048,7 @@ InjectEnv("geometry", {
                                                                                 ]]
 --[[!
 @fqxn CFS.UserEnv.math
+@pulsarlua table math
 @desc <pre class="fw-bold lh-1 mb-2">
 <span style="color:#4d70f1">
 
@@ -971,6 +1065,7 @@ classification.
 InjectEnv("math", {
     --[[!
     @fqxn CFS.UserEnv.math.abs
+    @pulsarlua function math.abs
     @desc
         Returns the absolute (non-negative) value of a number.
     @example
@@ -979,6 +1074,7 @@ InjectEnv("math", {
     abs                 = math.abs,
     --[[!
     @fqxn CFS.UserEnv.math.acos
+    @pulsarlua function math.acos
     @desc
         Computes the arc cosine of a value, expressed in radians.
         The input must be within the range -1 to 1.
@@ -988,6 +1084,7 @@ InjectEnv("math", {
     acos                = math.acos,
     --[[!
     @fqxn CFS.UserEnv.math.asin
+    @pulsarlua function math.asin
     @desc
         Computes the arc sine of a value, in radians.
         Valid only for values between -1 and 1.
@@ -997,6 +1094,7 @@ InjectEnv("math", {
     asin                = math.asin,
     --[[!
     @fqxn CFS.UserEnv.math.atan
+    @pulsarlua function math.atan
     @desc
         Returns the arc tangent of a value, measured in radians.
     @example
@@ -1005,6 +1103,7 @@ InjectEnv("math", {
     atan                = math.atan,
     --[[!
     @fqxn CFS.UserEnv.math.atan2
+    @pulsarlua function math.atan2
     @desc
         Computes the arc tangent using two coordinates,
         preserving the correct quadrant of the result.
@@ -1014,6 +1113,7 @@ InjectEnv("math", {
     atan2               = math.atan2,
     --[[!
     @fqxn CFS.UserEnv.math.ceil
+    @pulsarlua function math.ceil
     @desc
         Rounds a number upward to the nearest integer
         that is greater than or equal to the input.
@@ -1023,6 +1123,7 @@ InjectEnv("math", {
     ceil                = math.ceil,
     --[[!
     @fqxn CFS.UserEnv.math.clamp
+    @pulsarlua function math.clamp
     @desc Constrains a numeric value to lie within a minimum and maximum bound.
     If the value is smaller than the minimum, the minimum is returned.
     If the value is larger than the maximum, the maximum is returned.
@@ -1036,6 +1137,7 @@ InjectEnv("math", {
     clamp               = math.clamp,
     --[[!
     @fqxn CFS.UserEnv.math.convertbase
+    @pulsarlua function math.convertbase
     @desc Converts a numeric string from one base to another.
     The input is first interpreted using the source base, then re-encoded
     using the target base.
@@ -1045,6 +1147,7 @@ InjectEnv("math", {
     convertbase         = math.convertbase,
     --[[!
     @fqxn CFS.UserEnv.math.cos
+    @pulsarlua function math.cos
     @desc Calculates the cosine of an angle given in radians.
     @example
     local c = math.cos(math.pi)
@@ -1052,6 +1155,7 @@ InjectEnv("math", {
     cos                 = math.cos,
     --[[!
     @fqxn CFS.UserEnv.math.counting
+    @pulsarlua function math.counting
     @desc Converts a number into a positive counting value.
     The result is always greater than zero and rounded using floor or ceiling.
     @param number nValue Input value.
@@ -1063,6 +1167,7 @@ InjectEnv("math", {
     counting            = math.counting,
     --[[!
     @fqxn CFS.UserEnv.math.deg
+    @pulsarlua function math.deg
     @desc Converts an angle from radians into degrees.
     @example
     local d = math.deg(math.pi) -- 180
@@ -1070,6 +1175,7 @@ InjectEnv("math", {
     deg                 = math.deg,
     --[[!
     @fqxn CFS.UserEnv.math.drift
+    @pulsarlua function math.drift
     @desc Applies a random additive offset within a symmetric range.
     The result varies by up to the drift amount in either direction.
     @example
@@ -1078,6 +1184,7 @@ InjectEnv("math", {
     drift               = math.drift,
     --[[!
     @fqxn CFS.UserEnv.math.driftf
+    @pulsarlua function math.driftf
     @desc Applies a proportional random variation to a value.
     The drift is applied as a ratio of the original value.
     @example
@@ -1086,6 +1193,7 @@ InjectEnv("math", {
     driftf              = math.driftf,
     --[[!
     @fqxn CFS.UserEnv.math.e
+    @pulsarlua number math.e
     @desc Mathematical constant representing Euler’s number.
     Used as the base of natural logarithms.
     @example
@@ -1094,6 +1202,7 @@ InjectEnv("math", {
     e                   = math.e,
     --[[!
     @fqxn CFS.UserEnv.math.exp
+    @pulsarlua function math.exp
     @desc
         Computes the exponential value e raised to the given power.
     @example
@@ -1102,6 +1211,7 @@ InjectEnv("math", {
     exp                 = math.exp,
     --[[!
     @fqxn CFS.UserEnv.math.factorial
+    @pulsarlua function math.factorial
     @desc Computes the factorial of a positive integer using iterative multiplication.
     The factorial is the product of all integers from 1 to the given value.
     @param number nVal Integer value.
@@ -1112,6 +1222,7 @@ InjectEnv("math", {
     factorial           = math.factorial,
     --[[!
     @fqxn CFS.UserEnv.math.floor
+    @pulsarlua function math.floor
     @desc
         Rounds a number downward to the nearest integer
         that is less than or equal to the input.
@@ -1121,6 +1232,7 @@ InjectEnv("math", {
     floor               = math.floor,
     --[[!
     @fqxn CFS.UserEnv.math.fmod
+    @pulsarlua function math.fmod
     @desc
         Returns the remainder of dividing two numbers,
         keeping the sign of the first operand.
@@ -1130,6 +1242,7 @@ InjectEnv("math", {
     fmod                = math.fmod,
     --[[!
     @fqxn CFS.UserEnv.math.gcf
+    @pulsarlua function math.gcf
     @desc Calculates the greatest common factor of two numbers using the Euclidean algorithm.
     The result is always non-negative.
     @param number nNum First value.
@@ -1142,6 +1255,7 @@ InjectEnv("math", {
     geometry            = tGeometry,
     --[[!
     @fqxn CFS.UserEnv.math.huge
+    @pulsarlua number math.huge
     @desc Represents a value larger than any other numeric value, typically used as positive infinity.
     @example
     local inf = math.huge
@@ -1149,6 +1263,7 @@ InjectEnv("math", {
     huge                = math.huge,
     --[[!
     @fqxn CFS.UserEnv.math.inttorgb
+    @pulsarlua function math.inttorgb
     @desc Converts a packed integer color value into red, green, and blue components.
     @example
     local r, g, b = math.inttorgb(0xFF00FF)
@@ -1156,6 +1271,7 @@ InjectEnv("math", {
     inttorgb            = math.inttorgb,
     --[[!
     @fqxn CFS.UserEnv.math.iseven
+    @pulsarlua function math.iseven
     @desc Tests whether a numeric value is evenly divisible by two.
     @param number nValue Input value.
     @ret boolean bIsEven True if the value is even.
@@ -1165,6 +1281,7 @@ InjectEnv("math", {
     iseven              = math.iseven,
     --[[!
     @fqxn CFS.UserEnv.math.isinteger
+    @pulsarlua function math.isinteger
     @desc Determines whether a numeric value represents an exact integer.
     @example
     local bIsInt = math.isinteger(4.0) -- true
@@ -1172,6 +1289,7 @@ InjectEnv("math", {
     isinteger           = math.isinteger,
     --[[!
     @fqxn CFS.UserEnv.math.isodd
+    @pulsarlua function math.isodd
     @desc Tests whether a numeric value is not evenly divisible by two.
     @param number nValue Input value.
     @ret boolean bIsOdd True if the value is odd.
@@ -1181,6 +1299,7 @@ InjectEnv("math", {
     isodd               = math.isodd,
     --[[!
     @fqxn CFS.UserEnv.math.log
+    @pulsarlua function math.log
     @desc Computes the natural logarithm of a number, or a logarithm with an optional base.
     @example
     local n = math.log(8, 2)   -- 3
@@ -1188,6 +1307,7 @@ InjectEnv("math", {
     log                 = math.log,
     --[[!
     @fqxn CFS.UserEnv.math.max
+    @pulsarlua function math.max
     @desc Returns the largest value among its arguments.
     @example
     local m = math.max(1, 5, 3)
@@ -1195,6 +1315,7 @@ InjectEnv("math", {
     max                 = math.max,
     --[[!
     @fqxn CFS.UserEnv.math.min
+    @pulsarlua function math.min
     @desc Returns the smallest value among its arguments.
     @example
     local m = math.min(1, 5, 3)
@@ -1202,6 +1323,7 @@ InjectEnv("math", {
     min                 = math.min,
     --[[!
     @fqxn CFS.UserEnv.math.modf
+    @pulsarlua function math.modf
     @desc Splits a number into its integer and fractional components.
     @example
     local i, f = math.modf(3.14)
@@ -1209,6 +1331,7 @@ InjectEnv("math", {
     modf                = math.modf,
     --[[!
     @fqxn CFS.UserEnv.math.pi
+    @pulsarlua number math.pi
     @desc A constant representing the mathematical value π.
     @example
     local c = 2 * math.pi
@@ -1216,6 +1339,7 @@ InjectEnv("math", {
     pi                  = math.pi,
     --[[!
     @fqxn CFS.UserEnv.math.rad
+    @pulsarlua function math.rad
     @desc Converts an angle from degrees to radians.
     @example
     local r = math.rad(180)
@@ -1223,6 +1347,7 @@ InjectEnv("math", {
     rad                 = math.rad,
     --[[!
     @fqxn CFS.UserEnv.math.random
+    @pulsarlua function math.random
     @desc Produces pseudo-random numbers.
         May return a float in [0,1) or an integer within a range.
     @example
@@ -1232,6 +1357,7 @@ InjectEnv("math", {
     random              = math.random,
     --[[!
     @fqxn CFS.UserEnv.math.randomf
+    @pulsarlua function math.randomf
     @desc Generates a random floating-point number within a given range.
     The result has fixed decimal precision.
     @example
@@ -1240,6 +1366,7 @@ InjectEnv("math", {
     randomf             = math.randomf,
     --[[!
     @fqxn CFS.UserEnv.math.randomseed
+    @pulsarlua function math.randomseed
     @desc Sets the initial seed for the random number generator.
     @example
     math.randomseed(os.time())
@@ -1247,6 +1374,7 @@ InjectEnv("math", {
     randomseed          = math.randomseed,
     --[[!
     @fqxn CFS.UserEnv.math.ratio
+    @pulsarlua function math.ratio
     @desc Reduces two numbers into their simplest integer ratio form.
     The result is returned as a table with left and right components.
     @param number nLeft Left value.
@@ -1258,6 +1386,7 @@ InjectEnv("math", {
     ratio               = math.ratio,
     --[[!
     @fqxn CFS.UserEnv.math.rgbtohex
+    @pulsarlua function math.rgbtohex
     @desc Converts red, green, and blue components into a hexadecimal color value.
     @example
     local nHex = math.rgbtohex(255, 128, 0)
@@ -1265,6 +1394,7 @@ InjectEnv("math", {
     rgbtohex            = math.rgbtohex,
     --[[!
     @fqxn CFS.UserEnv.math.rgbtoint
+    @pulsarlua function math.rgbtoint
     @desc Packs red, green, and blue components into a single integer value.
     @example
     local nINt = math.rgbtoint(255, 0, 255)
@@ -1272,6 +1402,7 @@ InjectEnv("math", {
     rgbtoint            = math.rgbtoint,
     --[[!
     @fqxn CFS.UserEnv.math.sin
+    @pulsarlua function math.sin
     @desc Calculates the sine of an angle given in radians.
     @example
     local s = math.sin(math.pi / 2)
@@ -1279,6 +1410,7 @@ InjectEnv("math", {
     sin                 = math.sin,
     --[[!
     @fqxn CFS.UserEnv.math.sqrt
+    @pulsarlua function math.sqrt
     @desc Returns the square root of a non-negative number.
     @example
     local s = math.sqrt(16)
@@ -1286,6 +1418,7 @@ InjectEnv("math", {
     sqrt                = math.sqrt,
     --[[!
     @fqxn CFS.UserEnv.math.sum
+    @pulsarlua function math.sum
     @desc Returns the total of all numeric arguments provided.
     @example
     local t = math.sum(1, 2, 3, 4)
@@ -1293,6 +1426,7 @@ InjectEnv("math", {
     sum                 = math.sum,
     --[[!
     @fqxn CFS.UserEnv.math.tan
+    @pulsarlua function math.tan
     @desc Calculates the tangent of an angle expressed in radians.
     @example
     local t = math.tan(math.pi / 4)
@@ -1300,6 +1434,7 @@ InjectEnv("math", {
     tan                 = math.tan,
     --[[!
     @fqxn CFS.UserEnv.math.tointeger
+    @pulsarlua function math.tointeger
     @desc Converts a value to an integer if it represents an exact integer numeric value.
     @example
     local i = math.tointeger(3.0)
@@ -1307,6 +1442,7 @@ InjectEnv("math", {
     tointeger           = math.tointeger,
     --[[!
     @fqxn CFS.UserEnv.math.type
+    @pulsarlua function math.type
     @desc Returns whether a number is classified as an integer or a floating-point value.
     @example
     print(math.type(3))     -- "integer"
@@ -1315,6 +1451,7 @@ InjectEnv("math", {
     type                = math.type,
     --[[!
     @fqxn CFS.UserEnv.math.ult
+    @pulsarlua function math.ult
     @desc Compares two integers as unsigned values.
     Returns true if the first value is smaller.
     @example
@@ -1323,6 +1460,7 @@ InjectEnv("math", {
     ult                 = math.ult,
     --[[!
     @fqxn CFS.UserEnv.math.whole
+    @pulsarlua function math.whole
     @desc Converts a number into a whole (non-negative) value.
     Unlike counting numbers, zero is allowed.
     @param number nValue Input value.
@@ -1430,6 +1568,12 @@ InjectEnv("table", { --TODO DOX
     concat  = table.concat,
     insert  = table.insert,
     move    = table.move,
+    --[[!
+    @fqxn CFS.UserEnv.Private.new
+    @desc Creates a read-only shadow exposing only keys allowed by the supplied specification.
+    @param any tSpec Spec.
+    @vis private
+    !]]
     new     = function(tSpec)
         local tNew      = {};
         local tNewMeta  = {};
@@ -1498,6 +1642,12 @@ end
                                                                         ╚═╝      ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
                                                                         ]]
 local tUserEnv = {
+    --[[!
+    @fqxn CFS.Modules.UserEnv.Get
+    @pulsarlua function UserEnv.Get
+    @desc Returns the current script execution environment.
+    @vis public
+    !]]
     Get = function()
         return tEnv;
     end,
@@ -1509,6 +1659,12 @@ local tUserEnv = {
     --   "Drawing.DrawLine"
     --   "Color.RGBA"
     --
+    --[[!
+    @fqxn CFS.Modules.UserEnv.Get
+    @pulsarlua function UserEnv.GetCommandList
+    @desc Collects callable paths from the user environment while avoiding repeated table traversal.
+    @vis public
+    !]]
     GetCommandList = function()
         local tRoot = tEnv -- upvalue
 
@@ -1516,6 +1672,12 @@ local tUserEnv = {
         local tOutSet  = {}
         local tOut     = {}
 
+        --[[!
+        @fqxn CFS.UserEnv.Private.AddCommand
+        @desc Adds a nonempty callable command path once.
+        @param any sPath Path.
+        @vis private
+        !]]
         local function AddCommand(sPath)
             if (sPath ~= "" and not tOutSet[sPath]) then
                 tOutSet[sPath] = true
@@ -1523,6 +1685,12 @@ local tUserEnv = {
             end
         end
 
+        --[[!
+        @fqxn CFS.UserEnv.Private.EnumKeys
+        @desc Collects string table keys for environment command traversal.
+        @param any t T.
+        @vis private
+        !]]
         local function EnumKeys(t)
             local tKeys = {}
 
@@ -1544,6 +1712,13 @@ local tUserEnv = {
             return tKeys
         end
 
+        --[[!
+        @fqxn CFS.UserEnv.Private.Walk
+        @desc Traverses environment tables to discover callable command paths without revisiting tables.
+        @param any t T.
+        @param any sPrefix Prefix.
+        @vis private
+        !]]
         local function Walk(t, sPrefix)
             if (tVisited[t]) then return end
             tVisited[t] = true;
@@ -1566,9 +1741,23 @@ local tUserEnv = {
         table.sort(tOut, function(a, b) return a:lower() < b:lower() end);
         return tOut;
     end,
+    --[[!
+    @fqxn CFS.Modules.UserEnv.Refresh
+    @pulsarlua function UserEnv.Refresh
+    @desc Retained environment-reset hook; currently performs no operation.
+    @vis public
+    !]]
     Refresh = function()
         --TODO FINISH CLEAN THIS OUT!!! On game  load, it should be clean
     end,
+    --[[!
+    @fqxn CFS.Modules.UserEnv.ProcSysUpdateRoot
+    @pulsarlua function UserEnv.ProcSysUpdateRoot
+    @desc Updates processing-owned environment root keys, optionally purging existing root content first.
+    @param any tInput Input.
+    @param any bPurge Purge.
+    @vis public
+    !]]
     ProcSysUpdateRoot = function(tInput, bPurge) --permits additions/replacement to/of existing keys or a full purge, then new items added
 
         if (rawtype(tInput) == "table") then
@@ -1595,6 +1784,13 @@ local tUserEnv = {
         end
     end,
     --expects new CFG to have brought in through the user env
+    --[[!
+    @fqxn CFS.Modules.UserEnv.UserUpdateCFG
+    @pulsarlua function UserEnv.UserUpdateCFG
+    @desc Replaces the exposed configuration table with supplied game configuration.
+    @param any tInput Input.
+    @vis public
+    !]]
     UserUpdateCFG = function(tInput)
         _tCFG = {};
 
@@ -1606,6 +1802,13 @@ local tUserEnv = {
         setmetatable(_tCFGDecoy, _tCFGMeta);
 
     end,
+    --[[!
+    @fqxn CFS.Modules.UserEnv.UserUpdateENV
+    @pulsarlua function UserEnv.UserUpdateENV
+    @desc Replaces user-defined environment entries with the supplied game environment table.
+    @param any tInput Input.
+    @vis public
+    !]]
     UserUpdateENV = function(tInput) --TODO BUG update this to use protected env when able : the user table will get input thourgh forge constructor, then run through the safe env filter, then iterated over and dumped into main env table (error on overwriteing ofc.)
         --local tInput = --GetUserEnv();
         --TODO ALSO DO NOT LEt user indices overwrite exiting onces...keep track of list afte rinjhection and allow new injectio to overwrite only user indices

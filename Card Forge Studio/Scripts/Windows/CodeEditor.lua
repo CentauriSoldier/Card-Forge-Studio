@@ -1,3 +1,8 @@
+--[[!
+@fqxn CFS.Windows.CodeEditor
+@desc Modal Base64 code-cell editor with syntax validation and shared editor preferences.
+!]]
+
 -- Modal Lua code-cell editor. The draft stays in memory until Apply.
 local wx = require("wx");
 local wxstc = wxstc;
@@ -12,6 +17,14 @@ local _tWindowState = {
 };
 WindowState.register("CodeEditor", _tWindowState);
 
+--[[!
+@fqxn CFS.Windows.CodeEditor.create
+@pulsarlua function CodeEditor.create
+@desc Creates a modal Lua code-cell editor from Base64 text. Invalid syntax disables Apply and the draft stays in memory.
+@param any dParent Parent window.
+@param any sEncoded Base64-encoded Lua source.
+@param any sTitle Display title.
+!]]
 function CodeEditor.create(dParent, sEncoded, sTitle)
     local dDialog = wx.wxDialog(dParent, wx.wxID_ANY, sTitle or "Code Editor",
         wx.wxDefaultPosition, wx.wxSize(800, 600), wx.wxDEFAULT_DIALOG_STYLE + wx.wxRESIZE_BORDER);
@@ -31,6 +44,11 @@ function CodeEditor.create(dParent, sEncoded, sTitle)
     oCode:SetText(Base64.dec(sEncoded));
     oCode:EmptyUndoBuffer();
 
+    --[[!
+    @fqxn CFS.Windows.CodeEditor.Private.checkSyntax
+    @desc Compiles the draft without running it, displays syntax errors, and updates Apply enablement.
+    @vis private
+    !]]
     local function checkSyntax()
         local fChunk, sError = load(oCode:GetText(), "Code cell", "t", {});
         oStatus:SetLabel(fChunk and "" or sError);
@@ -52,6 +70,7 @@ function CodeEditor.create(dParent, sEncoded, sTitle)
     end);
 
     oApply:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function()
+        EditorSettings.cleanControl(oCode);
         if (checkSyntax()) then
             oSyntaxTimer:Stop();
             unregister();
@@ -80,6 +99,14 @@ function CodeEditor.create(dParent, sEncoded, sTitle)
         windowState = oWindowState, getResult = function() return sResult; end};
 end
 
+--[[!
+@fqxn CFS.Windows.CodeEditor.edit
+@pulsarlua function CodeEditor.edit
+@desc Runs the code-cell editor; returns Base64 text after Apply or nil after cancellation, then releases native state.
+@param any dParent Parent window.
+@param any sEncoded Base64-encoded Lua source.
+@param any sTitle Display title.
+!]]
 function CodeEditor.edit(dParent, sEncoded, sTitle)
     local tEditor = CodeEditor.create(dParent, sEncoded, sTitle);
     local nResult = tEditor.dialog:ShowModal();

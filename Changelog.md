@@ -3,7 +3,51 @@
 ---
 
 <details open>
-<summary><strong>Alpha (Current)</strong></summary>
+<summary><strong>Alpha 0.2 — 2026-10-09</strong></summary>
+
+### Added
+
+- Native Windows launcher and Lua 5.4/wxLua desktop runtime.
+- New Game and New Card Set creation with template files, defaults, validation, and rollback.
+- Dedicated game/card-set source editors, new-file actions, persistent active tabs, and card-set notes.
+- PNG export for all, visible, or selected cards, with progress, 1–1000% sizing, a 64-million-pixel limit, and a Default button.
+- Bulk card creation and column management with add, rename, delete, save protection, and reload after changes.
+- Styled game/card-set loaders with square logos, a No Logo fallback, and independent saved window sizes.
+- Game and card-set Info interfaces; Forge background, Card Canvas, guides, and preview options.
+- Configurable grid row, text, and index colors with a fixed, read-only live preview.
+- Per-entry log copying and Copy All; missing-image fallback artwork.
+- CFS API documentation and project-named Pulsar autocomplete packages, with development startup build/install support.
+- Documentation page themes, independent Prism themes, custom banners, and parser-specific example highlighting.
+
+### Changed
+
+- Ported Studio from AutoPlay Media Studio to a native Lua/wxLua application, replacing its host-specific UI and runtime integration.
+- Rebuilt native editing, wiki, logging, styling, and window-state interfaces around the existing Lua/CSV workflow.
+- Separated the generic Exporter coordinator from the PNG exporter; other legacy export formats remain deferred.
+- Export destinations are remembered per card set, initially defaulting to the game's Exports folder.
+- Source-editor options live in their editors; Forge options and Preview share the main Options window.
+- Documentation namespaces use consistent CFS names; generated game/card-set entries follow their names and update on rename.
+- Expanded Studio documentation, public autocomplete tags, signatures, and verified generated accessors.
+- Removed unused pane definitions, legacy processing scaffolding, and abandoned row-filter files while retaining active CSV processing.
+
+### Fixed
+
+- Game/card-set creation failures, invalid UUID/path handling, and failed-write cleanup.
+- Empty Name-only CSV loading and trailing-newline phantom rows.
+- Non-numeric card dimensions and column changes losing alignment with code-column definitions.
+- Matching row highlighting between Base Data and Final Data, including sorted and filtered views.
+- Grid color-picker painting and excess blank sample-grid canvas; canceled preview colors reset on reopening.
+- Documentation import, tag iteration/validation, MIME preprocessing, wrapper handling, and LF/CRLF comment extraction.
+- Lua documentation extraction matching template strings as comments.
+- Documentation Back/Forward navigation, inherited-content chains and cycles, and output failure handling.
+- Pulsar package generation, code-name mapping, callable-class members, and documented object-member completion.
+
+</details>
+
+---
+
+<details open>
+<summary><strong>Alpha 0.1</strong></summary>
 
 ### Added
 - Vertical and horizontal guides on the canvas

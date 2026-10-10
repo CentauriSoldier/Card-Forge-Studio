@@ -1,3 +1,8 @@
+--[[!
+@fqxn CFS.Modules.Globals.ProcessDox
+@desc Retained game documentation build function using legacy file APIs; not the current Studio startup documentation build.
+!]]
+
 return function()
     Log.Note("ProcessDox: Building game's documentation files.");
     local sName           = INIFile.GetValue(FS.Game.Info, "SETTINGS", "Name");
@@ -10,6 +15,12 @@ return function()
     local sPluginsRoot = (sScriptsRoot .. "\\Plugins"):gsub("\\+", "\\");
     local nPluginsLen  = #sPluginsRoot;
 
+    --[[!
+    @fqxn CFS.Modules.Globals.ProcessDox.Private.IsUnderPlugins
+    @desc Checks whether a normalized source path lies beneath the Scripts Plugins root.
+    @param any pFilePath File path.
+    @vis private
+    !]]
     local function IsUnderPlugins(pFilePath)
 
         if not (type.isstring(pFilePath)) then
@@ -24,6 +35,12 @@ return function()
 
     end
 
+    --[[!
+    @fqxn CFS.Modules.Globals.ProcessDox.Private.ImportFile
+    @desc Imports a source file into the retained game documentation builder unless plugin inclusion is disabled.
+    @param any pFile File.
+    @vis private
+    !]]
     local function ImportFile(pFile)
 
         if (not bIncludePlugins and IsUnderPlugins(pFile)) then

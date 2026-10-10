@@ -1,3 +1,9 @@
+--[[!
+@fqxn CFS.Modules.Tests.DataWindows
+@desc Development test harness; not a public application API.
+@vis private
+!]]
+
 -- Standalone interaction test. These rows are fixtures, not game data.
 -- No game files or CSV files are written by this test.
 local _pTests = assert(debug.getinfo(1, "S").source:match("^@(.+[/\\])"));

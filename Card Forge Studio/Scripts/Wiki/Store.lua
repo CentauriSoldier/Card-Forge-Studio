@@ -1,6 +1,17 @@
+--[[!
+@fqxn CFS.Modules.Wiki.Store
+@desc Wiki page and image-asset drafts with stable IDs and conflict-aware disk persistence.
+!]]
+
 -- Portable page storage. Stable IDs keep links intact across renames.
 local wx = require("wx");
 local Store = {};
+--[[!
+@fqxn CFS.Modules.Wiki.Store.Private.read
+@desc Reads binary file contents or returns nil when opening fails; checks successful reading and closing.
+@vis private
+@param any pFile File path.
+!]]
 local function read(pFile)
     local hFile = io.open(pFile, "rb");
     if (not hFile) then return nil; end
@@ -8,13 +19,31 @@ local function read(pFile)
     assert(hFile:close());
     return sData;
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Store.Private.encode
+@desc Encodes bytes as hexadecimal for tab-separated wiki storage.
+@vis private
+@param any sText Text content.
+!]]
 local function encode(sText)
     return (sText:gsub(".", function(sChar) return string.format("%02X", sChar:byte()); end));
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Store.Private.decode
+@desc Validates hexadecimal storage and decodes the original bytes.
+@vis private
+@param any sText Text content.
+!]]
 local function decode(sText)
     assert(#sText % 2 == 0 and not sText:find("[^%x]"), "Malformed wiki data.");
     return (sText:gsub("%x%x", function(sPair) return string.char(tonumber(sPair, 16)); end));
 end
+--[[!
+@fqxn CFS.Modules.Wiki.Store.open
+@pulsarlua function Store.open
+@desc Loads Wiki.dat, validates page IDs and parent chains, and returns a draft store with stable page IDs.
+@param any pRoot Root folder.
+!]]
 function Store.open(pRoot)
     local pFile = pRoot.."/Wiki.dat";
     local sOriginal = read(pFile);
@@ -39,6 +68,11 @@ function Store.open(pRoot)
         end
     end
     local tStore = {pages = tPages, root = pRoot, dirty = false, assets = {}};
+    --[[!
+    @fqxn CFS.Modules.Wiki.Store.Store.list
+    @desc Returns pages sorted by title, breaking equal-title ties by stable ID.
+    @vis public
+    !]]
     function tStore.list()
         local tRet = {};
         for _, tPage in pairs(tPages) do tRet[#tRet + 1] = tPage; end
@@ -48,6 +82,14 @@ function Store.open(pRoot)
         end);
         return tRet;
     end
+    --[[!
+    @fqxn CFS.Modules.Wiki.Store.Store.add
+    @desc Creates a page with a unique ID and validated parent and marks the store dirty.
+    @vis public
+    @param any sTitle Display title.
+    @param any nParent Parent.
+    @param any sXML Serialized rich-text XML.
+    !]]
     function tStore.add(sTitle, nParent, sXML)
         assert(sTitle:find("%S"), "Enter a page title.");
         assert(nParent == 0 or tPages[nParent], "Parent page is unavailable.");
@@ -55,10 +97,24 @@ function Store.open(pRoot)
         nNext = nNext + 1; tPages[tPage.id] = tPage; tStore.dirty = true;
         return tPage;
     end
+    --[[!
+    @fqxn CFS.Modules.Wiki.Store.Store.rename
+    @desc Changes a page title while preserving its ID and links.
+    @vis public
+    @param any nID Page or timer identifier.
+    @param any sTitle Display title.
+    !]]
     function tStore.rename(nID, sTitle)
         assert(sTitle:find("%S"), "Enter a page title.");
         assert(tPages[nID]).title = sTitle; tStore.dirty = true;
     end
+    --[[!
+    @fqxn CFS.Modules.Wiki.Store.Store.move
+    @desc Changes a page parent after rejecting missing parents and moves beneath the page itself.
+    @vis public
+    @param any nID Page or timer identifier.
+    @param any nParent Parent.
+    !]]
     function tStore.move(nID, nParent)
         assert(tPages[nID]);
         local nAncestor = nParent;
@@ -68,14 +124,33 @@ function Store.open(pRoot)
         end
         tPages[nID].parent = nParent; tStore.dirty = true;
     end
+    --[[!
+    @fqxn CFS.Modules.Wiki.Store.Store.remove
+    @desc Deletes a page only after its child pages have been moved or removed.
+    @vis public
+    @param any nID Page or timer identifier.
+    !]]
     function tStore.remove(nID)
         for _, tPage in pairs(tPages) do assert(tPage.parent ~= nID, "Move or delete the subpages first."); end
         assert(tPages[nID]); tPages[nID] = nil; tStore.dirty = true;
     end
+    --[[!
+    @fqxn CFS.Modules.Wiki.Store.Store.update
+    @desc Replaces a page XML draft and marks the store dirty only when content changes.
+    @vis public
+    @param any nID Page or timer identifier.
+    @param any sXML Serialized rich-text XML.
+    !]]
     function tStore.update(nID, sXML)
         local tPage = assert(tPages[nID]);
         if (tPage.xml ~= sXML) then tPage.xml = sXML; tStore.dirty = true; end
     end
+    --[[!
+    @fqxn CFS.Modules.Wiki.Store.Store.image
+    @desc Reads an image into the asset draft and allocates an unused Assets filename.
+    @vis public
+    @param any pSource Source.
+    !]]
     function tStore.image(pSource)
         local sData = assert(read(pSource), "Could not read the image.");
         local sExtension = (pSource:match("%.([%w]+)$") or "img"):lower();
@@ -86,6 +161,11 @@ function Store.open(pRoot)
         tStore.assets[sName] = sData; tStore.dirty = true;
         return sName;
     end
+    --[[!
+    @fqxn CFS.Modules.Wiki.Store.Store.save
+    @desc Checks external changes, stages assets and wiki data, backs up existing data, and retains the draft on failure.
+    @vis public
+    !]]
     function tStore.save()
         assert(read(pFile) == sOriginal, "The wiki changed externally. Your draft has been kept.");
         assert(wx.wxDirExists(pRoot) or wx.wxFileName.Mkdir(pRoot, 511, wx.wxPATH_MKDIR_FULL), "Could not create the Wiki folder.");

@@ -1,3 +1,9 @@
+--[[!
+@fqxn CFS.Modules.ExporterLua
+@desc Deferred Lua exporter skeleton; not an enabled Studio export format.
+@vis private
+!]]
+
 local _sClass   = "";
 local _sName    = "";
 local _tReturns = {

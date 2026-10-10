@@ -1,7 +1,18 @@
+--[[!
+@fqxn CFS.Classes.Tutorial
+@desc Retained tutorial HTML generation class; some legacy initialization and validation remain incomplete.
+!]]
+
 local wx = require("wx");
 local _sDefaultSection = "Basics";
 local _pTutorials      = FS.Tutorials;
 
+--[[!
+@fqxn CFS.Classes.Tutorial.Private.FixPath
+@desc Converts a local path to a file URL with normalized separators and encoded spaces.
+@param any sPath Path.
+@vis private
+!]]
 local function FixPath(sPath)
     return "file:///"..sPath:gsub("\\", '/'):gsub('//', '/'):gsub(' ', "%%20");
 end
@@ -66,6 +77,12 @@ local _sBottom = [[
 </html>
 ]];
 
+--[[!
+@fqxn CFS.Classes.Tutorial.Private.GetFileInfo
+@desc Reads a tutorial HTML file and derives section, order, and title from its tilde-separated filename.
+@param any pFile File.
+@vis private
+!]]
 local function GetFileInfo(pFile)
 
     if not (type(pFile) == "string" and wx.wxFileExists(pFile)) then
@@ -101,9 +118,20 @@ return class("Tutorial",
     {--STATIC PUBLIC
         --__INIT = function(stapub) end, --static initializer (runs before class object creation)
         --Tutorial = function(cClass, sAuthCode)
+        --[[!
+        @fqxn CFS.Classes.Tutorial.Methods.Tutorial
+                @desc Retained class initialization hook for tutorial generation.
+        @param any cTutorial C tutorial.
+        @ret Tutorial Created instance.
+        !]]
         Tutorial = function(cTutorial) Tutorial = cTutorial; end,
         PATH_INDEX__RO = FS.AppDir.."\\index.html",
         --end, --static constructor (runs after class object creation)
+        --[[!
+        @fqxn CFS.Classes.Tutorial.Methods.BuildHTML
+        @pulsarlua function Tutorial.BuildHTML
+        @desc Collects tutorial HTML files, orders sections and items, and writes the combined tutorial page.
+        !]]
         BuildHTML = function()
             local tFiles = {};
             local oFolder = wx.wxDir(_pTutorials);
@@ -172,6 +200,11 @@ return class("Tutorial",
 
             return sHTML;
         end,
+        --[[!
+        @fqxn CFS.Classes.Tutorial.Methods.Init
+        @pulsarlua function Tutorial.Init
+        @desc Builds tutorial HTML through the class's generation method.
+        !]]
         Init = function()
             local sHTML = Tutorial.BuildHTML();
             local hFile = assert(io.open(Tutorial.PATH_INDEX, "wb"));
@@ -180,6 +213,11 @@ return class("Tutorial",
         end
     },
     {--PRIVATE
+        --[[!
+        @fqxn CFS.Classes.Tutorial.Private.Tutorial
+        @desc Retained class initialization hook for tutorial generation.
+        @vis private
+        !]]
         Tutorial = function(this, cdat) end,
     },
     {--PROTECTED

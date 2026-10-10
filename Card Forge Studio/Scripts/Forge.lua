@@ -665,7 +665,7 @@ end
 
 
 --[[!
-    @fqxn CFS.Classes.Forge
+    @fqxn CFS.Modules.Forge
     @desc <h2>Forge</h2>
 
     <p>
@@ -730,7 +730,8 @@ return class("Forge",
 
         end,
         --[[!
-            @fqxn CFS.Classes.Forge.Methods.DrawImage
+            @fqxn CFS.Modules.Forge.DrawImage
+            @pulsarlua function Forge.DrawImage
             @desc Draws an image onto the active card render target.
 
             <p>
@@ -772,7 +773,8 @@ return class("Forge",
             _D.DrawImage(nImage, nX, nY, nWidth, nHeight);
         end,
         --[[!
-            @fqxn CFS.Classes.Forge.Methods.DrawText
+            @fqxn CFS.Modules.Forge.DrawText
+            @pulsarlua function Forge.DrawText
             @desc Draws plain text onto the active card render target using a single style.
 
             <p>
@@ -870,7 +872,8 @@ return class("Forge",
             return nLastX, nLastY, nLastWidth, nLastHeight;
         end,
         --[[!
-            @fqxn CFS.Classes.Forge.Methods.DrawStyledText
+            @fqxn CFS.Modules.Forge.DrawStyledText
+            @pulsarlua function Forge.DrawStyledText
             @desc Draws text containing inline style markup onto the active card render target.
 
             <p>
@@ -926,6 +929,12 @@ return class("Forge",
             --------------------------------------------------------------------
             -- PARSE HELPERS
             --------------------------------------------------------------------
+            --[[!
+            @fqxn CFS.Modules.Forge.Private.BuildRuns
+            @desc Splits styled text into drawing runs and accumulated plain text.
+            @param any sIn Value supplied as sIn.
+            @vis private
+            !]]
             local function BuildRuns(sIn)
                 local tRuns  = {};
                 local sPlain = "";
@@ -1389,6 +1398,12 @@ local _nHeight      = 1;
 local _nRevision    = 0;
 local _oAssetClock  = wx.wxStopWatch();
 
+--[[!
+@fqxn CFS.Modules.Forge.Private.nativeColour
+@desc Converts a packed RGBA number to a native color or passes through an existing native color value.
+@param any vColour Value supplied as vColour.
+@vis private
+!]]
 local function nativeColour(vColour)
     if (rawtype(vColour) == "number") then
         return wx.wxColour((vColour >> 24) & 255, (vColour >> 16) & 255, (vColour >> 8) & 255, vColour & 255);
@@ -1396,49 +1411,120 @@ local function nativeColour(vColour)
     return vColour;
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.Private.drawingContext
+@desc Adapts graphics and device contexts to the drawing callbacks used by card scripts.
+@param any oGC Value supplied as oGC.
+@param any oDC Value supplied as oDC.
+@vis private
+!]]
 local function drawingContext(oGC, oDC)
     local tContext = {};
     local oFont    = wx.wxNORMAL_FONT;
     local oColour  = wx.wxBLACK;
 
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.tContext_SetDrawingFont
+    @desc Installs the drawing font in both native contexts.
+    @param any oNewFont Value supplied as oNewFont.
+    @vis private
+    !]]
     function tContext.SetDrawingFont(oNewFont)
         oFont = oNewFont;
         oGC:SetFont(oFont, oColour);
         oDC:SetFont(oFont);
     end
 
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.tContext_SetFilteringMode
+    @desc Compatibility hook; native alpha composition is already configured.
+    @vis private
+    !]]
     function tContext.SetFilteringMode()
         -- WX graphics context uses alpha composition for the card layer.
     end
 
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.tContext_GetTextWidth
+    @desc Returns the native measured width of text converted to a string.
+    @param any sText Value supplied as sText.
+    @vis private
+    !]]
     function tContext.GetTextWidth(sText)
         local nWidth = oGC:GetTextExtent(tostring(sText));
         return nWidth;
     end
 
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.tContext_GetTextHeight
+    @desc Returns the native measured height of text converted to a string.
+    @param any sText Value supplied as sText.
+    @vis private
+    !]]
     function tContext.GetTextHeight(sText)
         local nWidth, nHeight = oGC:GetTextExtent(tostring(sText));
         return nHeight;
     end
 
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.tContext_DrawText
+    @desc Sets the supplied text color and draws an unrotated text string.
+    @param any nX Value supplied as nX.
+    @param any nY Value supplied as nY.
+    @param any sText Value supplied as sText.
+    @param any oTextColour Value supplied as oTextColour.
+    @vis private
+    !]]
     function tContext.DrawText(nX, nY, sText, oTextColour)
         oColour = nativeColour(oTextColour) or oColour;
         oGC:SetFont(oFont, oColour);
         oGC:DrawText(tostring(sText), nX, nY);
     end
 
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.tContext_DrawAngledText
+    @desc Sets the supplied text color and draws text rotated by the supplied angle in degrees.
+    @param any nX Value supplied as nX.
+    @param any nY Value supplied as nY.
+    @param any sText Value supplied as sText.
+    @param any nAngle Value supplied as nAngle.
+    @param any oTextColour Value supplied as oTextColour.
+    @vis private
+    !]]
     function tContext.DrawAngledText(nX, nY, sText, nAngle, oTextColour)
         oColour = nativeColour(oTextColour) or oColour;
         oGC:SetFont(oFont, oColour);
         oGC:DrawText(tostring(sText), nX, nY, math.rad(nAngle or 0));
     end
 
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.tContext_DrawRectangle
+    @desc Draws a filled rectangle without an outline.
+    @param any nX Value supplied as nX.
+    @param any nY Value supplied as nY.
+    @param any nWidth Value supplied as nWidth.
+    @param any nHeight Value supplied as nHeight.
+    @param any oFill Value supplied as oFill.
+    @vis private
+    !]]
     function tContext.DrawRectangle(nX, nY, nWidth, nHeight, oFill)
         oGC:SetPen(wx.wxTRANSPARENT_PEN);
         oGC:SetBrush(wx.wxBrush(nativeColour(oFill)));
         oGC:DrawRectangle(nX, nY, nWidth, nHeight);
     end
 
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.tContext_DrawTextBackground
+    @desc Draws a padded text background in a temporarily translated and rotated graphics state.
+    @param any nX Value supplied as nX.
+    @param any nY Value supplied as nY.
+    @param any nWidth Value supplied as nWidth.
+    @param any nHeight Value supplied as nHeight.
+    @param any nPadding Value supplied as nPadding.
+    @param any oFill Value supplied as oFill.
+    @param any nAngle Value supplied as nAngle.
+    @vis private
+    !]]
     function tContext.DrawTextBackground(nX, nY, nWidth, nHeight, nPadding, oFill, nAngle)
         oGC:PushState();
         oGC:Translate(nX, nY);
@@ -1446,10 +1532,25 @@ local function drawingContext(oGC, oDC)
         tContext.DrawRectangle(-nPadding, -nPadding, nWidth + 2 * nPadding, nHeight + 2 * nPadding, oFill);
         oGC:PopState();
     end
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.tContext_GetOutputInfo
+    @desc Returns native card width and height to drawing scripts.
+    @vis private
+    !]]
     function tContext.GetOutputInfo()
         return {Width = _nWidth, Height = _nHeight,};
     end
 
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.tContext_DrawImage
+    @desc Draws a bitmap using supplied dimensions or its native dimensions.
+    @param any oImage Value supplied as oImage.
+    @param any nX Value supplied as nX.
+    @param any nY Value supplied as nY.
+    @param any nWidth Value supplied as nWidth.
+    @param any nHeight Value supplied as nHeight.
+    @vis private
+    !]]
     function tContext.DrawImage(oImage, nX, nY, nWidth, nHeight)
         oGC:DrawBitmap(oImage, nX, nY, nWidth or oImage:GetWidth(), nHeight or oImage:GetHeight());
     end
@@ -1457,6 +1558,12 @@ local function drawingContext(oGC, oDC)
     return tContext;
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.Private.resolveImage
+@desc Validates a game-relative image path and selects the bundled missing-image fallback when needed.
+@param any sRelative Value supplied as sRelative.
+@vis private
+!]]
 local function resolveImage(sRelative)
     assert(rawtype(sRelative) == "string", "Image path must be a string.");
     local sPath = sRelative:gsub("\\", "/");
@@ -1475,6 +1582,12 @@ local function resolveImage(sRelative)
     return io.normalizepath(FS.Game.Root.."/"..table.concat(tParts, "/"));
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.Private.imageStamp
+@desc Builds an image modification signature or returns the missing-file marker.
+@param any pFile Value supplied as pFile.
+@vis private
+!]]
 local function imageStamp(pFile)
     local oFile = wx.wxFileName(pFile);
     local oTime = oFile:GetModificationTime();
@@ -1482,6 +1595,11 @@ local function imageStamp(pFile)
     return tostring(oTime:GetTicks())..":"..tostring(oTime:GetMillisecond())..":"..oFile:GetSize():ToString();
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.Private.checkImages
+@desc Checks cached image signatures at the monitoring interval and requests redraw when artwork changes.
+@vis private
+!]]
 local function checkImages()
     if (_oAssetClock:Time() < PROCSYS_LIVE_FILE_REPO_TIMER_INTERVAL) then return end
     _oAssetClock:Start();
@@ -1493,9 +1611,54 @@ local function checkImages()
     end
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.DrawImage
+@pulsarlua function Forge.DrawImage
+@desc Draws an image onto the active card render target.
+
+<p>
+  Loads (or retrieves from cache) an image from the active game directory and draws it
+  into the current card draw context. This method is primarily intended for use by
+  CardSet <code>Draw</code> scripts, but may also be used internally by the Forge.
+</p>
+
+<h3>Behavior</h3>
+<ul>
+  <li>Resolves the image path relative to the active game folder.</li>
+  <li>Sanitizes the provided path to prevent invalid or unsafe access.</li>
+  <li>Caches image handles to avoid redundant loads across draw calls.</li>
+  <li>Draws the image using alpha blending.</li>
+</ul>
+
+<h3>Notes</h3>
+<ul>
+  <li>This method must be called from within an active card draw pass.</li>
+  <li>Images are drawn into the card image layer, not the utility overlay layer.</li>
+  <li>Repeated calls with the same image path reuse cached image handles.</li>
+</ul>
+
+@param string pImage  Relative image path (from the game directory).
+@param number nX      X position in card-space coordinates.
+@param number nY      Y position in card-space coordinates.
+@param number nWidth  Draw width in card-space units.
+@param number nHeight Draw height in card-space units.
+@param string sName   Optional image identifier used for error reporting.
+@ex
+-- Draw an image asset onto the card at a fixed position
+local pOgre = "Images/Ogre.png";
+Forge.DrawImage(pOgre, 100, 100, 32, 32);
+        @param any sPath s Path.
+        !]]
 function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight)
     assert(_D, "Forge drawing is only available during a render pass.");
     local pImage = resolveImage(sPath);
+
+    -- Missing artwork uses the application placeholder in preview and export.
+    -- Resolve the requested path first so invalid paths retain their validation.
+    if (not wx.wxFileExists(pImage)) then
+        pImage = io.normalizepath(APP_PATH.."/Images/Missing.png");
+    end
+
     local tImage = _tImages[pImage];
     local oImage = tImage and tImage.bitmap;
 
@@ -1509,32 +1672,67 @@ function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight)
     _D.DrawImage(oImage, nX, nY, nWidth, nHeight);
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.DrawRectangle
+@pulsarlua function Forge.DrawRectangle
+@desc Draws a rectangle through the current native drawing context; requires an active render pass.
+@param any ... Additional arguments.
+!]]
 function Forge.DrawRectangle(...)
     assert(_D, "Forge drawing is only available during a render pass.");
     return _D.DrawRectangle(...);
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.GetOutputInfo
+@pulsarlua function Forge.GetOutputInfo
+@desc Returns native card width and height.
+!]]
 function Forge.GetOutputInfo()
     return {Width = _nWidth, Height = _nHeight,};
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.SetDrawFunction
+@pulsarlua function Forge.SetDrawFunction
+@desc Installs the front drawing callback and marks the card for redraw.
+@param any fDraw Draw.
+!]]
 function Forge.SetDrawFunction(fDraw)
     assert(rawtype(fDraw) == "function", "Draw must return a function.");
     _fDraw = fDraw;
     Forge.RequestCardRedraw();
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.SetDrawBackFunction
+@pulsarlua function Forge.SetDrawBackFunction
+@desc Installs the back drawing callback and marks the card for redraw.
+@param any fDraw Draw.
+!]]
 function Forge.SetDrawBackFunction(fDraw)
     assert(rawtype(fDraw) == "function", "DrawBack must return a function.");
     _fDrawBack = fDraw;
     Forge.RequestCardRedraw();
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.SetActiveRow
+@pulsarlua function Forge.SetActiveRow
+@desc Sets the active render row and requests a card redraw.
+@param any tRow Row.
+!]]
 function Forge.SetActiveRow(tRow)
     _tActiveRow = tRow;
     Forge.RequestCardRedraw();
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.SetActiveCardSet
+@pulsarlua function Forge.SetActiveCardSet
+@desc Loads card dimensions, clears image and bitmap caches, selects the front, and requests redraw.
+@param any oCardSet Card set.
+!]]
 function Forge.SetActiveCardSet(oCardSet)
     _nWidth, _nHeight = oCardSet.GetCardWidth(), oCardSet.GetCardHeight();
     assert(_nWidth > 0 and _nHeight > 0, "Invalid card dimensions.");
@@ -1544,6 +1742,12 @@ function Forge.SetActiveCardSet(oCardSet)
     Forge.RequestCardRedraw();
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.SetFace
+@pulsarlua function Forge.SetFace
+@desc Selects front or back and requests redraw when the face changes.
+@param any sFace Card face: front or back.
+!]]
 function Forge.SetFace(sFace)
     assert(sFace == "front" or sFace == "back", "Unknown card face.");
     local bBack = sFace == "back";
@@ -1553,22 +1757,48 @@ function Forge.SetFace(sFace)
     end
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.SetDrawEnabled
+@pulsarlua function Forge.SetDrawEnabled
+@desc Blocks or permits timer-driven preview drawing.
+@param any bEnabled Enabled.
+!]]
 function Forge.SetDrawEnabled(bEnabled)
     _bDrawBlocked = not bEnabled;
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.RequestCardRedraw
+@pulsarlua function Forge.RequestCardRedraw
+@desc Marks card pixels and the surrounding canvas dirty.
+!]]
 function Forge.RequestCardRedraw()
     _bRedrawCard, _bRedrawCanvas = true, true;
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.RequestUtilRedraw
+@pulsarlua function Forge.RequestUtilRedraw
+@desc Marks utility guides and the surrounding canvas dirty.
+!]]
 function Forge.RequestUtilRedraw()
     _bRedrawUtil, _bRedrawCanvas = true, true;
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.GetBitmap
+@pulsarlua function Forge.GetBitmap
+@desc Returns the current preview bitmap and its revision number.
+!]]
 function Forge.GetBitmap()
     return _oBitmap, _nRevision;
 end
 
+--[[!
+@fqxn CFS.Modules.Forge.OnTimer
+@pulsarlua function Forge.OnTimer
+@desc Checks image changes and renders dirty preview pixels when ready. Releases drawing resources and propagates rendering failures.
+!]]
 function Forge.OnTimer()
     checkImages();
     if (_bDrawBusy or _bDrawBlocked or not _bRedrawCanvas) then return false end
@@ -1580,7 +1810,11 @@ function Forge.OnTimer()
             local oBitmap = wx.wxBitmap(_nWidth, _nHeight, 32);
             oDC = wx.wxMemoryDC();
             oDC:SelectObject(oBitmap);
-            oDC:SetBackground(wx.wxWHITE_BRUSH);
+            -- Card Canvas is a preview-only clear color; export retains its own background.
+            local sCanvasColor = INIFile.GetValue(FS.AppCFG, "Settings", "ForgeCanvasColor");
+
+            if (not sCanvasColor:match("^#%x%x%x%x%x%x$")) then sCanvasColor = "#FFFFFF"; end
+            oDC:SetBackground(wx.wxBrush(wx.wxColour(sCanvasColor)));
             oDC:Clear();
             oGC = assert(wx.wxGraphicsContext.Create(oDC), "Could not create WX graphics context.");
             _D, _Object, _InternalDC = drawingContext(oGC, oDC), "Card", oDC;
@@ -1604,10 +1838,100 @@ function Forge.OnTimer()
     return true;
 end
 
+-- Export uses the same draw callbacks without replacing the preview bitmap or face.
+--[[!
+@fqxn CFS.Modules.Forge.ExportPNG
+@pulsarlua function Forge.ExportPNG
+@desc Renders a selected face at the requested percentage and writes PNG without replacing preview state; restores drawing context after success or failure.
+@param any sFace Card face: front or back.
+@param any pFile File path.
+@param any nPercent Output size as a percentage of native card dimensions.
+!]]
+function Forge.ExportPNG(sFace, pFile, nPercent)
+    assert(sFace == "front" or sFace == "back", "Unknown export face.");
+    assert(_tActiveRow and not _bDrawBusy, "No card is ready to export.");
+    local fDraw;
+    if (sFace == "back") then fDraw = _fDrawBack; else fDraw = _fDraw; end
+    assert(fDraw, "No draw function for export face.");
+    local oDC, oGC;
+    local nWidth, nHeight = require("Exporter").get("PNG").dimensions(_nWidth, _nHeight, nPercent or 100);
+    local tContext = {_D, _Object, _InternalDC};
+    _bDrawBusy = true;
+    local bOK, sError = xpcall(function()
+        local oBitmap = wx.wxBitmap(nWidth, nHeight, 32);
+        oDC = wx.wxMemoryDC(); oDC:SelectObject(oBitmap); oDC:SetBackground(wx.wxWHITE_BRUSH); oDC:Clear();
+        oGC = assert(wx.wxGraphicsContext.Create(oDC), "Could not create export graphics context.");
+        oGC:Scale(nWidth / _nWidth, nHeight / _nHeight);
+        _D, _Object, _InternalDC = drawingContext(oGC, oDC), "Card", oDC;
+        fDraw(_Object, _D, _InternalDC);
+        oGC:delete(); oGC = nil; oDC:SelectObject(wx.wxNullBitmap); oDC:delete(); oDC = nil;
+        local oImage = oBitmap:ConvertToImage();
+        local bSaved = oImage:SaveFile(pFile, wx.wxBITMAP_TYPE_PNG); oImage:delete();
+        assert(bSaved, "Could not save PNG image.");
+    end, debug.traceback);
+    if (oGC) then oGC:delete(); end
+    if (oDC) then oDC:SelectObject(wx.wxNullBitmap); oDC:delete(); end
+    _D, _Object, _InternalDC = table.unpack(tContext, 1, 3); _bDrawBusy = false;
+    assert(bOK, sError);
+end
+
+--[[!
+@fqxn CFS.Modules.Forge.Release
+@pulsarlua function Forge.Release
+@desc Clears image, row, and bitmap state and resets pending redraw flags.
+!]]
 function Forge.Release()
     _tImages, _tActiveRow, _oBitmap = {}, nil, nil;
     _bRedrawCard, _bRedrawUtil, _bRedrawCanvas = false, false, false;
 end
+--[[!
+@fqxn CFS.Modules.Forge.DrawText
+@pulsarlua function Forge.DrawText
+@desc Draws plain text onto the active card render target using a single style.
+
+<p>
+  Renders text using the specified FontStyle during the active card draw pass.
+  This method is intended for use by CardSet <code>Draw</code> scripts and supports
+  optional centering, rotation, and custom wrapping behavior.
+</p>
+
+<h3>Behavior</h3>
+<ul>
+  <li>Uses the specified style from <code>Forge.STYLE</code>.</li>
+  <li>Optionally centers text around the provided coordinates.</li>
+  <li>Supports rotated text via an angle parameter.</li>
+  <li>Supports custom line-wrapping through a user-supplied wrapper function.</li>
+</ul>
+
+<h3>Notes</h3>
+<ul>
+  <li>Must be called from within an active card draw pass.</li>
+  <li>Text is drawn into the card image layer, not the utility overlay.</li>
+  <li>Returns the final draw position and measured size of the last rendered line.</li>
+</ul>
+
+@param string  sStyle   Name of the FontStyle to use.
+@param number  nRawX    Base X position in card-space coordinates.
+@param number  nRawY    Base Y position in card-space coordinates.
+@param string  sText    Text to draw.
+@param boolean vCenterX Optional horizontal centering flag.
+@param boolean vCenterY Optional vertical centering flag.
+@param number  vAngle   Optional rotation angle (degrees).
+@param function|nil vWrap Optional wrapping function.
+@return number nX       Final X position of the last line drawn.
+@return number nY       Final Y position of the last line drawn.
+@return number nWidth   Width of the rendered text block.
+@return number nHeight  Height of the rendered text block.
+
+@ex
+-- Draw centered title text near the top of the card
+Forge.DrawText(
+    "TITLE",
+    412, 60,
+    "Example Card",
+    true, true
+);
+        !]]
 Forge.DrawText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)
     local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
     local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
@@ -1659,6 +1983,56 @@ Forge.DrawText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngl
 
     return nLastX, nLastY, nLastWidth, nLastHeight;
 end
+--[[!
+@fqxn CFS.Modules.Forge.DrawStyledText
+@pulsarlua function Forge.DrawStyledText
+@desc Draws text containing inline style markup onto the active card render target.
+
+<p>
+  Renders text that includes inline style tags (e.g. <code>&lt;BOLD&gt;</code>,
+  <code>&lt;ITALIC&gt;</code>) using multiple FontStyles in a single draw call.
+  This method is intended for CardSet <code>Draw</code> scripts that require
+  rich text composition.
+</p>
+
+<h3>Behavior</h3>
+<ul>
+  <li>Parses inline style tags and resolves them against <code>Forge.STYLE</code>.</li>
+  <li>Preserves style runs across wrapped lines.</li>
+  <li>Uses ink-box layout to neutralize negative bearings and kerning artifacts.</li>
+  <li>Supports centering, rotation, and custom wrapping behavior.</li>
+</ul>
+
+<h3>Notes</h3>
+<ul>
+  <li>Must be called from within an active card draw pass.</li>
+  <li>Tags that do not resolve to a known style fall back to the base style.</li>
+  <li>Returns the top-left position and total size of the rendered text block.</li>
+</ul>
+
+@param string  sStyle   Base FontStyle name.
+@param number  nRawX    Base X position in card-space coordinates.
+@param number  nRawY    Base Y position in card-space coordinates.
+@param string  sText    Text with inline style markup.
+@param boolean vCenterX Optional horizontal centering flag.
+@param boolean vCenterY Optional vertical centering flag.
+@param number  vAngle   Optional rotation angle (degrees).
+@param function|nil vWrap Optional wrapping function.
+@return number nX       Top-left X position of the rendered block.
+@return number nY       Top-left Y position of the rendered block.
+@return number nWidth   Total width of the rendered block.
+@return number nHeight  Total height of the rendered block.
+
+@ex
+-- Draw a description line with inline emphasis
+-- Note: there must exist a Style named "BOLD"
+Forge.DrawStyledText(
+    "BODY",
+    60, 820,
+    "Deal <BOLD>3 damage</BOLD> to all enemy units.",
+    false, false
+);
+        !]]
 Forge.DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)--TODO BUG FIX USe HTML parser, not this
     local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
     local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
@@ -1667,6 +2041,12 @@ Forge.DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY,
     --------------------------------------------------------------------
     -- PARSE HELPERS
     --------------------------------------------------------------------
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.BuildRuns2
+    @desc Splits styled text into drawing runs and accumulated plain text.
+    @param any sIn Value supplied as sIn.
+    @vis private
+    !]]
     local function BuildRuns(sIn)
         local tRuns  = {};
         local sPlain = "";

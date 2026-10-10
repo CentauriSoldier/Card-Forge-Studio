@@ -1,3 +1,8 @@
+--[[!
+@fqxn CFS.Classes.FontStyle
+@desc Parses inherited style INI sections and renders native text with spacing, backgrounds, and layered effects.
+!]]
+
 local class         = class;
 local math          = math;
     local clamp         = math.clamp;
@@ -16,12 +21,51 @@ local INI           = require("Plugins.INI");
 local Color         = {};
 local DrawingFont   = {};
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.Color_RGBA
+@desc Packs red, green, blue, and alpha channels into an RGBA integer.
+@param any nR R.
+@param any nG G.
+@param any nB B.
+@param any nA A.
+@vis private
+!]]
 Color.RGBA = function(nR, nG, nB, nA) return (nR << 24) | (nG << 16) | (nB << 8) | nA end
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.Color_GetRed
+@desc Extracts the red byte from a packed RGBA value.
+@param any oColor Color.
+@vis private
+!]]
 Color.GetRed = function(oColor) return (oColor >> 24) & 255 end
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.Color_GetGreen
+@desc Extracts the green byte from a packed RGBA value.
+@param any oColor Color.
+@vis private
+!]]
 Color.GetGreen = function(oColor) return (oColor >> 16) & 255 end
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.Color_GetBlue
+@desc Extracts the blue byte from a packed RGBA value.
+@param any oColor Color.
+@vis private
+!]]
 Color.GetBlue = function(oColor) return (oColor >> 8) & 255 end
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.Color_GetAlpha
+@desc Extracts the alpha byte from a packed RGBA value.
+@param any oColor Color.
+@vis private
+!]]
 Color.GetAlpha = function(oColor) return oColor & 255 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.Color_TryFromString
+@desc Parses supported color text into a packed RGBA value.
+@param any sValue Value.
+@vis private
+!]]
 function Color.TryFromString(sValue)
     if (rawtype(sValue) ~= "string") then return nil end
 
@@ -50,6 +94,14 @@ function Color.TryFromString(sValue)
     return nil;
 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.DrawingFont_Load
+@desc Creates a native font with the requested family, size, and style flags.
+@param any sFamily Family.
+@param any nSize Size.
+@param any tOptions Options.
+@vis private
+!]]
 function DrawingFont.Load(sFamily, nSize, tOptions)
     local oFont = wx.wxFont(nSize, wx.wxFONTFAMILY_DEFAULT, tOptions.Italic and wx.wxFONTSTYLE_ITALIC or wx.wxFONTSTYLE_NORMAL, tOptions.Bold and wx.wxFONTWEIGHT_BOLD or wx.wxFONTWEIGHT_NORMAL, tOptions.Underline or false, sFamily);
 
@@ -60,6 +112,12 @@ function DrawingFont.Load(sFamily, nSize, tOptions)
     return oFont;
 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.Ini
+@desc Creates an INI-reader adapter for style sections and inherited values.
+@param any pFile File.
+@vis private
+!]]
 local function Ini(pFile)
     local tSections = {};
     local tNames    = {};
@@ -86,6 +144,14 @@ local function Ini(pFile)
     assert(bOK, sError);
 
     return {
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.GetValue
+        @desc Reads a style key, following inheritance until a value is found or a section repeats.
+        @param any sSection Section.
+        @param any sKey Key.
+        @param any bInherit Inherit.
+        @vis private
+        !]]
         GetValue = function(sSection, sKey, bInherit)
             local tSeen = {};
             while (not tSeen[sSection]) do
@@ -97,12 +163,23 @@ local function Ini(pFile)
             end
             return "";
         end,
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.GetValueNames
+        @desc Returns sorted keys for a style section.
+        @param any sSection Section.
+        @vis private
+        !]]
         GetValueNames = function(sSection)
             local tKeys = {};
             for sKey in pairs(tSections[sSection] or {}) do tKeys[#tKeys + 1] = sKey; end
             table.sort(tKeys);
             return tKeys;
         end,
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.GetSectionNames
+        @desc Returns the style section names.
+        @vis private
+        !]]
         GetSectionNames = function() return tNames end,
     };
 end
@@ -128,10 +205,32 @@ local _tParsedStyles    = {};
 
 local FontStyle;
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.XPCallError
+@desc Formats a font-style error with a stack traceback.
+@param any vErr Err.
+@vis private
+!]]
 local function XPCallError(vErr)
     return debug.traceback(tostring(vErr), 2);
 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.GetEffectBounds
+@desc Computes text bounds including enabled shadow, extrusion, and glow offsets.
+@param any nW W.
+@param any nH H.
+@param any bShadow Shadow.
+@param any nShadowX Shadow x.
+@param any nShadowY Shadow y.
+@param any b3D B3d.
+@param any n3DStepX N3dstep x.
+@param any n3DStepY N3dstep y.
+@param any n3DDepth N3ddepth.
+@param any bGlow Glow.
+@param any nGlowRadius Glow radius.
+@vis private
+!]]
 local function GetEffectBounds(nW, nH,
     bShadow, nShadowX, nShadowY,
     b3D, n3DStepX, n3DStepY, n3DDepth, bGlow, nGlowRadius)
@@ -141,6 +240,13 @@ local function GetEffectBounds(nW, nH,
     local nMinY = 0;
     local nMaxY = nH;
 
+    --[[!
+    @fqxn CFS.Classes.FontStyle.Private.ApplyDelta
+    @desc Extends effect bounds by a supplied horizontal and vertical offset.
+    @param any nDX Dx.
+    @param any nDY Dy.
+    @vis private
+    !]]
     local function ApplyDelta(nDX, nDY)
         local nX0 = nDX;
         local nX1 = nW + nDX;
@@ -174,6 +280,18 @@ local function GetEffectBounds(nW, nH,
     return nMinX, nMinY, nMaxX - nMinX, nMaxY - nMinY;
 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.DrawTextRun
+@desc Draws a text run using the configured spacing and rotation.
+@param any pri Pri.
+@param any D D.
+@param any nX X.
+@param any nY Y.
+@param any sText Text.
+@param any nAngle Angle.
+@param any nColor Color.
+@vis private
+!]]
 local function DrawTextRun(pri, D, nX, nY, sText, nAngle, nColor)
     if (pri.LetterSpacing == 0) then
         if (nAngle) then D.DrawAngledText(nX, nY, sText, nAngle, nColor);
@@ -192,6 +310,14 @@ local function DrawTextRun(pri, D, nX, nY, sText, nAngle, nColor)
     end
 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.MeasureTextRun
+@desc Measures a text run while accounting for configured letter spacing.
+@param any pri Pri.
+@param any D D.
+@param any sText Text.
+@vis private
+!]]
 local function MeasureTextRun(pri, D, sText)
     if (pri.LetterSpacing == 0) then return D.GetTextWidth(sText); end
     local nWidth, nCount = 0, 0;
@@ -202,6 +328,11 @@ local function MeasureTextRun(pri, D, sText)
     return nWidth + math.max(0, nCount - 1) * pri.LetterSpacing;
 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.ReadStyleFile
+@desc Reads the active style file through the live-file repository.
+@vis private
+!]]
 local function ReadStyleFile()
     local sRet = "";
     local hFile = nil;
@@ -217,6 +348,12 @@ local function ReadStyleFile()
     return sRet;
 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.BuildFontSignature
+@desc Builds a comparison signature from parsed font settings.
+@param any tParsed Parsed.
+@vis private
+!]]
 local function BuildFontSignature(tParsed)
     local tFontOptions = istable(tParsed.FontOptions) and tParsed.FontOptions or {};
     local sRet = "";
@@ -234,6 +371,12 @@ local function BuildFontSignature(tParsed)
     return sRet;
 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.BuildEffectSignature
+@desc Builds a comparison signature from parsed text-effect settings.
+@param any tParsed Parsed.
+@vis private
+!]]
 local function BuildEffectSignature(tParsed)
     local sRet = "";
 
@@ -272,6 +415,13 @@ local function BuildEffectSignature(tParsed)
     return sRet;
 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.ParseFontStyleINI
+@desc Parses a named style and its inherited values through the supplied or default INI reader.
+@param any sSectionName Section name.
+@param any oReader Reader.
+@vis private
+!]]
 local function ParseFontStyleINI(sSectionName, oReader)
     local oSource = oReader or _oINI;
     local tRet = nil;
@@ -283,6 +433,12 @@ local function ParseFontStyleINI(sSectionName, oReader)
 
         if (istable(tValueNames) and #tValueNames > 0) then
 
+            --[[!
+            @fqxn CFS.Classes.FontStyle.Private.val
+            @desc Resolves a value from the current inherited style section.
+            @param any sValName Val name.
+            @vis private
+            !]]
             local function val(sValName)
                 local sRet = "";
                 local sVal = oSource.GetValue(sSectionName, sValName, true);
@@ -376,6 +532,11 @@ local function ParseFontStyleINI(sSectionName, oReader)
     return tRet;
 end
 
+--[[!
+@fqxn CFS.Classes.FontStyle.Private.SyncStyles
+@desc Synchronizes cached styles and parsed settings with the active style file.
+@vis private
+!]]
 local function SyncStyles()
     local tSectionNames     = {};
     local tSeen             = {};
@@ -476,6 +637,7 @@ return class("FontStyle",
     {--STATIC PUBLIC
         --[[!
             @fqxn CFS.Classes.FontStyle.Methods.FontStyle
+            @pulsarlua function FontStyle
             @desc Initializes the FontStyle class reference for internal static use.
             @param class cFontStyle The FontStyle class.
             @param string sAuthCode An authorization code.
@@ -488,16 +650,25 @@ return class("FontStyle",
             LoadAndSync();
         end,]]
 
+
         --[[!
-            @fqxn CFS.Classes.FontStyle.Methods.Get
-            @desc Gets a font style object by name.
-            @param string sName The name of the font style to retrieve.
-            @return FontStyle|nil oFontStyle The matching FontStyle object, or nil if not found.
+        @fqxn CFS.Classes.FontStyle.Methods.Parse
+        @pulsarlua function FontStyle.Parse
+        @desc Returns parsed settings for a named style through the supplied or default INI reader.
+        @param any sName Name.
+        @param any oReader Reader.
         !]]
         Parse = function(sName, oReader)
             return ParseFontStyleINI(sName, oReader);
         end,
 
+        --[[!
+            @fqxn CFS.Classes.FontStyle.Methods.Get
+            @pulsarlua function FontStyle.Get
+            @desc Gets a font style object by name.
+            @param string sName The name of the font style to retrieve.
+            @return FontStyle|nil oFontStyle The matching FontStyle object, or nil if not found.
+        !]]
         Get = function(sName)
             local oRet;
 
@@ -511,6 +682,7 @@ return class("FontStyle",
 
         --[[!
             @fqxn CFS.Classes.FontStyle.Methods.Has
+            @pulsarlua function FontStyle.Has
             @desc Checks if a font style exists.
             @param string sName The name of the font style.
             @return boolean bHas True if the style exists; otherwise false.
@@ -528,6 +700,7 @@ return class("FontStyle",
 
         --[[!
             @fqxn CFS.Classes.FontStyle.Methods.GetNames
+            @pulsarlua function FontStyle.GetNames
             @desc Gets all registered font style names.
             @return table tNames A sorted array of font style names.
         !]]
@@ -547,6 +720,7 @@ return class("FontStyle",
 
         --[[!
             @fqxn CFS.Classes.FontStyle.Methods.UpdateINI
+            @pulsarlua function FontStyle.UpdateINI
             @desc Loads and synchronizes font styles from an INI file.
             @param string sINI The path to the INI file.
         !]]
@@ -561,7 +735,13 @@ return class("FontStyle",
     },
     {--PRIVATE
         Name__AUTOA_                = "",
-        Font__AUTOA_                = null,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetFont
+        @pulsarlua function FontStyle.GetFont
+        @desc Returns the stored Font value through the generated public accessor.
+        @return any Stored Font value.
+        !]]
+Font__AUTOA_                = null,
         Color                       = _oBlack,
         LetterSpacing               = 0,
         BackgroundEnabled           = false,
@@ -570,10 +750,34 @@ return class("FontStyle",
         ShadowRadius                = 2,
         ShadowSoftness              = false,
 
-        ShadowEnabled__AUTOA_       = false,
-        ShadowColor__AUTOA_         = _oClear,
-        ShadowX__AUTOA_             = 0,
-        ShadowY__AUTOA_             = 0,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetShadowEnabled
+        @pulsarlua function FontStyle.GetShadowEnabled
+        @desc Returns the stored ShadowEnabled value through the generated public accessor.
+        @return any Stored ShadowEnabled value.
+        !]]
+ShadowEnabled__AUTOA_       = false,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetShadowColor
+        @pulsarlua function FontStyle.GetShadowColor
+        @desc Returns the stored ShadowColor value through the generated public accessor.
+        @return any Stored ShadowColor value.
+        !]]
+ShadowColor__AUTOA_         = _oClear,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetShadowX
+        @pulsarlua function FontStyle.GetShadowX
+        @desc Returns the stored ShadowX value through the generated public accessor.
+        @return any Stored ShadowX value.
+        !]]
+ShadowX__AUTOA_             = 0,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetShadowY
+        @pulsarlua function FontStyle.GetShadowY
+        @desc Returns the stored ShadowY value through the generated public accessor.
+        @return any Stored ShadowY value.
+        !]]
+ShadowY__AUTOA_             = 0,
 
         D3Enabled                   = false,
         D3Color                     = _oClear,
@@ -581,17 +785,71 @@ return class("FontStyle",
         D3StepX                     = 0,
         D3StepY                     = 0,
 
-        GlowEnabled__AUTOA_         = false,
-        GlowGradientEnabled__AUTOA_ = false,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetGlowEnabled
+        @pulsarlua function FontStyle.GetGlowEnabled
+        @desc Returns the stored GlowEnabled value through the generated public accessor.
+        @return any Stored GlowEnabled value.
+        !]]
+GlowEnabled__AUTOA_         = false,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetGlowGradientEnabled
+        @pulsarlua function FontStyle.GetGlowGradientEnabled
+        @desc Returns the stored GlowGradientEnabled value through the generated public accessor.
+        @return any Stored GlowGradientEnabled value.
+        !]]
+GlowGradientEnabled__AUTOA_ = false,
         GlowColor                   = _oClear,
         GlowOuterColor              = _oClear,
-        GlowRadius__AUTOA_          = 0,
-        GlowAlphaMax__AUTOA_        = 0,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetGlowRadius
+        @pulsarlua function FontStyle.GetGlowRadius
+        @desc Returns the stored GlowRadius value through the generated public accessor.
+        @return any Stored GlowRadius value.
+        !]]
+GlowRadius__AUTOA_          = 0,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetGlowAlphaMax
+        @pulsarlua function FontStyle.GetGlowAlphaMax
+        @desc Returns the stored GlowAlphaMax value through the generated public accessor.
+        @return any Stored GlowAlphaMax value.
+        !]]
+GlowAlphaMax__AUTOA_        = 0,
 
-        OutlineEnabled__AUTOA_      = false,
-        OutlineColor__AUTOA_        = _oClear,
-        OutlineThickness__AUTOA_    = 0,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetOutlineEnabled
+        @pulsarlua function FontStyle.GetOutlineEnabled
+        @desc Returns the stored OutlineEnabled value through the generated public accessor.
+        @return any Stored OutlineEnabled value.
+        !]]
+OutlineEnabled__AUTOA_      = false,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetOutlineColor
+        @pulsarlua function FontStyle.GetOutlineColor
+        @desc Returns the stored OutlineColor value through the generated public accessor.
+        @return any Stored OutlineColor value.
+        !]]
+OutlineColor__AUTOA_        = _oClear,
+                --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.GetOutlineThickness
+        @pulsarlua function FontStyle.GetOutlineThickness
+        @desc Returns the stored OutlineThickness value through the generated public accessor.
+        @return any Stored OutlineThickness value.
+        !]]
+OutlineThickness__AUTOA_    = 0,
 
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.DrawGlow
+        @desc Draws enabled glow layers before the main text.
+        @param any sObject Object.
+        @param any D D.
+        @param any hInternalDC H internal dc.
+        @param any nX X.
+        @param any nY Y.
+        @param any sText Text.
+        @param any nAngle Angle.
+        @vis private
+        !]]
         DrawGlow = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
             local pri = cdat.pri;
             local nRadius = math.max(0, floor(pri.GlowRadius));
@@ -603,6 +861,12 @@ return class("FontStyle",
             -- per-sample opacity avoids making the overlapping passes opaque.
             for nDistance = nRadius, 1, -1 do
                 local nMix = nDistance / nRadius;
+                --[[!
+                @fqxn CFS.Classes.FontStyle.Private.channel
+                @desc Extracts a color channel for glow interpolation.
+                @param any fChannel Channel.
+                @vis private
+                !]]
                 local function channel(fChannel)
                     return floor(fChannel(nInner) * (1 - nMix) + fChannel(nOuter) * nMix + 0.5);
                 end
@@ -624,6 +888,18 @@ return class("FontStyle",
             end
         end,
 
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.Draw3D
+        @desc Draws extrusion layers using the configured depth, step, and color.
+        @param any sObject Object.
+        @param any D D.
+        @param any hInternalDC H internal dc.
+        @param any nX X.
+        @param any nY Y.
+        @param any sText Text.
+        @param any nAngle Angle.
+        @vis private
+        !]]
         Draw3D = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
             local pri = cdat.pri;
             local nER = Color.GetRed(pri.D3Color);
@@ -642,6 +918,18 @@ return class("FontStyle",
             end
         end,
 
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.DrawOutline
+        @desc Draws text offsets using the configured outline thickness and color.
+        @param any sObject Object.
+        @param any D D.
+        @param any hInternalDC H internal dc.
+        @param any nX X.
+        @param any nY Y.
+        @param any sText Text.
+        @param any nAngle Angle.
+        @vis private
+        !]]
         DrawOutline = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
             local pri = cdat.pri;
             local nBaseX = 0;
@@ -676,6 +964,18 @@ return class("FontStyle",
             end
         end,
 
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.DrawShadow
+        @desc Draws the configured text shadow before the main text.
+        @param any sObject Object.
+        @param any D D.
+        @param any hInternalDC H internal dc.
+        @param any nX X.
+        @param any nY Y.
+        @param any sText Text.
+        @param any nAngle Angle.
+        @vis private
+        !]]
         DrawShadow = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, nAngle)
             local pri = cdat.pri;
             local nBaseX = floor(nX + pri.ShadowX);
@@ -710,6 +1010,14 @@ return class("FontStyle",
 
     },
     {--PUBLIC
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.FontStyle
+        @pulsarlua function FontStyle
+        @desc Constructs a named font-style instance and applies supplied parsed settings.
+        @param any sName Name.
+        @param any tParsed Parsed.
+        @ret FontStyle Created instance.
+        !]]
         FontStyle = function(this, cdat, sName, tParsed)
             local pri = cdat.pri;
 
@@ -720,6 +1028,13 @@ return class("FontStyle",
             end
         end,
 
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.ApplyParsed
+        @pulsarlua function FontStyle.ApplyParsed
+        @desc Applies parsed font and effect settings, rebuilding the native font when requested or absent.
+        @param any tParsed Parsed.
+        @param any bRebuildFont Rebuild font.
+        !]]
         ApplyParsed = function(this, cdat, tParsed, bRebuildFont)
             local pri = cdat.pri;
             local tFontOptions = {};
@@ -774,6 +1089,11 @@ return class("FontStyle",
             end
         end,
 
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.Update
+        @pulsarlua function FontStyle.Update
+        @desc Reparses the named style and updates the instance only when font or effect signatures change.
+        !]]
         Update = function(this, cdat)
             local sName = cdat.pri.Name;
             local tParsed = nil;
@@ -809,6 +1129,18 @@ return class("FontStyle",
             return bRet;
         end,
 
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.Draw
+        @pulsarlua function FontStyle.Draw
+        @desc Draws the text background and enabled glow, shadow, extrusion, and outline layers before the main text.
+        @param any sObject Object.
+        @param any D D.
+        @param any hInternalDC H internal dc.
+        @param any nX X.
+        @param any nY Y.
+        @param any sText Text.
+        @param any vAngle Angle.
+        !]]
         Draw = function(this, cdat, sObject, D, hInternalDC, nX, nY, sText, vAngle)
             local pri = cdat.pri;
             local nAngle = isnumber(vAngle) and floor(clamp(vAngle, 0, 360)) or nil;
@@ -848,6 +1180,14 @@ return class("FontStyle",
             end
         end,
 
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.Prep
+        @pulsarlua function FontStyle.Prep
+        @desc Measures text and effect extents and optionally installs the style's font in the drawing context.
+        @param any D D.
+        @param any sText Text.
+        @param any bSkipSetFont Skip set font.
+        !]]
         Prep = function(this, cdat, D, sText, bSkipSetFont)
             local pri = cdat.pri;
             local nTextWidth = 0;

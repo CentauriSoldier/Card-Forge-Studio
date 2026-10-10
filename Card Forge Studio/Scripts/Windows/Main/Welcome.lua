@@ -1,8 +1,19 @@
+--[[!
+@fqxn CFS.Windows.Main.Welcome
+@desc Welcome artwork, version display, external project links, and canvas layout.
+!]]
+
 -- Welcome page artwork from the original AutoPlay page.
 -- Development controls and WindowWizard experiments are intentionally omitted.
 local wx = require("wx");
 local Welcome = {};
 
+--[[!
+@fqxn CFS.Windows.Main.Welcome.create
+@pulsarlua function Welcome.create
+@desc Builds the welcome canvas and layout using the application version and bundled artwork.
+@param any pApplication Application.
+!]]
 function Welcome.create(pApplication)
     local sVersion = INIFile.GetValue(FS.AppCFG, "Settings", "Version");
     local oVersionFont = wx.wxFont(18, wx.wxFONTFAMILY_DEFAULT, wx.wxFONTSTYLE_NORMAL, wx.wxFONTWEIGHT_NORMAL, false, "CRYSTAL");
@@ -21,6 +32,12 @@ function Welcome.create(pApplication)
 
     oQuiet:delete();
 
+    --[[!
+    @fqxn CFS.Windows.Main.Welcome.Private.draw
+    @desc Paints welcome artwork scaled to the canvas dimensions.
+    @param any oCanvas Canvas.
+    @vis private
+    !]]
     local function draw(oCanvas)
         local oSize = oCanvas:GetClientSize();
         local nScale = math.min(oSize:GetWidth() / 1400, oSize:GetHeight() / 1200);
@@ -52,6 +69,13 @@ function Welcome.create(pApplication)
         oDC:delete();
     end
 
+    --[[!
+    @fqxn CFS.Windows.Main.Welcome.Private.addLinks
+    @desc Creates bundled artwork links and connects protected browser-launch actions.
+    @param any dCanvas Canvas.
+    @param any fProtect Protect.
+    @vis private
+    !]]
     local function addLinks(dCanvas, fProtect)
         local tButtons = {};
         local tLinks = {
@@ -76,6 +100,11 @@ function Welcome.create(pApplication)
             tButtons[#tButtons + 1] = oButton;
         end
 
+        --[[!
+        @fqxn CFS.Windows.Main.Welcome.Private.layout
+        @desc Positions welcome link buttons after a canvas resize.
+        @vis private
+        !]]
         local function layout()
             local oSize = dCanvas:GetClientSize();
 
@@ -91,6 +120,13 @@ function Welcome.create(pApplication)
         layout();
 
         return {
+            --[[!
+            @fqxn CFS.Windows.Main.Welcome.Private.ShowItems
+            @desc Shows or hides welcome link controls and recomputes their positions.
+            @param any _ _.
+            @param any bShow Show.
+            @vis private
+            !]]
             ShowItems = function(_, bShow)
                 for _, oButton in ipairs(tButtons) do
                     oButton:Show(bShow);

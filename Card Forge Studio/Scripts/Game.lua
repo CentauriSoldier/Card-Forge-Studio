@@ -1,14 +1,28 @@
+--[[!
+@fqxn CFS.Classes.Game
+@desc Game discovery, creation, activation, and card-set metadata access.
+!]]
+
 local _tGames       = {}; --keys are uuids, values are {Game = GameObject, Name = NameString}
 local _oActiveGame  = false;
-local io            = io;
---TODO with New methods, checkf or existing item first...do not overwrite
 
 -- CardSet is imported when discovery is requested.
 
+--[[!
+@fqxn CFS.Classes.Game.Private.SortByName
+@desc Compares game or card-set objects by display name.
+@param any oItemA o Item A.
+
+@param any oItemB o Item B.
+!]]
 local function SortByName(oItemA, oItemB)
     return oItemA.GetName() < oItemB.GetName();
 end
 
+--[[!
+@fqxn CFS.Classes.Game.Private.UpdateCardSets
+@desc Rebuilds card-set discovery for this game.
+!]]
 local function UpdateCardSets(this, cdat)
     local CardSet = require("CardSet");
     local pri = cdat.pri;
@@ -45,12 +59,48 @@ return class("Game",
 
     },
     {--STATIC PUBLIC
-        --__INIT = function(stapub) end, --static initializer (runs before class object creation)
-        --Game = function(this, sAuthCode) end, --static constructor (runs after class object creation)
-        --INFOINI_SECTIONS = _eInfoINISections,
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.Activate
+        @pulsarlua function Game.Activate
+        @desc Prepares filesystem paths, discovers card sets, and activates processing.
+        @param any oGame o Game.
+        !]]
+        Activate = function(oGame)
+
+            if not (type(oGame) == "Game") then
+                error("Game.Activate: Error activating game. Expected Game object. Got "..type(oGame)..'.');
+            end
+
+            Log.Note("Game.Activate: Loading game, \""..oGame.GetName()..'".');
+
+            --set the filepaths for the current game
+            FS.Game.Prep(oGame);
+
+            --update this game's card sets
+            oGame.UpdateCardSets();
+            -- TODO Restore ProcessDox as an explicit writable operation; it writes game documentation.
+            ProcSys.PrepGame(oGame);
+            _oActiveGame = oGame;
+
+            Log.Note("Game.Activate: Game loaded.");
+        end,
+
+
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.GetActive
+        @pulsarlua function Game.GetActive
+        @desc Returns the active game, or false when none is loaded.
+        !]]
         GetActive = function()
             return _oActiveGame;
         end,
+
+
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.GetAll
+        @pulsarlua function Game.GetAll
+        @desc Returns discovered game objects sorted by name.
+        !]]
         GetAll = function()
             local tRet = {};
 
@@ -62,18 +112,14 @@ return class("Game",
 
             return tRet;
         end,
-        GetNames = function()
-            local tRet = {};
 
-            for sUUID, tGame in pairs(_tGames) do
-                tRet[#tRet + 1] = tGame.Name;
-            end
 
-            table.sort(tRet, SortByName);
-
-            return tRet;
-        end,
-        --GameExists = function(sGame) end
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.GetByName
+        @pulsarlua function Game.GetByName
+        @desc Finds a discovered game with the specified display name.
+        @param any sName s Name.
+        !]]
         GetByName = function(sName)
             local vRet;
 
@@ -92,44 +138,55 @@ return class("Game",
 
             return vRet;
         end,
-        New = function()
-            local sGame             = Dialog.Input("Create New Game", "Game name:", "", MB_ICONINFORMATION);
-            local bCancelPressed    = sGame == "CANCEL";
-            local bIsEmpty          = sGame:isempty();
 
-            if (not bCancelPressed and not bIsEmpty) then
 
-                if (bIsFilesafe) then
-                    --Game.Activate(sGame);
-                    MainMenu.RefreshGamesList();
-                end
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.GetNames
+        @pulsarlua function Game.GetNames
+        @desc Returns discovered game names sorted alphabetically.
+        !]]
+        GetNames = function()
+            local tRet = {};
 
+            for sUUID, tGame in pairs(_tGames) do
+                tRet[#tRet + 1] = tGame.Name;
             end
 
-        end,
-        Activate = function(oGame)
+            table.sort(tRet);
 
-            if not (type(oGame) == "Game") then
-                error("Game.Activate: Error activating game. Expected Game object. Got "..type(oGame)..'.');
+            return tRet;
+        end,
+
+
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.New
+        @pulsarlua function Game.New
+        @desc Creates and registers an empty game. Activation is left to the caller so normal unsaved-change checks can run first.
+        @param string sName Display name.
+        @return Game New game object.
+        !]]
+        New = function(sName)
+            if (rawtype(sName) ~= "string" or not sName:match("%S") or sName:find("[%c]")) then
+                error("A game name must contain visible text and no control characters.", 2);
             end
 
-            Log.Note("Game.Activate: Loading game, \""..oGame.GetName()..'".');
+            local sUUID = string.uuid(true);
+            FS.Game.Create(sUUID, sName);
+            local oGame = Game(sUUID);
+            _tGames[sUUID] = {
+                Name   = oGame.GetName(),
+                Object = oGame,
+            };
 
-            --set the filepaths for the current game
-            FS.Game.Prep(oGame);
-            --TODO LEFT OFF HERE
-            --load row filters
-
-            --update this game's card sets
-            oGame.UpdateCardSets();
-            --TODO get this boolean from INI file before running Dox
-            -- TODO Restore ProcessDox as an explicit writable operation; it writes game documentation.
-            ProcSys.PrepGame(oGame);
-            _oActiveGame = oGame;
-
-            Log.Note("Game.Activate: Game loaded.");
+            return oGame;
         end,
-        --rebuilds all game objects and refreshes the private static info
+
+
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.Refresh
+        @pulsarlua function Game.Refresh
+        @desc Rebuilds game discovery and logs invalid metadata.
+        !]]
         Refresh = function()
             --clear out all games
             _tGames = {};
@@ -169,22 +226,53 @@ return class("Game",
         end,
     },
     {--PRIVATE
-        Env__AUTOR_             = null,
-        CFG__AUTOR_             = null,
+                --[[!
+        @fqxn CFS.Classes.Game.Methods.GetEnv
+        @pulsarlua function Game.GetEnv
+        @desc Returns the stored Env value through the generated public accessor.
+        @return any Stored Env value.
+        !]]
+Env__AUTOR_             = null,
+                --[[!
+        @fqxn CFS.Classes.Game.Methods.GetCFG
+        @pulsarlua function Game.GetCFG
+        @desc Returns the stored CFG value through the generated public accessor.
+        @return any Stored CFG value.
+        !]]
+CFG__AUTOR_             = null,
         CardSets                = {},
-        IncludePlugins__AUTOA_  = false,
+                --[[!
+        @fqxn CFS.Classes.Game.Methods.GetIncludePlugins
+        @pulsarlua function Game.GetIncludePlugins
+        @desc Returns the stored IncludePlugins value through the generated public accessor.
+        @return any Stored IncludePlugins value.
+        !]]
+IncludePlugins__AUTOA_  = false,
         Name__AUTOA_            = '',
-        UUID__AUTOR_            = null,
+                --[[!
+        @fqxn CFS.Classes.Game.Methods.GetUUID
+        @pulsarlua function Game.GetUUID
+        @desc Returns the stored UUID value through the generated public accessor.
+        @return any Stored UUID value.
+        !]]
+UUID__AUTOR_            = null,
     },
     {--PROTECTED
 
     },
     {--PUBLIC
-        --assumes this is being called by the refresh function (after getting data from FS)
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.Game
+        @pulsarlua function Game
+        @desc Loads game metadata from its existing Info.ini.
+        @param any sUUID s UUID.
+        !]]
         Game = function(this, cdat, sUUID)
             local pri = cdat.pri;
 
-            --TODO validate input
+            if (rawtype(sUUID) ~= "string" or not sUUID:isuuid()) then
+                error("Game requires a valid UUID string.", 2);
+            end
 
             pri.UUID = sUUID:upper();
 
@@ -194,8 +282,17 @@ return class("Game",
             pri.IncludePlugins  = INIFile.GetValueBoolean(  pINI, sSection, "IncludePlugins");
             pri.Name            = INIFile.GetValue(         pINI, sSection, "Name");
 
-            --UpdateCardSets(this, pri);
+            if (rawtype(pri.Name) ~= "string" or not pri.Name:match("%S") or pri.Name:find("[%c]")) then
+                error("Invalid game name in "..pINI, 2);
+            end
         end,
+
+
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.GetAllCardSets
+        @pulsarlua function Game.GetAllCardSets
+        @desc Returns this game’s card sets sorted by name.
+        !]]
         GetAllCardSets = function(this, cdat)
             local pri = cdat.pri;
             local tRet = {};
@@ -208,6 +305,14 @@ return class("Game",
 
             return tRet;
         end,
+
+
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.GetCardSet
+        @pulsarlua function Game.GetCardSet
+        @desc Finds a card set by its identifier.
+        @param any sUUID s UUID.
+        !]]
         GetCardSet = function(this, cdat, sUUID)
             local pri = cdat.pri;
             local vRet;
@@ -227,6 +332,14 @@ return class("Game",
 
             return vRet;
         end,
+
+
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.GetCardSetByName
+        @pulsarlua function Game.GetCardSetByName
+        @desc Finds a card set by its display name.
+        @param any sName s Name.
+        !]]
         GetCardSetByName = function(this, cdat, sName)
             local pri = cdat.pri;
             local vRet;
@@ -246,21 +359,23 @@ return class("Game",
 
             return vRet;
         end,
-        --[[GetCardSetNames = function(this, cdat)
+
+
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.RefreshInfo
+        @pulsarlua function Game.RefreshInfo
+        @desc Refreshes the loaded game name after metadata changes.
+        !]]
+        RefreshInfo = function(this, cdat)
             local pri = cdat.pri;
-            local tRet = {};
-
-            for sUUID, tCardSet in pairs(pri.CardSets) do
-                tRet[#tRet + 1] = tCardSet.Name;
-            end
-
-            table.sort(tRet, SortByName);
-
-            return tRet;
+            local pInfo = FS.Game.GetInfoINIPath(pri.UUID);
+            local sName = INIFile.GetValue(pInfo, "SETTINGS", "Name");
+            assert(type(sName) == "string" and sName:match("%S") and not sName:find("[\r\n]"), "Invalid game name in "..pInfo);
+            pri.Name = sName;
+            if (_tGames[pri.UUID]) then _tGames[pri.UUID].Name = sName; end
         end,
-        NewCardSet = function(this, cdat)
 
-        end,]]
+
         --updates game, all game's card sets, and all LiveFiles
         UpdateCardSets = UpdateCardSets,
     },

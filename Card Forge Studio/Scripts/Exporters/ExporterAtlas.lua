@@ -1,3 +1,9 @@
+--[[!
+@fqxn CFS.Modules.ExporterAtlas
+@desc Deferred Atlas exporter skeleton; not an enabled Studio export format.
+@vis private
+!]]
+
 local _sClass   = "ExporterAtlas";
 local _sName    = "Atlas";
 local _tReturns = {

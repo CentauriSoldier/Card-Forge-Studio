@@ -1,321 +1,66 @@
---[[TODO DOX
-    @section Exporter Targets
+--[[!
+@fqxn CFS.Modules.Exporter
+@desc Format lookup and safe staged export commits; format-specific behavior belongs to individual exporters.
+!]]
 
-    Core
-        - Print & Play (sheet layout, bleed, cut lines)
-        - Plain Image (per-card PNG/JPG)
-        - CSV / JSON (data export)
-        - TTS (Tabletop Simulator decks)
-
-    Game Platforms
-        - Tabletop Playground export
-        - Screentop.gg export
-        - PlayingCards.io export
-
-    Print / Manufacturing
-        - The Game Crafter format
-        - MakePlayingCards format
-        - PDF sheets (print-ready, embedded guides)
-
-    Dev / Pipeline
-        - Asset manifest (JSON index)
-        - Atlas / spritesheet export
-        - Unity import package
-
-    Preview / Sharing
-        - HTML preview site
-        - Static gallery export
-        - ZIP bundle (full pack)
-_tExportersMeta     = {};
-_tExportersDecoy    = {};
+-- Format-independent export lookup and staged file commit.
+local wx            = require("wx");
+local Exporter = {};
 
 
-local function GetExporterEntryByClassName(sName)
-    local tRet;
-
-    for _, tExporter in ipairs(_tExporters) do
-
-        if (tExporter.ClassName == sName) then
-            tRet = tExporter;
-            break;
-        end
-
-    end
-
-    return tRet;
+--[[!
+@fqxn CFS.Modules.Exporter.get
+@pulsarlua function Exporter.get
+@desc Loads the dedicated exporter module for a requested format.
+@param string sType Export format identifier matching an Exporter module suffix.
+@return table tExporter The format's implementation.
+@note Missing exporter modules raise an error; unfinished targets are not enabled automatically.
+!]]
+function Exporter.get(sType)
+    assert(type(sType) == "string" and sType:match("^[%w_]+$"), "Invalid exporter identifier.");
+    return require("Exporters.Exporter"..sType);
 end
-]]
 
 
-
---[[
---Exporter object is created from user Exporter files
-
---User clicks Export->1/x:TYPE->1/x:Exporter
-
-
-]]
-
-local _tExporterSchema = schema.Record({
-    Name        = schema.String,
-    Class       = schema.String,
-    RowHandler  = schema.Function,
-    TestRow     = schema.Table,
-});
-
-local _tExporters = {};
---local _eExporters;
-
---[[    _tExporters[sName] = {
-        Class       = cCaller,
-        Instances   = {},
-        Returns     = {},
-    };
-]]
---[[
-local function BuildTypeEnum()
-    _eExporters         = nil;
-    local tEnumNames    = {};
-    local tEnumValues   = {};
-    local tTemp         = {};
-
-    --create the list of enum names using the child class names
-    for sType, tExporter in pairs(_tExporters) do
-        tTemp[#tTemp + 1] = {
-            Name    = sType, --TODO NOT CLASS, instance
-            Value   = null,
-        };
-
-        --create the enum values (class objects)
-        local tValues        = {};
-        local tValuesDecoy   = {};
-        local tValuesMeta    = {
-            __newindex  = function() end, --TODO THROW ERROR
-            __index     = tValues,
-            __len       = function() return end,--TODO
-        };
-    end
-
-    table.sort(tTemp,
-        function(a, b)
-            return a.MenuName < b.MenuName;
+--[[!
+@fqxn CFS.Modules.Exporter.run
+@pulsarlua function Exporter.run
+@desc Stages all planned outputs before committing them without overwriting existing files. On failure, removes staged files and outputs created by this job.
+@param string pDirectory Destination folder.
+@param table tPlan Ordered output records, each with a name.
+@param function fRender Receives an output record and staged path; writes the format-specific file.
+@param function|nil fProgress Optional phase, completed count, total count, and current record callback.
+@return number nCount Number of committed files.
+@note Rendering belongs to the exporter. This service does not interpret card rows, faces, or formats.
+!]]
+function Exporter.run(pDirectory, tPlan, fRender, fProgress)
+    assert(wx.wxDirExists(pDirectory), "Export destination does not exist.");
+    for _, tFile in ipairs(tPlan) do assert(not wx.wxFileExists(pDirectory.."/"..tFile.name) and not wx.wxDirExists(pDirectory.."/"..tFile.name), "Export file already exists: "..tFile.name..". Choose an empty destination."); end
+    local tStaged, tWritten = {}, {};
+    local bOK, sError = xpcall(function()
+        -- Produce every temporary output before exposing any final filenames.
+        for nIndex, tFile in ipairs(tPlan) do
+            if (fProgress) then fProgress("Rendering", nIndex - 1, #tPlan, tFile); end
+            local oFile = wx.wxFile(); local pStage = wx.wxFileName.CreateTempFileName(pDirectory.."/.cfs-export-", oFile);
+            if (oFile:IsOpened()) then oFile:Close(); end; oFile:delete();
+            assert(pStage ~= "", "Could not stage export output.");
+            local tStage = {path = pStage, destination = pDirectory.."/"..tFile.name}; tStaged[#tStaged + 1] = tStage;
+            fRender(tFile, pStage);
+            if (fProgress) then fProgress("Rendered", nIndex, #tPlan, tFile); end
         end
-    );
+        -- Commit without overwrite; retain the destinations owned by this job for rollback.
+        for nIndex, tStage in ipairs(tStaged) do
+            if (fProgress) then fProgress("Writing", nIndex - 1, #tPlan); end
+            assert(wx.wxRenameFile(tStage.path, tStage.destination, false), "Could not finish export."); tWritten[#tWritten + 1] = tStage.destination;
+        end
+    end, debug.traceback);
+    for _, tStage in ipairs(tStaged) do if (wx.wxFileExists(tStage.path)) then wx.wxRemoveFile(tStage.path); end end
+    -- On failure, delete only this job's outputs and propagate the original error.
+    if (not bOK) then
+        for _, pFile in ipairs(tWritten) do wx.wxRemoveFile(pFile); end
+        error(sError, 0);
+    end
+    return #tPlan;
+end
 
-    --_eExporters = enum(tTemp, );
-end]]
-
---local _eActiveExporter;
---NOTE on CodeColumns; DO NOT EXPORT, they are not designed for that nor will they be. Put that note in the Dox.
-
-return class("Exporter",
-    {--METAMETHODS
-
-    },
-    {--STATIC PUBLIC
-        GetCatalogue = function()
-            local tRet      = {};
-            local nCount    = 0;
-
-            for cExporter, tExporter in pairs(_tExporters) do
-                nCount = nCount + 1;
-                tRet[tExporter.MenuName] = tExporter.Class;
-            end
-
-            table.sort(tRet);
-
-            setmetatable(tRet, {
-                __len = function() return nCount end,
-            });
-
-            return tRet;
-        end,
-        --CATALOGUE = _eExporters,
-        --__INIT = function(stapub) end--static initializer (runs before class object creation)
-        --Exporter = function(cMe, sAuthCode) end, --static constructor (runs after class object creation)
-        --[[GetActive = function()
-            return _tExporters[_eActiveExporter];
-        end,]]
-        --[[GetAll = function()
-            local tRet = {};
-
-            for sName, oExporter in pairs(_tExporters) do
-                tRet[sName] = oExporter;
-            end
-
-            return tRet;
-        end,]]
-        --[[GetMenuNames = function()--Used to build/access exporters subfolders
-            local tRet = {};
-
-            for sName, tExporter in pairs(_tExporters) do
-                tRet[sName] = sName;
-            end
-
-            return tRet;
-        end,]]
-        RegisterChildClass = function(cCaller, sAuthCode, sMenuName, tReturns)
-            type.assert.table(tReturns, "number", "table", 1); --there should be at least one return, a boolean if nothing else
-            type.assert.string(sMenuName, "%S", "Menu name must be a non-empty string");
-
-            if not class.is(cCaller) then
-                error("Exporter.RegisterChildClass: Argument 1 must be a class.", 2);
-            end
-
-            local cParent = class.getparent(cCaller);
-
-            if not (cParent and class.getname(cParent) == "Exporter") then
-                error("Exporter.RegisterChildClass: Argument 1 must be a child class of Exporter.", 2);
-            end
-
-            if not class.isstaticconstructorrunning(cCaller, sAuthCode) then
-                error("Exporter.RegisterChildClass must be called from the static constructor of an Exporter child class.", 2);
-            end
-
-            local sClassName = class.getname(cCaller);
-
-            if not sClassName:match("^Exporter[%w_]+$") then
-                error("Exporter.RegisterChildClass: '"..sClassName.."' is an invalid class name. Must be 'Exporter<Something>'.", 2);
-            end
-
-            if not (type(cCaller.Export) == "function") then
-                error("Exporter.RegisterChildClass: '"..sClassName.."' has not implemented a public static 'Export' method.", 2);
-            end
-
-            --create the base table entry for the child class in the _tExporters table
-            _tExporters[sClassName] = {
-                Class       = cCaller,                  --the actual class object
-                MenuName    = sMenuName,                --the name that will be shown in the Export menu
-                Returns     = {},                       --the returns values of the class
-            };
-
-            local tRegistar     = _tExporters[sClassName];
-            local tMyReturns    = tRegistar.Returns;
-
-            --iterate over the strictly-ordered return table
-            for nIndex, tReturn in ipairs(tReturns) do
-                type.assert.table(tReturn, "number", "string", 1);
-                local tMyReturn     = {};
-                tMyReturns[nIndex]  = tMyReturn;
-
-                --determine what types are allowed for this return index and store them
-                for nTypeIndex, sType in ipairs(tReturn) do
-                    type.assert.string(sType, "%S+", "Return type names must be non-blank strings");
-                    tMyReturn[sType] = true;
-                end
-
-            end
-
-        end,
-        --[[SetActiveType = function(eExporterType)
-            type.assert.custom(eExporterType, "Exporter.TYPE");
-            _eActiveExporter = eExporterType;
-        end,]]
-    },
-    {--PRIVATE
-        --MenuName__AUTOA_    = "",   --the name that will be shown in the Export menu
-        --Name__AUTOA_        = "",   --the user-given name of this exporter object
-        --Type                = "",   --the index of the table entry in _tExporters
-        --TypeData            = {},   --the table entry in _tExporters
-
-        ValidateRowHandlerReturns = function(this, cdat, ...)
-            local pro       = cdat.pro;
-            local tReturns  = pro.TypeData.Returns;
-            local tArgs     = {...};
-            local nArgs     = select("#", ...);
-
-            for nArg, tArgTypes in ipairs(tReturns) do
-                local vArg      = tArgs[nArg];          -- may be nil (intentional)
-                local sArgType  = type(vArg);
-                local bFound    = false;
-
-                for sType, bAllowed in pairs(tArgTypes) do
-
-                    if (bAllowed and sArgType == sType) then
-                        bFound = true;
-                        break;
-                    end
-
-                end
-
-                if not (bFound) then
-                    local tAllowedTypes = {};
-
-                    for sType, bAllowed in pairs(tArgTypes) do
-
-                        if bAllowed then
-                            tAllowedTypes[#tAllowedTypes + 1] = sType;
-                        end
-
-                    end
-
-                    error("Exporter: "..pro.MenuName.."->"..pro.Name.." row handler return #"..nArg..
-                          " must be one of {"..table.concat(tAllowedTypes, ", ").."}, got "..sArgType..".", 2);
-                end
-
-            end
-
-            return true;
-        end,
-    },
-    {--PROTECTED
-
-        --OutputPath      = "",
-        --PerRow          = true,
-        --Returns         = {},
-        --Rows            = null,
-        --ScriptPath      = "",
-        RowHandler        = null, --the actual exporter function that handles each row
-
-        Exporter = function(this, cdat, tExporter)
-            local vError = schema.CheckSchema(tExporter, _tExporterSchema);
-
-            if (vError) then
-                error("Error creating User Exporter:\r\n"..schema.FormatOutput(vError), 2);
-            end
-
-            local sName         = tExporter.Name;
-            local sClass        = tExporter.Class;
-            local tTestRow      = tExporter.TestRow;
-            local fRowHandler   = tExporter.RowHandler;
-
-            type.string.assert(sName, "%S+", "Error creating User Exporter:\r\nExporter name cannot be blank.", 2);
-
-            if not (_tExporters[sClass]) then
-                error("Error creating User Exporter:\r\n"..sClass.." is not a valid Exporter child class.", 2);
-            end
-
-            local pro = cdat.pro;
-
-            pro.MenuName        = GetMenuName(sClass);
-            pro.Name            = sName;
-            pro.Type            = sClass;
-            pro.RowHandler      = fRowHandler;
-            pro.TypeData        = _tExporters[sClass];
-
-            --validate the test row itself TODO FINISH COMPLETE THIS
-            type.assert.table(tTestRow, nil, nil, 1, "Error creating User Exporter:\r\nTestRow must be a non-empty table.");
-
-            --validate the exporter function against the test row
-            local bSuccess = cdat.pri.ValidateRowHandlerReturns(fRowHandler(tTestRow));
-            if bSuccess then
-
-                --(re)build the TYPE enum
-                BuildTypeEnum();
-            end
-
-        end,
-        RefreshUserExporters = function() --assumes game is ready and running
-            _tExporters = {};
-        end,
-
-    },
-    {--PUBLIC
-        SetRowHandler = function(this, cdat, fRowHandler)
-
-        end,
-    },
-    nil,   --extending class
-    false, --if the class is final
-    nil    --interface(s) (either nil, or interface(s))
-);
+return Exporter;

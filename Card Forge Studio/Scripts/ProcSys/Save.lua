@@ -1,7 +1,18 @@
+--[[!
+@fqxn CFS.Modules.ProcSys.Save
+@desc Verifies and stages CSV and code-column saves with conflict detection and backup retention.
+!]]
+
 -- Write all source rows; grid sorting and filtering do not affect storage.
 local wx = require("wx");
 local Save = {};
 
+--[[!
+@fqxn CFS.Modules.ProcSys.Save.Private.readFile
+@desc Reads a binary file and checks read and close success.
+@vis private
+@param any pFile File path.
+!]]
 local function readFile(pFile)
     local hFile = assert(io.open(pFile, "rb"));
     local sText, sError = hFile:read("a");
@@ -11,6 +22,12 @@ local function readFile(pFile)
     return sText;
 end
 
+--[[!
+@fqxn CFS.Modules.ProcSys.Save.Private.backupFiles
+@desc Lists and sorts timestamped CSV backups owned by Studio.
+@vis private
+@param any pFolder Folder.
+!]]
 local function backupFiles(pFolder)
     local tFiles  = {};
     local oFolder = wx.wxDir(pFolder);
@@ -24,7 +41,18 @@ local function backupFiles(pFolder)
     return tFiles;
 end
 
-function Save.write(pFile, pBackup, tHeaders, tRows, sExpected)
+--[[!
+@fqxn CFS.Modules.ProcSys.Save.write
+@pulsarlua function Save.write
+@desc Validates CSV round-trip contents and external edits, creates a verified backup, stages CSV/code-column changes, and prunes old backups after success.
+@param any pFile File path.
+@param any pBackup CSV backup folder.
+@param any tHeaders Ordered column headers.
+@param any tRows Source rows to save.
+@param any sExpected Last accepted disk contents used to detect external edits.
+@param any tCodeFile Code-column file record, or nil.
+!]]
+function Save.write(pFile, pBackup, tHeaders, tRows, sExpected, tCodeFile)
     assert(#tHeaders > 0, "Cannot save data without headers.");
     local sOriginal = readFile(pFile);
     assert(sOriginal == sExpected, "The CSV changed outside Card Forge Studio. Reload it before saving; your edits have been retained.");
@@ -38,7 +66,11 @@ function Save.write(pFile, pBackup, tHeaders, tRows, sExpected)
         sCSV = table.concat(tQuoted, CSV_DELIMITER).."\r\n";
     end
     if (sOriginal:sub(1, 3) == "\239\187\191") then sCSV = "\239\187\191"..sCSV; end
-    local tCheck, tCheckHeaders = FTCSV.parse(sCSV, CSV_DELIMITER, {loadFromString = true,});
+    local sCheckCSV = #tHeaders == 1 and #tRows > 0 and sCSV:gsub("\r?\n$", "") or sCSV;
+    local tCheck, tCheckHeaders = FTCSV.parse(sCheckCSV, CSV_DELIMITER, {loadFromString = true,});
+    if (#tRows == 0 and #tHeaders == 1) then
+        tCheck = {};
+    end
     assert(#tCheck == #tRows and #tCheckHeaders == #tHeaders, "CSV save validation failed.");
     for nColumn, sHeader in ipairs(tHeaders) do
         assert(tCheckHeaders[nColumn] == sHeader, "CSV header order changed while saving.");
@@ -75,7 +107,33 @@ function Save.write(pFile, pBackup, tHeaders, tRows, sExpected)
         assert(bClosed, sCloseError);
         assert(readFile(pStaging) == sCSV, "Temporary CSV verification failed.");
         assert(readFile(pFile) == sOriginal, "The CSV changed during saving. Save aborted.");
-        assert(wx.wxRenameFile(pStaging, pFile, true), "Cannot replace the CSV. Your edits have been retained.");
+        if (tCodeFile) then
+            local tNames = {};
+
+            for _, sHeader in ipairs(tHeaders) do
+                if (tCodeFile.columns[sHeader]) then tNames[#tNames + 1] = sHeader; end
+            end
+
+            local sColumns = #tNames > 0 and table.concat(tNames, "\r\n").."\r\n" or "";
+
+            if (sColumns ~= tCodeFile.original) then
+                local tModel = require("Windows.Editors.Common").model({
+                    {name = "Data.csv", path = pFile, kind = "text"},
+                    {name = "CodeColumns.txt", path = tCodeFile.path, kind = "text"},
+                });
+
+                tModel.files[1].original = sOriginal;
+                tModel.files[1].text = sCSV;
+                tModel.files[2].original = tCodeFile.original;
+                tModel.files[2].text = sColumns;
+                tModel.save();
+                wx.wxRemoveFile(pStaging);
+            else
+                assert(wx.wxRenameFile(pStaging, pFile, true), "Cannot replace the CSV. Your edits have been retained.");
+            end
+        else
+            assert(wx.wxRenameFile(pStaging, pFile, true), "Cannot replace the CSV. Your edits have been retained.");
+        end
     end, debug.traceback);
     if (not bOK) then
         wx.wxRemoveFile(pStaging);

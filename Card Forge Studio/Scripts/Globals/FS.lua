@@ -1,3 +1,8 @@
+--[[!
+@fqxn CFS.Modules.FS
+@desc Validates application, game, and card-set paths and creates new games and card sets from templates.
+!]]
+
 local wx = require("wx");
 local _sOriginalPackagePath = package.path;
 --[[
@@ -13,11 +18,27 @@ local _sOriginalPackagePath = package.path;
 ╭─╴╭─╮╭┬╮╭─╴
 │╶╮├─┤│││├╴
 ╰─╯╵ ╵╵ ╵╰─╴--]]
+--[[!
+@fqxn CFS.Modules.FS.Game
+@pulsarlua table FS.Game
+@desc Read-only active Game paths populated during filesystem preparation.
+@field string Root Active Root path.
+@field string Wiki Active Wiki path.
+@field string Docs Active Docs path.
+@field string CardSets Active CardSets path.
+@field string CSVBackup Active CSVBackup path.
+@field string Exports Active Exports path.
+@field string Scripts Active Scripts path.
+@field string Symbols Active Symbols path.
+@field string CFG Active CFG path.
+@field string ENV Active ENV path.
+@field string Info Active Info path.
+@field string Styles Active Styles path.
+!]]
 local tGame     = {
     Root        = "",
     Wiki        = "",
     Docs        = "",
-    Temp        = "",
     CardSets    = "",
     --Set         = "",
     CSVBackup   = "",
@@ -27,9 +48,7 @@ local tGame     = {
     CFG         = "",
     ENV         = "",
     Info        = "",
-    Scratch     = "",
     Styles      = "",
-    RowFilters  = "",
 };
 local tGameDecoy    = {};
 local tGameMeta     = {
@@ -47,13 +66,25 @@ setmetatable(tGameDecoy, tGameMeta);
 ╭─╴╭─╮╭─╮╶┬╮╭─╮╭─╴╶┬╴
 │  ├─┤├┬╯ ││╰─╮├╴  │
 ╰─╴╵ ╵╵╰╴╶┴╯╰─╯╰─╴ ╵ --]]
+--[[!
+@fqxn CFS.Modules.FS.CardSet
+@pulsarlua table FS.CardSet
+@desc Read-only active CardSet paths populated during filesystem preparation.
+@field string Root Active Root path.
+@field string Data Active Data path.
+@field string Draw Active Draw path.
+@field string DrawBack Active DrawBack path.
+@field string Info Active Info path.
+@field string RowProc Active RowProc path.
+@field string CodeColumns Active CodeColumns path.
+!]]
 local tCardSet = {
     Root            = "",
     Data            = "",
-    DrawPath        = "",
-    DrawBackPath    = "",
+    Draw        = "",
+    DrawBack    = "",
     Info            = "",
-    RowProcPath     = "",
+    RowProc     = "",
     CodeColumns     = "",
 };
 local tCardSetDecoy    = {};
@@ -100,19 +131,17 @@ local tFS       = {
 ██║     ██║   ██║██║     ██╔══██║██║
 ███████╗╚██████╔╝╚██████╗██║  ██║███████╗
 ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝--]]
-local function BuildInfoFile(sGame) --TODO move this
-    local sRet =[[
-[SETTINGS]
-;true puts all Plugin/luaEx Dox in your API help file(increases boot time)
-IncludePlugins=false
-Name=${game}]] % {
-    game = sGame,
-};
 
-    return sRet;
-end
-
+--[[!
+@fqxn CFS.Modules.FS.Private.GetSubfolderUUIDs
+@desc Discovers valid UUID-named subfolders and returns them in sorted order.
+@param any pFolder Folder.
+@param any sCaller Caller.
+@vis private
+!]]
 local function GetSubfolderUUIDs(pFolder, sCaller)
+    if (not wx.wxDirExists(pFolder)) then return {}; end
+
     local tRet;
     local tFolders = {};
     local oFolder  = wx.wxDir(pFolder);
@@ -150,33 +179,37 @@ local function GetSubfolderUUIDs(pFolder, sCaller)
 
     return tRet;
 end
-
---assumes pFile and vFile are good  TODO warnings
-local function CheckFile(pFile, vFile)
-    assert(wx.wxFileExists(pFile), "Required game file is missing: "..pFile..". Linked game data is read-only.");
+--[[!
+@fqxn CFS.Modules.FS.Private.CheckFile
+@desc Checks that a required game file exists without writing it.
+@param any pFile p File.
+!]]
+local function CheckFile(pFile)
+    if (not wx.wxFileExists(pFile)) then error("Required game file is missing: "..pFile..". Linked game data is read-only.", 2); end
 end
 
+--[[!
+@fqxn CFS.Modules.FS.Private.CheckFolder
+@desc Checks that a required game directory exists without creating it.
+@param any pFolder p Folder.
+!]]
 local function CheckFolder(pFolder)
-    assert(wx.wxDirExists(pFolder), "Required game folder is missing: "..pFolder..". Linked game data is read-only.");
+    if (not wx.wxDirExists(pFolder)) then error("Required game folder is missing: "..pFolder..". Linked game data is read-only.", 2); end
 end
 
---validates and returns uppered
-local function ProcessUUID(sUUID, sCaller)
+--[[!
+@fqxn CFS.Modules.FS.Private.ProcessUUID
+@desc Validates and normalizes a UUID before constructing a filesystem path.
+@param any sUUID s UUID.
 
-    if (type(sUUID) ~= "string" and not sUUID:isempty()) then
-        Log.Warning(sCaller..": Error processing UUID input: UUID must be a valid UUID string.");
-        return;
+@param any sCaller s Caller.
+!]]
+local function ProcessUUID(sUUID, sCaller)
+    if (rawtype(sUUID) ~= "string" or not sUUID:isuuid()) then
+        error((sCaller or "FS")..": Expected a valid UUID string.", 2);
     end
 
     return sUUID:upper();
-end
-
-local function EnsureGameStructure()
-
-end
-
-local function EnsureCardSetStructure()
-
 end
 
 
@@ -187,68 +220,102 @@ end
 ██║   ██║██╔══██║██║╚██╔╝██║██╔══╝
 ╚██████╔╝██║  ██║██║ ╚═╝ ██║███████╗
  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝--]]
-
---Set when game is prepped
-tGame.Prep = function(oGame)
-    --reset the package path
-    package.path = _sOriginalPackagePath;
-
-    if not (type(oGame) == "Game") then
-        error("FS: Error prepping game paths. Argument 1 must be of type Game. Got "..type(oGame)..'.');
+--[[!
+@fqxn CFS.Modules.FS.Game.Create
+@pulsarlua function FS.Game.Create
+@desc Creates a new UUID game folder from bundled templates. Failed creation removes only files and directories owned by this attempt.
+@param string sUUID New game identifier.
+@param string sName Display name stored in Info.ini.
+@return string Created game directory.
+!]]
+tGame.Create = function(sUUID, sName)
+    if (rawtype(sName) ~= "string" or not sName:match("%S") or sName:find("[%c]")) then
+        error("A game name must contain visible text and no control characters.", 2);
     end
 
-    Log.Note("FS.PrepGame: Updating virtual file system.");
+    local pRoot         = tGame.GetRoot(sUUID);
+    local tCreatedDirs  = {};
+    local tCreatedFiles = {};
+    local tFiles        = {};
+    local tTemplates    = {
+        ["Scripts\\CFG.lua"] = "CFG.lua",
+        ["Scripts\\ENV.lua"] = "ENV.lua",
+        ["Styles.ini"]       = "Styles.ini",
+    };
 
-    local sGameUUID = oGame.GetUUID();
-    local pGames    = tFS.Games;
-    local pGame     = pGames.."\\"..sGameUUID;
-
-    if not (pGame == pGames.."\\"..sGameUUID and wx.wxDirExists(pGame)) then
-        error("FS: Error prepping game paths.\r\n\"${game}\" is not located in the expected directory of\r\n\"${games}.\"" % {game = pGame, games = pGames});
+    CheckFolder(tFS.AppDir);
+    if (wx.wxDirExists(pRoot) or wx.wxFileExists(pRoot)) then
+        error("The new game directory already exists: "..pRoot, 2);
     end
 
+    -- Read every template first; a missing resource must not leave a partial game.
+    for sTarget, sTemplate in pairs(tTemplates) do
+        local hFile, sError = io.open(pTemplates.."\\"..sTemplate, "rb");
+        if (not hFile) then error(sError, 2); end
 
-    --TODO USE FILESPECs WHERE POSSIBLE
+        local sContents, sReadError = hFile:read("a");
+        local bClosed, sCloseError = hFile:close();
+        if (not sContents or not bClosed) then error(sReadError or sCloseError, 2); end
 
-    --setup the game's folder
-    tGame.Wiki             = pGame.."/"..FOLDER_WIKI;
-    tGame.Root             = pGame;                                        --CheckFolder(pGame);
-    tGame.Docs             = pGame             .."\\Docs";                 CheckFolder(tGame.Docs);
-    tGame.Temp             = pGame             .."\\Temp";                 CheckFolder(tGame.Temp);
-    tGame.CardSets         = pGame             .."\\"..FOLDER_CARD_SETS;   CheckFolder(tGame.CardSets);
-    --tGame.Set              = ""; --Gets set during set loading QUESTION DOes it? How? What is this path for?
-    tGame.CSVBackup        = pGame             .."\\CSV Backup";           CheckFolder(tGame.CSVBackup);
-    --tGame.CSVExport    = pGame             .."\\CSV Export";           CheckFolder(tGame.CSVExport);
-    --NOTE: FIX This has been changed to filters
-    --tGame.UserExporters    = pGame             .."\\Exporters";            CheckFolder(tGame.UserExporters);
---        for _, sName in Exporter.CATALOGUE() do
---            local sFullName = "UserExporters"..sName;
-        --tFS.Game[sFullName] = tGame.UserExporters.."\\"..sName;              CheckFolder(tFS.Game[sFullName]);
---          end
+        tFiles[sTarget] = sContents;
+    end
 
-    tGame.Exports          = pGame             .."\\Exports";              CheckFolder(tGame.Exports);
-    tGame.Scripts          = pGame             .."\\Scripts";              CheckFolder(tGame.Scripts);
-    tGame.Symbols          = pGame             .."\\Symbols";              CheckFolder(tGame.Symbols);
-    tGame.CFG              = tGame.Scripts  .."\\CFG";                  CheckFolder(tGame.CFG);
-    tGame.ENV              = tGame.Scripts  .."\\ENV";                  CheckFolder(tGame.ENV);
+    tFiles["Info.ini"] = "[SETTINGS]\r\nIncludePlugins=false\r\nName="..sName.."\r\n";
+    local bOK, sError = xpcall(function()
+        if (not wx.wxDirExists(tFS.Games)) then
+            if (not wx.wxMkdir(tFS.Games)) then error("Cannot create Games folder: "..tFS.Games); end
+            tCreatedDirs[#tCreatedDirs + 1] = tFS.Games;
+        end
 
-    --set the game name
-    _sGame = oGame.GetName(); --TODO FINISH UPDATE THIS
+        local tFolders = {
+            "", FOLDER_CARD_SETS, "CSV Backup", "Docs", "Exports",
+            "Scripts", "Scripts\\CFG", "Scripts\\ENV", "Symbols", FOLDER_WIKI,
+        };
 
-    --setup the game's files --TODO use FILESPECS HERE
-    tGame.Info          = pGame              .."\\Info.ini";         CheckFile(tGame.Info,                          BuildInfoFile(_sGame));
-    tGame.Scratch       = tGame.Temp      .."\\Scratch.lua";      CheckFile(tGame.Scratch,                       "");
-    tGame.Styles        = pGame              .."\\Styles.ini";       CheckFile(tGame.Styles,                        pTemplates.."\\Styles.ini");
-    tGame.RowFilters    = tGame.Scripts   .."\\RowFilters.lua";   CheckFile(tGame.RowFilters,                    pTemplates.."\\RowFilters.lua");
-                                                                        CheckFile(tGame.Scripts.."\\CFG.lua",          pTemplates.."\\CFG.lua");
-                                                                        CheckFile(tGame.Scripts.."\\ENV.lua",          pTemplates.."\\ENV.lua");
+        -- Record each successful creation so cleanup cannot remove pre-existing data.
+        for _, sFolder in ipairs(tFolders) do
+            local pFolder = sFolder == "" and pRoot or pRoot.."\\"..sFolder;
+            if (not wx.wxMkdir(pFolder)) then error("Cannot create folder: "..pFolder); end
+            tCreatedDirs[#tCreatedDirs + 1] = pFolder;
+        end
 
-    --add game's scripts folder to the package path
-    package.path = _sOriginalPackagePath..";"..pGame.."\\Scripts\\?.lua";
+        for sFile, sContents in pairs(tFiles) do
+            local pFile = pRoot.."\\"..sFile;
+            local hFile, sOpenError = io.open(pFile, "wb");
+            if (not hFile) then error(sOpenError); end
+            tCreatedFiles[#tCreatedFiles + 1] = pFile;
 
-    Log.Note("FS.PrepGame: Virtual file system updated for current game.");
+            local bWritten, sWriteError = hFile:write(sContents);
+            local bClosed, sCloseError = hFile:close();
+            if (not bWritten or not bClosed) then error(sWriteError or sCloseError); end
+        end
+    end, debug.traceback);
+
+    if (not bOK) then
+        for nIndex = #tCreatedFiles, 1, -1 do
+            if (not wx.wxRemoveFile(tCreatedFiles[nIndex])) then
+                Log.Warning("Could not remove incomplete game file: "..tCreatedFiles[nIndex]);
+            end
+        end
+
+        for nIndex = #tCreatedDirs, 1, -1 do
+            if (not wx.wxRmdir(tCreatedDirs[nIndex])) then
+                Log.Warning("Could not remove incomplete game folder: "..tCreatedDirs[nIndex]);
+            end
+        end
+
+        error(sError, 2);
+    end
+
+    return pRoot;
 end
 
+--[[!
+@fqxn CFS.Modules.FS.Game.GetCardSetUUIDs
+@pulsarlua function FS.Game.GetCardSetUUIDs
+@desc Lists the card-set identifiers within a game.
+@param any vUUID v UUID.
+!]]
 tGame.GetCardSetUUIDs = function(vUUID)
     local sGameUUID = ProcessUUID(vUUID, "FS.Game.GetCardSetUUIDs");
     local tRet;
@@ -267,23 +334,81 @@ tGame.GetCardSetUUIDs = function(vUUID)
     return tRet;
 end
 
+--[[!
+@fqxn CFS.Modules.FS.Game.GetInfoINIPath
+@pulsarlua function FS.Game.GetInfoINIPath
+@desc Resolves game metadata from a validated UUID.
+@param any vUUID v UUID.
+!]]
+tGame.GetInfoINIPath = function(vUUID)
+    local sUUID = ProcessUUID(vUUID);
+    return tGame.GetRoot(sUUID).."\\Info.ini";
+end
+
+--[[!
+@fqxn CFS.Modules.FS.Game.GetRoot
+@pulsarlua function FS.Game.GetRoot
+@desc Resolves a game directory from its UUID.
+@param any vUUID v UUID.
+!]]
+tGame.GetRoot = function(vUUID)
+    local sUUID = ProcessUUID(vUUID);
+    return tFS.Games.."\\"..sUUID;
+end
+
+--[[!
+@fqxn CFS.Modules.FS.Game.GetUUIDs
+@pulsarlua function FS.Game.GetUUIDs
+@desc Lists discoverable game identifiers.
+!]]
 tGame.GetUUIDs = function()
     return GetSubfolderUUIDs(tFS.Games, "FS.Game.GetUUIDs");
 end
 
+--[[!
+@fqxn CFS.Modules.FS.Game.Prep
+@pulsarlua function FS.Game.Prep
+@desc Validates a game's required paths before publishing them. Existing game data is never repaired or written during loading.
+@param Game oGame Game to prepare.
+!]]
+tGame.Prep = function(oGame)
+    if (type(oGame) ~= "Game") then error("FS.Game.Prep requires a Game object.", 2); end
 
---for Game constructor bootstrapping
-tGame.GetInfoINIPath = function(vUUID)
-    --TODO asssertions
-    local sUUID = ProcessUUID(vUUID);
-    return FS.Game.GetRoot(sUUID.."\\Info.ini");
-end
+    local pRoot    = tGame.GetRoot(oGame.GetUUID());
+    local pScripts = pRoot.."\\Scripts";
+    local tPaths   = {
+        CardSets    = pRoot.."\\"..FOLDER_CARD_SETS,
+        CFG         = pScripts.."\\CFG",
+        CSVBackup   = pRoot.."\\CSV Backup",
+        Docs        = pRoot.."\\Docs",
+        ENV         = pScripts.."\\ENV",
+        Exports     = pRoot.."\\Exports",
+        Info        = pRoot.."\\Info.ini",
+        Root        = pRoot,
+        Scripts     = pScripts,
+        Styles      = pRoot.."\\Styles.ini",
+        Symbols     = pRoot.."\\Symbols",
+        Wiki        = pRoot.."\\"..FOLDER_WIKI,
+    };
 
---for Game constructor bootstrapping
-tGame.GetRoot = function(vUUID)
-    --TODO asssertions
-    local sUUID = ProcessUUID(vUUID);
-    return tFS.Games.."\\"..sUUID;
+    for sKey, pPath in pairs(tPaths) do
+        if (sKey == "Info" or sKey == "Styles") then
+            CheckFile(pPath);
+        elseif (sKey ~= "Wiki") then
+            CheckFolder(pPath);
+        end
+    end
+
+    CheckFile(pScripts.."\\CFG.lua");
+    CheckFile(pScripts.."\\ENV.lua");
+
+    -- Commit only validated paths, retaining the old active paths on validation failure.
+    for sKey, pPath in pairs(tPaths) do
+        tGame[sKey] = pPath;
+    end
+
+    package.path = _sOriginalPackagePath..";"..pScripts.."\\?.lua";
+    Log.Note("FS.Game.Prep: Active game paths updated.");
 end
 
 
@@ -295,8 +420,98 @@ end
 ╚██████╗██║  ██║██║  ██║██████╔╝███████║███████╗   ██║
  ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝   ╚═╝   --]]
 
-tCardSet.GetInfoINIPath = function(vGameUUID, vUUID) --TODO BUG FIX thiese paths are not correct
-    --TODO asssertions
+--[[!
+@fqxn CFS.Modules.FS.CardSet.Create
+@pulsarlua function FS.CardSet.Create
+@desc Creates a new card-set directory and its required files, removing only this attempt's files on failure.
+@param string sGameUUID Owning game identifier.
+@param string sUUID New card-set identifier.
+@param string sName Display name.
+@param number nWidth Card width in pixels.
+@param number nHeight Card height in pixels.
+@return string Created directory.
+!]]
+tCardSet.Create = function(sGameUUID, sUUID, sName, nWidth, nHeight)
+    if (rawtype(sName) ~= "string" or not sName:match("%S") or sName:find("[%c]")) then
+        error("A card-set name must contain visible text and no control characters.", 2);
+    end
+
+    for _, nDimension in ipairs({nWidth, nHeight}) do
+        if (rawtype(nDimension) ~= "number" or nDimension <= 0 or nDimension >= math.huge or nDimension ~= math.floor(nDimension)) then
+            error("Card dimensions must be positive finite integers.", 2);
+        end
+    end
+    if (nWidth == nil or nHeight == nil) then error("Both card dimensions are required.", 2); end
+
+    local pParent       = tGame.GetRoot(sGameUUID).."\\"..FOLDER_CARD_SETS;
+    local pRoot         = pParent.."\\"..ProcessUUID(sUUID, "FS.CardSet.Create");
+    local tCreatedFiles = {};
+    local bCreated      = false;
+    local sNamespace    = INIFile.GetValue(tGame.GetInfoINIPath(sGameUUID), "SETTINGS", "Name").."."..sName;
+    local sDrawing      = "--[[!\r\n@fqxn "..sNamespace..".Draw\r\n@desc Draws this card face. Add drawing calls inside the returned function.\r\n]]\r\nreturn function(sObject, D, hDC)\r\nend\r\n";
+    local sProcessor    = "--[[!\r\n@fqxn "..sNamespace..".RowProc\r\n@desc Returns a cell's processed text; the starter keeps its original value.\r\n]]\r\nreturn function(nRow, nColumn, sHeader, tRow, sText, fGetFinalValue)\r\n    return sText;\r\nend\r\n";
+    local sInfo         = "[SETTINGS]\r\nName="..sName.."\r\nCardWidth="..nWidth.."\r\nCardHeight="..nHeight.."\r\n\r\n"..
+        "[Export.PNG]\r\nType=PNG\r\nSides=fronts\r\nBacks=shared\r\nBackRow=0\r\nScalePercent=100\r\nLastExportFolder=\r\n\r\n"..
+        "[Editor.Navigation]\r\nActiveFile=1:"..FILESPEC_CARDSET_DRAW.Full.."\r\n";
+    local tFiles        = {
+        [FILESPEC_CARDSET_CODECOLUMMS.Full] = "",
+        [FILESPEC_CARDSET_DATA.Full]        = "Name\r\n",
+        [FILESPEC_CARDSET_DRAW.Full]        = sDrawing,
+        [FILESPEC_CARDSET_DRAWBACK.Full]    = sDrawing:gsub("(@fqxn [^\r\n]+)%.Draw\r\n", "%1.DrawBack\r\n"),
+        [FILESPEC_CARDSET_INFO.Full]        = sInfo,
+        [FILESPEC_CARDSET_ROWPROC.Full]     = sProcessor,
+        ["Notes.txt"]                      = "",
+    };
+
+    CheckFolder(pParent);
+    if (wx.wxDirExists(pRoot) or wx.wxFileExists(pRoot)) then
+        error("The card-set directory already exists: "..pRoot, 2);
+    end
+
+    -- Create only a fresh UUID directory; existing user files are never opened for writing.
+    local bOK, sError = xpcall(function()
+        if (not wx.wxMkdir(pRoot)) then error("Cannot create card-set folder: "..pRoot); end
+        bCreated = true;
+
+        for sFile, sContents in pairs(tFiles) do
+            local pFile = pRoot.."\\"..sFile;
+            local hFile, sOpenError = io.open(pFile, "wb");
+            if (not hFile) then error(sOpenError); end
+            tCreatedFiles[#tCreatedFiles + 1] = pFile;
+
+            local bWritten, sWriteError = hFile:write(sContents);
+            local bClosed, sCloseError = hFile:close();
+            if (not bWritten or not bClosed) then error(sWriteError or sCloseError); end
+        end
+    end, debug.traceback);
+
+    if (not bOK) then
+        for nIndex = #tCreatedFiles, 1, -1 do
+            if (not wx.wxRemoveFile(tCreatedFiles[nIndex])) then
+                Log.Warning("Could not remove incomplete card-set file: "..tCreatedFiles[nIndex]);
+            end
+        end
+
+        if (bCreated and not wx.wxRmdir(pRoot)) then
+            Log.Warning("Could not remove incomplete card-set directory: "..pRoot);
+        end
+
+        error(sError, 2);
+    end
+
+    return pRoot;
+end
+
+
+--[[!
+@fqxn CFS.Modules.FS.CardSet.GetInfoINIPath
+@pulsarlua function FS.CardSet.GetInfoINIPath
+@desc Resolves the metadata path for a validated game and card-set identifier.
+@param any vGameUUID v Game UUID.
+
+@param any vUUID v UUID.
+!]]
+tCardSet.GetInfoINIPath = function(vGameUUID, vUUID)
     local sGameUUID = ProcessUUID(vGameUUID, "FS.CardSet.GetInfoINIPath");
     local sUUID     = ProcessUUID(vUUID, "FS.CardSet.GetInfoINIPath");
     local sRet;
@@ -309,8 +524,15 @@ tCardSet.GetInfoINIPath = function(vGameUUID, vUUID) --TODO BUG FIX thiese paths
 end
 
 
+--[[!
+@fqxn CFS.Modules.FS.CardSet.GetRoot
+@pulsarlua function FS.CardSet.GetRoot
+@desc Resolves an existing card-set directory.
+@param any vGameUUID v Game UUID.
+
+@param any vUUID v UUID.
+!]]
 tCardSet.GetRoot = function(vGameUUID, vUUID)
-    --TODO asssertions
     local sGameUUID = ProcessUUID(vGameUUID, "FS.CardSet.GetRoot");
     local sUUID     = ProcessUUID(vUUID, "FS.CardSet.GetRoot");
     local sRet;
@@ -328,10 +550,20 @@ tCardSet.GetRoot = function(vGameUUID, vUUID)
     return sRet;
 end
 
-tCardSet.Prep = function(oCardSet) --TODO LEFT OFF HERE
-    --TODO validate input
-    local sUUID             = oCardSet.GetUUID()
-    local pCardSet          = tGame.Root.."\\"..FOLDER_CARD_SETS.."\\"..sUUID;
+--[[!
+@fqxn CFS.Modules.FS.CardSet.Prep
+@pulsarlua function FS.CardSet.Prep
+@desc Publishes the paths used by card processing.
+@param any oCardSet o Card Set.
+!]]
+tCardSet.Prep = function(oCardSet)
+    if (type(oCardSet) ~= "CardSet") then error("FS.CardSet.Prep requires a CardSet object.", 2); end
+
+    local sUUID    = oCardSet.GetUUID();
+    local pCardSet = tCardSet.GetRoot(oCardSet.GetGameUUID(), sUUID);
+    if (not pCardSet or pCardSet ~= tGame.Root.."\\"..FOLDER_CARD_SETS.."\\"..sUUID) then
+        error("The card set does not belong to the active game.", 2);
+    end
 
     tCardSet.Root           = pCardSet;
     tCardSet.Data           = pCardSet.."\\"..FILESPEC_CARDSET_DATA.Full;
@@ -341,7 +573,6 @@ tCardSet.Prep = function(oCardSet) --TODO LEFT OFF HERE
     tCardSet.RowProc        = pCardSet.."\\"..FILESPEC_CARDSET_ROWPROC.Full;
     tCardSet.CodeColumns    = pCardSet.."\\"..FILESPEC_CARDSET_CODECOLUMMS.Full;
 
-    --tFS.Cards               = tFS.Game.."\\"..FOLDER_CARD_SETS;   CheckFolder(tFS.Cards);
 end
 
 --[[
@@ -355,8 +586,8 @@ local tFSMeta     = {
     __index = function(t, k)
         return tFS[k];
     end,
-    __newindex = function(t, k, v) error("Atempt to write to read only FS table.") end,
-    --TODO Set __metatable = false after finding bug
+    __newindex = function(t, k, v) error("Attempt to write to read only FS table.") end,
+    __metatable = false,
 };
 
 local tFSDecoy    = {};

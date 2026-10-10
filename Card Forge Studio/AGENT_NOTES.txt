@@ -1,0 +1,26 @@
+Deferred work
+
+- Audit Docs/Templates: verify every retained template is current, trace its active uses, and identify any unused templates for review.
+- Create doxignore system
+- User-editable theme manager for editor themes and other themed components.
+- Code-editor autocomplete as you type: basic Lua and everything exposed through UserEnv.
+- More granular window-raising preferences: main-window triggers, selected window triggers, and user-defined window groups.
+- Wiki video linking and embedding. Do not implement yet.
+
+Deferred exporters: inventory every legacy script; audit and implement before exposing each target. Existing scripts are not verified working exporters.
+- Scripts/Exporters/ExporterAtlas.lua
+- Scripts/Exporters/ExporterCSV.lua
+- Scripts/Exporters/ExporterHTMLPreview.lua
+- Scripts/Exporters/ExporterHTMLStaticGallery.lua
+- Scripts/Exporters/ExporterImage.lua
+- Scripts/Exporters/ExporterImageBAK.lua (backup variant; retain for review)
+- Scripts/Exporters/ExporterJSON.lua
+- Scripts/Exporters/ExporterLua.lua
+- Scripts/Exporters/ExporterPDFSheets.lua
+- Scripts/Exporters/ExporterPlayingCardsIO.lua
+- Scripts/Exporters/ExporterPrintAndPlay.lua
+- Scripts/Exporters/ExporterScreentop.lua
+- Scripts/Exporters/ExporterTableTopSimulator.lua
+- Scripts/Exporters/ExporterTabletopPlayground.lua
+- Scripts/Exporters/ExporterUnityPackage.lua
+- Scripts/Exporters/ExporterZip.lua

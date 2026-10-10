@@ -1,7 +1,19 @@
+--[[!
+@fqxn CFS.Modules.Globals.ImportSystem
+@desc Validates game-relative source paths and executes imports in the user environment.
+!]]
+
 local wx           = require("wx");
 local sImportError = "Error importing file: ";
 
 -- Sanitizes a relative import path and resolves it to a Windows path.
+--[[!
+@fqxn CFS.Modules.Globals.ImportSystem.Private.SanitizePath
+@desc Normalizes a relative Windows import path and rejects absolute paths, traversal, invalid characters, and reserved leaf names.
+@param any sRelPath Rel path.
+@param any vMessage Message.
+@vis private
+!]]
 local function SanitizePath(sRelPath, vMessage)
     local sMessage = rawtype(vMessage) == "string" and vMessage or "";
 
@@ -70,6 +82,13 @@ local function SanitizePath(sRelPath, vMessage)
 end
 
 --TODO make this throw an error so the user knows what's happening when a file doesn't exists or fails
+--[[!
+@fqxn CFS.Modules.Globals.ImportSystem.Private.Import
+@desc Loads a validated game-relative Lua file into the user environment; returns chunk results or nil and its runtime error.
+@param any sPathRaw Path raw.
+@param any vMessage Message.
+@vis private
+!]]
 local function Import(sPathRaw, vMessage)
     local sMessage = rawtype(vMessage) == "string" and vMessage or "";
     local sPath = SanitizePath(sPathRaw, sMessage);
