@@ -1,6 +1,16 @@
 --[[!
 @fqxn CFS.Windows.Log
-@desc Native log message-card window providing Copy All and per-entry copying; disk records, in-memory entries, and native-window notifications.
+@desc
+<section aria-label="Windows.Log overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Windows.Log</h2><p style="font-size:1.15rem;margin:0">The log window displays recorded messages as readable cards.</p></div>
+<h3>How it fits into your work</h3><p>Inspect messages, copy a single entry, or copy the whole log for diagnosis.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.Log">Log</a></h3><p style="margin:0">Logging records Studio activity and preserves useful context when something goes wrong.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Errors">Errors</a></h3><p style="margin:0">Error reporting gives services a shared way to record failures without opening modal windows.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">The window is the presentation layer. The logging service owns recorded messages and disk output.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Native message-card window; the Log service owns messages and disk operations.
@@ -19,7 +29,7 @@ local _dFrame, _oCards, _oWindowState;
 local _tLevelColours = {DEBUG = "#576575", NOTE = "#285a86", WARNING = "#805300", ERROR = "#a02525"};
 
 --[[!
-@fqxn CFS.Windows.Log.Private.copyText
+@fqxn CFS.Windows.Log.Private.Functions.copyText
 @desc Copies plain text to the native clipboard and reports failure without leaving the clipboard open.
 @param string sText Text to copy.
 !]]
@@ -43,7 +53,7 @@ end
 
 
 --[[!
-@fqxn CFS.Windows.Log.Private.entryText
+@fqxn CFS.Windows.Log.Private.Functions.entryText
 @desc Formats a log entry as plain text, retaining its level, timestamp and multiline message.
 @param table tEntry Log entry.
 @return string Copyable entry text.
@@ -54,7 +64,7 @@ end
 
 
 --[[!
-@fqxn CFS.Windows.Log.Private.escapeHTML
+@fqxn CFS.Windows.Log.Private.Functions.escapeHTML
 @desc Escapes log text for HTML cards and converts line breaks to HTML breaks.
 @param any sText Text.
 @vis private
@@ -64,7 +74,7 @@ local function escapeHTML(sText)
 end
 
 --[[!
-@fqxn CFS.Windows.Log.Private.refreshCards
+@fqxn CFS.Windows.Log.Private.Functions.refreshCards
 @desc Rebuilds the log-card HTML from current in-memory entries.
 @vis private
 !]]
@@ -97,7 +107,7 @@ local function refreshCards()
 end
 
 --[[!
-@fqxn CFS.Windows.Log.Private.ensureWindow
+@fqxn CFS.Windows.Log.Private.Functions.ensureWindow
 @desc Creates the native log frame and controls once and binds persistent window state.
 @vis private
 !]]
@@ -168,7 +178,7 @@ local function ensureWindow()
 end
 
 --[[!
-@fqxn CFS.Windows.Log.Show
+@fqxn CFS.Windows.Log.Functions.Show
 @pulsarlua function Window.Show
 @desc Creates the log window if needed, then shows and raises it.
 !]]
@@ -179,7 +189,7 @@ function Window.Show()
 end
 
 --[[!
-@fqxn CFS.Windows.Log.IsShown
+@fqxn CFS.Windows.Log.Functions.IsShown
 @pulsarlua function Window.IsShown
 @desc Reports whether the log frame exists and is visible.
 !]]
@@ -188,7 +198,7 @@ function Window.IsShown()
 end
 
 --[[!
-@fqxn CFS.Windows.Log.Close
+@fqxn CFS.Windows.Log.Functions.Close
 @pulsarlua function Window.Close
 @desc Saves window state, destroys the log frame, and clears its native references.
 !]]

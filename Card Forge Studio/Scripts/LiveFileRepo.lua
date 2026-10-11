@@ -5,7 +5,7 @@ local dTimerOwner = wx.wxEvtHandler();
 local GlobalTimer = {};
 
 --[[!
-@fqxn CFS.Classes.LiveFileRepo.Private.GlobalTimer_Start
+@fqxn CFS.Classes.LiveFileRepo.Private.Functions.GlobalTimer_Start
 @desc Replaces any timer with the same ID, binds its callback to a native event handler, and starts periodic monitoring.
 @param any nInterval Interval.
 @param any nID Id.
@@ -25,7 +25,7 @@ function GlobalTimer.Start(nInterval, nID, fCallback)
 end
 
 --[[!
-@fqxn CFS.Classes.LiveFileRepo.Private.GlobalTimer_Stop
+@fqxn CFS.Classes.LiveFileRepo.Private.Functions.GlobalTimer_Stop
 @desc Stops and deletes a registered native timer and disconnects its event callback.
 @param any nID Id.
 @vis private
@@ -41,7 +41,7 @@ function GlobalTimer.Stop(nID)
 end
 
 --[[!
-@fqxn CFS.Classes.LiveFileRepo.Private.ReadToString
+@fqxn CFS.Classes.LiveFileRepo.Private.Functions.ReadToString
 @desc Reads a normalized file path in binary mode and checks read and close success.
 @param any pFile File.
 @vis private
@@ -50,8 +50,10 @@ local function ReadToString(pFile)
     local hFile = assert(io.open(io.normalizepath(pFile), "rb"));
     local sText, sError = hFile:read("a");
     local bClosed, sCloseError = hFile:close();
+
     assert(sText, sError);
     assert(bClosed, sCloseError);
+
     return sText;
 end
 
@@ -65,7 +67,7 @@ for nByte = 0, 255 do
 end
 
 --[[!
-@fqxn CFS.Classes.LiveFileRepo.Private.GetCRC
+@fqxn CFS.Classes.LiveFileRepo.Private.Functions.GetCRC
 @desc Computes a CRC-32 checksum over the file text.
 @param any sText Text.
 @vis private
@@ -98,7 +100,7 @@ local _nNextTimerID = LIVECODE_TIMER_ID_MIN - 1;
 
 ----------------------------------------------------
 --[[!
-@fqxn CFS.Classes.LiveFileRepo.Private.sink
+@fqxn CFS.Classes.LiveFileRepo.Private.Functions.sink
 @desc Provides a no-operation callback for files without a change handler.
 @vis private
 !]]
@@ -109,7 +111,23 @@ local function sink() end
 --[[!
     @fqxn CFS.Classes.LiveFileRepo
     @pulsarlua table LiveFileRepo
-    @desc Monitors registered files with native timers, maintains read-only file views, and invokes callbacks when file text changes.
+    @desc
+<section aria-label="Live File Repository overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Live File Repository</h2><p style="font-size:1.15rem;margin:0">This watcher notices edits to the files Studio is following.</p></div>
+<h3>How it fits into your work</h3><p>ProcSys registers the active project's files. Native timers check their contents and report changes to callbacks for later processing.</p>
+<figure style="margin:1.5rem 0"><figcaption style="font-weight:700;margin-bottom:.8rem">The big picture</figcaption><div role="img" aria-label="Changed file then Watcher callback then Queued processing then Updated preview" style="display:flex;flex-wrap:wrap;align-items:center;gap:.7rem"><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Changed file</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Watcher callback</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Queued processing</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Updated preview</span></div></figure>
+<h3>Follow the handoffs</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">What a watcher actually watches</h3><p style="margin:0">A watcher remembers a registered file and a fingerprint of its contents. Timer checks compare the current contents with that remembered state. When a change is detected, the registered callback tells the owning system about it. The watcher does not interpret a drawing script or save card data.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">How changes reach the rest of Studio</h3><p style="margin:0">ProcSys uses these notifications to queue work. Its timer handles the affected processing stages in sequence, so a changed file can lead to refreshed data or artwork through the appropriate owner. Registration and starting the watcher are separate steps; merely having a file on disk does not make it watched.</p></article>
+</div>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.Game">Game</a></h3><p style="margin:0">A game is the home for a whole project: its name, shared settings, and collection of card sets.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Forge">Forge</a></h3><p style="margin:0">Forge is the visual workbench that turns selected card data and drawing instructions into artwork.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Watching a file does not save it or interpret its meaning. The callback consumer decides what to reload or redraw.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 return class("LiveFileRepo",
     {--METAMETHODS
@@ -134,7 +152,7 @@ return class("LiveFileRepo",
         LiveFilesByTimerID  = {}, --indexed by timer id
 
         --[[!
-        @fqxn CFS.Classes.LiveFileRepo.Private.OnTimer
+        @fqxn CFS.Classes.LiveFileRepo.Private.Functions.OnTimer
         @desc Reads a watched file, updates text and CRC on change, invokes its callback, and retains read or callback errors on the file record.
         @param any nID Id.
         @vis private

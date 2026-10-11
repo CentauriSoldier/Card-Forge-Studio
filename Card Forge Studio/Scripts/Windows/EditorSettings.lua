@@ -1,6 +1,18 @@
 --[[!
 @fqxn CFS.Windows.EditorSettings
-@desc Shared code-editor preferences, palettes, controls, and save-time whitespace policies.
+@desc
+<section aria-label="EditorSettings overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">EditorSettings</h2><p style="font-size:1.15rem;margin:0">Shared settings keep the code editors consistent across projects.</p></div>
+<h3>How it fits into your work</h3><p>Editors use the same palettes, controls, and save-time whitespace rules.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.EditorOptions">EditorOptions</a></h3><p style="margin:0">Editor Options lets you tailor the editing experience where you work.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.GameEditor">GameEditor</a></h3><p style="margin:0">Game Editor organizes the shared scripts used throughout a game.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.CardSetEditor">CardSetEditor</a></h3><p style="margin:0">Card Set Editor brings the active set's scripts and notes together.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.CodeEditor">CodeEditor</a></h3><p style="margin:0">Code Editor is a focused editor for a code cell's stored script.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Editor appearance and whitespace policies are separate from card text styles.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Shared preferences and registered editor controls. Manual changes notify all editors.
@@ -38,7 +50,7 @@ _tThemes[#_tThemes + 1] = {name = "Tokyo Night Storm", marginBackground = "#292E
 _tThemes[#_tThemes + 1] = {name = "Tokyo Night Moon", marginBackground = "#2F334D", marginForeground = "#C8D3F5", foldBackground = "#2F334D", foldForeground = "#828BB8", colors = {"#222436", "#C8D3F5", "#828BB8", "#C099FF", "#FF966C", "#C3E88D", "#FF966C", "#86E1FC", "#C8D3F5", "#2F334D", "#828BB8", "#2F334D",},};
 
 --[[!
-@fqxn CFS.Windows.EditorSettings.themes
+@fqxn CFS.Windows.EditorSettings.Functions.themes
 @pulsarlua function EditorSettings.themes
 @desc Returns the registered editor palettes, including token, gutter, and folding colors.
 !]]
@@ -47,6 +59,20 @@ function EditorSettings.themes()
 end
 
 local _tDefinitions = {
+    autocompleteUseEditorFontSize = {setting = "AutocompleteUseEditorFontSize", default = true},
+    referenceUseEditorFontSize = {setting = "ReferenceUseEditorFontSize", default = true},
+    referenceListFontSize = {setting = "ReferenceListFontSize", default = 11, min = 8, max = 24},
+    referenceDescriptionFontSize = {setting = "ReferenceDescriptionFontSize", default = 11, min = 8, max = 24},
+    autocompleteUseEditorTheme = {setting = "AutocompleteUseEditorTheme", default = true},
+    suggestionBackground = {setting = "SuggestionBackground", default = 1973806, min = 0, max = 16777215},
+    suggestionText = {setting = "SuggestionText", default = 15263984, min = 0, max = 16777215},
+    suggestionFontSize = {setting = "SuggestionFontSize", default = 11, min = 8, max = 24},
+    documentationBackground = {setting = "DocumentationBackground", default = 16448245, min = 0, max = 16777215},
+    documentationText = {setting = "DocumentationText", default = 1644830, min = 0, max = 16777215},
+    documentationFontSize = {setting = "DocumentationFontSize", default = 11, min = 8, max = 24},
+    autocompleteEnabled = {setting = "AutocompleteEnabled", default = true},
+    autocompleteHelp = {setting = "AutocompleteHelp", default = true},
+    autocompleteCharacters = {setting = "AutocompleteCharacters", default = 2, min = 1, max = 10},
     trimTrailing = {setting = "TrimTrailingWhitespace", default = false},
     finalNewline = {setting = "FinalNewline", default = false},
     autoClose = {setting = "AutoClose", default = false},
@@ -69,7 +95,7 @@ local _tDefinitions = {
 local _tCurrent;
 local _tEditors = {};
 --[[!
-@fqxn CFS.Windows.EditorSettings.Private.current
+@fqxn CFS.Windows.EditorSettings.Private.Functions.current
 @desc Loads validated editor preferences once, using built-in defaults for missing or unsupported values.
 @vis private
 !]]
@@ -98,7 +124,7 @@ local function current()
     return _tCurrent;
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.get
+@fqxn CFS.Windows.EditorSettings.Functions.get
 @pulsarlua function EditorSettings.get
 @desc Returns a copy of current editor preferences.
 !]]
@@ -108,7 +134,7 @@ function EditorSettings.get()
     return tCopy;
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.sizes
+@fqxn CFS.Windows.EditorSettings.Functions.sizes
 @pulsarlua function EditorSettings.sizes
 @desc Returns a copy of supported editor font sizes.
 !]]
@@ -118,7 +144,7 @@ function EditorSettings.sizes()
     return tCopy;
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.Private.matchBrackets
+@fqxn CFS.Windows.EditorSettings.Private.Functions.matchBrackets
 @desc Highlights a matched or unmatched bracket at or immediately before the caret.
 @vis private
 @param any oCode Code.
@@ -140,7 +166,7 @@ local function matchBrackets(oCode)
     return nBrace, nMatch;
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.apply
+@fqxn CFS.Windows.EditorSettings.Functions.apply
 @pulsarlua function EditorSettings.apply
 @desc Applies current font, palette, margins, indentation, wrapping, and visibility preferences to an editor control.
 @param any oCode Code.
@@ -198,7 +224,7 @@ function EditorSettings.apply(oCode)
         oCode:Refresh();
     end
 --[[!
-@fqxn CFS.Windows.EditorSettings.register
+@fqxn CFS.Windows.EditorSettings.Functions.register
 @pulsarlua function EditorSettings.register
 @desc Registers controls for shared preference updates and returns an unregister callback.
 @param any dWindow Window.
@@ -210,7 +236,7 @@ function EditorSettings.register(dWindow, tControls, fUpdated)
     local tEntry = {window = dWindow, controls = tControls, update = fUpdated};
     _tEditors[tEntry] = true;
     --[[!
-    @fqxn CFS.Windows.EditorSettings.Private.update
+    @fqxn CFS.Windows.EditorSettings.Private.Functions.update
     @desc Applies current settings to registered controls and invokes the optional toolbar update callback.
     @vis private
     !]]
@@ -222,7 +248,7 @@ function EditorSettings.register(dWindow, tControls, fUpdated)
     update();
     local bRegistered = true;
     --[[!
-    @fqxn CFS.Windows.EditorSettings.Private.unregister
+    @fqxn CFS.Windows.EditorSettings.Private.Functions.unregister
     @desc Removes this editor registration so destroyed controls stop receiving updates.
     @vis private
     !]]
@@ -237,7 +263,7 @@ function EditorSettings.register(dWindow, tControls, fUpdated)
     return unregister;
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.setMany
+@fqxn CFS.Windows.EditorSettings.Functions.setMany
 @pulsarlua function EditorSettings.setMany
 @desc Validates all requested preferences before persisting them and refreshing registered editors.
 @param any tValues Requested setting values.
@@ -274,7 +300,7 @@ function EditorSettings.setMany(tValues)
     for tEntry in pairs(_tEditors) do tEntry.refresh(); end
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.set
+@fqxn CFS.Windows.EditorSettings.Functions.set
 @pulsarlua function EditorSettings.set
 @desc Updates one preference through the validated batch setter.
 @param any sKey Setting or field key.
@@ -284,7 +310,7 @@ function EditorSettings.set(sKey, vValue)
     EditorSettings.setMany({[sKey] = vValue});
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.bar
+@fqxn CFS.Windows.EditorSettings.Functions.bar
 @pulsarlua function EditorSettings.bar
 @desc Builds the theme, font-size, and Options toolbar; returns its controls and unregister callback.
 @param any dParent Parent window.
@@ -302,7 +328,7 @@ function EditorSettings.bar(dParent, tControls)
         oSize:SetStringSelection(tostring(tState.size));
     end);
     --[[!
-    @fqxn CFS.Windows.EditorSettings.Private.set
+    @fqxn CFS.Windows.EditorSettings.Private.Functions.set
     @desc Applies a toolbar preference change and reports any failure.
     @vis private
     @param any sKey Setting or field key.
@@ -324,11 +350,17 @@ function EditorSettings.bar(dParent, tControls)
         local bOK, sError = pcall(function() require("Windows.EditorOptions").show(dParent); end);
         if (not bOK) then require("Errors").report(sError); end
     end);
-    oBar:Add(oOptions, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT, 12);
+    local oReference = wx.wxButton(dParent, wx.wxID_ANY, "Reference...");
+    oReference:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function()
+        local bOK, sError = pcall(function() require("Windows.EnvironmentReference").show(dParent); end);
+        if (not bOK) then require("Errors").report(sError); end
+    end);
+    oBar:Add(oReference, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT, 8);
+    oBar:Add(oOptions, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT, 8);
     return oBar, oTheme, oSize, unregister;
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.prepareSave
+@fqxn CFS.Windows.EditorSettings.Functions.prepareSave
 @pulsarlua function EditorSettings.prepareSave
 @desc Applies configured trailing-whitespace trimming and final-newline insertion to text.
 @param any sText Text content.
@@ -344,7 +376,7 @@ function EditorSettings.prepareSave(sText)
     return sText;
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.cleanControl
+@fqxn CFS.Windows.EditorSettings.Functions.cleanControl
 @pulsarlua function EditorSettings.cleanControl
 @desc Cleans source whitespace as one undo action and returns the resulting editor text.
 @param any oCode Code.
@@ -373,7 +405,7 @@ function EditorSettings.cleanControl(oCode)
     return oCode:GetText();
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.configure
+@fqxn CFS.Windows.EditorSettings.Functions.configure
 @pulsarlua function EditorSettings.configure
 @desc Configures language lexing, folding, bracket matching, auto-close, auto-indent, and shared preferences.
 @param any oCode Code.
@@ -428,7 +460,7 @@ function EditorSettings.configure(oCode, sKind)
     EditorSettings.apply(oCode);
 end
 --[[!
-@fqxn CFS.Windows.EditorSettings.count
+@fqxn CFS.Windows.EditorSettings.Functions.count
 @pulsarlua function EditorSettings.count
 @desc Counts active editor registrations.
 !]]

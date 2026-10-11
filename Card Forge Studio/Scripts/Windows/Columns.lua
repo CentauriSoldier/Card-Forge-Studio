@@ -1,6 +1,19 @@
 --[[!
 @fqxn CFS.Windows.Columns
-@desc Column-management dialog with save-before-open and save/reload-after-change behavior.
+@desc
+<section aria-label="Columns overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Columns</h2><p style="font-size:1.15rem;margin:0">Column Management changes the source table structure with a focused interface.</p></div>
+<h3>How it fits into your work</h3><p>Save outstanding changes before opening, then add, rename, or delete supported columns. Closing with changes saves them and reloads the set.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.DataGrid">Data Grid</a></h3><p style="margin:0">The common grid supplies table controls for both data windows.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys.Save">Card Data Saving</a></h3><p style="margin:0">The save service protects the connection between edited card data and disk files.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys.CSV">Card Data Processing</a></h3><p style="margin:0">The CSV processor connects entered values with the values used to draw a card.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Name remains required. Failed saves keep the dialog open. Closing unchanged does not trigger an unnecessary reload.</p></aside>
+<h3>After renaming a column</h3><p>The table and its code-column definitions stay aligned, but references inside your own scripts are not automatically rewritten. If a drawing or processing script uses the old header name, update that reference too.</p>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 local wx      = require("wx");
@@ -8,7 +21,7 @@ local Columns = {};
 
 
 --[[!
-@fqxn CFS.Windows.Columns.Show
+@fqxn CFS.Windows.Columns.Functions.Show
 @pulsarlua function Columns.Show
 @desc Manages source headers. Existing drafts must be saved first; closing saves structural changes, and failures leave the dialog open.
 @param wxWindow dParent Parent window.
@@ -59,7 +72,7 @@ function Columns.Show(dParent, tSession)
 
 
     --[[!
-    @fqxn CFS.Windows.Columns.Private.close
+    @fqxn CFS.Windows.Columns.Private.Functions.close
     @desc Saves and reloads the set only after structural changes; failed saves keep the dialog open.
     @vis private
     !]]
@@ -75,7 +88,7 @@ function Columns.Show(dParent, tSession)
 
 
     --[[!
-    @fqxn CFS.Windows.Columns.Private.refresh
+    @fqxn CFS.Windows.Columns.Private.Functions.refresh
     @desc Repopulates column headers and updates available column actions.
     @vis private
     !]]
@@ -91,7 +104,7 @@ function Columns.Show(dParent, tSession)
 
 
     --[[!
-    @fqxn CFS.Windows.Columns.Private.run
+    @fqxn CFS.Windows.Columns.Private.Functions.run
     @desc Executes a column-management action and reports failures without dismissing the dialog.
     @param any fAction Action.
     @vis private

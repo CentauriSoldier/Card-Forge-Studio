@@ -1,6 +1,19 @@
 --[[!
 @fqxn CFS.Classes.CardSet
-@desc Card-set metadata class with UUID ownership, creation, dimension access, and metadata refresh.
+@desc
+<section aria-label="Card Set overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Card Set</h2><p style="font-size:1.15rem;margin:0">A card set brings together one collection of cards, its dimensions, and the files that describe how those cards look and behave.</p></div>
+<h3>How it fits into your work</h3><p>Create or load a set inside the active game. Edit its source rows, compare the processed results, and use drawing scripts to turn the values into artwork.</p>
+<figure style="margin:1.5rem 0"><figcaption style="font-weight:700;margin-bottom:.8rem">The big picture</figcaption><div role="img" aria-label="Source rows then Row processing then Final values then Drawing instructions" style="display:flex;flex-wrap:wrap;align-items:center;gap:.7rem"><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Source rows</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Row processing</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Final values</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Drawing instructions</span></div></figure>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.Game">Game</a></h3><p style="margin:0">The parent game identifies which project owns the set.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.FS">File System</a></h3><p style="margin:0">FS supplies set paths and creates its starter files.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys uses the set metadata and paths to load source rows, processing scripts, and drawing callbacks.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.CardSetEditor">CardSetEditor</a></h3><p style="margin:0">The editor provides separate tabs for the set’s scripts, code columns, and Notes.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">The metadata object is separate from the loaded working data. New sets have empty drawing callbacks until you give them drawing instructions.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 local class     = class;
@@ -41,21 +54,21 @@ return class("CardSet",
         @desc Returns the stored GameUUID value through the generated public accessor.
         @return any Stored GameUUID value.
         !]]
-GameUUID__AUTOR_        = null,
+        GameUUID__AUTOR_        = null,
                 --[[!
         @fqxn CFS.Classes.CardSet.Methods.GetName
         @pulsarlua function CardSet.GetName
         @desc Returns the stored Name value through the generated public accessor.
         @return any Stored Name value.
         !]]
-Name__AUTOA_            = '',
+        Name__AUTOA_            = '',
                 --[[!
         @fqxn CFS.Classes.CardSet.Methods.GetUUID
         @pulsarlua function CardSet.GetUUID
         @desc Returns the stored UUID value through the generated public accessor.
         @return any Stored UUID value.
         !]]
-UUID__AUTOR_            = null,
+        UUID__AUTOR_            = null,
     },
     {--PROTECTED
 

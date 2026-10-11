@@ -3,6 +3,71 @@
 ---
 
 <details open>
+<summary><strong>Alpha 0.3 — 2026-10-10</strong></summary>
+
+### Added
+
+- Atlas export with shared sheet generation, Generic format 1 and LÖVE 11.5 targets, explicit target-version labels, and documented version-specific target functions.
+- CSV, JSON, and Lua exports of finalized card data, preserving text values and source column order.
+- One interactive HTML exporter with 20 selectable themes, search, filtering, enlarged card viewing, front/back switching, and embedded card data.
+- ZIP export with selectable card artwork, finalized CSV/JSON/Lua data, and the same themed HTML gallery.
+- Shared export selection and format-specific options, remembered per card set across PNG, Atlas, CSV, JSON, Lua, HTML, and ZIP.
+- Game and standalone card-set packages using .cfsg and .cfscs extensions, ZIP contents, and a shared import/export format version with an explicit compatibility list.
+- Staged package validation, Lua syntax checks without script execution, template repairs for missing required files, logged skipped invalid rows or card sets, overwrite confirmation, and replacement backups.
+- Standalone card-set packages carrying their own assets and source-game dependencies for import into another game without replacing that game's setup.
+- Shared FS-owned required-file manifests used by project creation, validation, and import repairs.
+- Separate Import/Export sections in the Game and Card Set menus; imports install projects without activating them and reject matching active IDs.
+- Close Game and Close Card Set actions at the bottom of their menus, with separators, active-state cleanup, preview/tool/file-watcher cleanup, logging, and unsaved-change cancellation.
+- Util.BuildAPIDocs and a development-only Help command, with start/completion logging and build failures reported to the Log window with tracebacks.
+- Development-only release ZIP building through Util, editable root-file/folder/exclusion tables, required runtime files, launcher-source exclusion, packaged development mode disabled, and a remembered destination folder.
+- Native License window displaying the root license text beneath a third-party licensing explanation; the license is included in release packages.
+- Help Feedback command opening GitHub Issues for bugs and feature requests.
+- Game documentation rebuilding with per-game saved page and code-highlighting themes, optional Card Forge Studio API/plugin inclusion defaulting to off, and a bordered Docs options section with live palette previews.
+- Native Tutorials window with separate Basic and Advanced lists, numbered steps across the top, larger instructional text, and adjacent Previous/Next navigation.
+- Three basic tutorials with 13 steps and 12 advanced tutorials with 51 steps, practical examples, editable topic/step ordering, and screenshot slots using Missing.png until images are supplied.
+- Dynamic autocomplete in Lua source editors and code-column editors, covering available built-ins, constants, namespaces, nested configuration, game-defined helpers, processing globals, styles, and active card-set column headers.
+- Generated per-game autocomplete.lua snapshots containing completion names and types rather than card values; required-file repair creates missing caches for older games.
+- Cache updates following environment/configuration changes and card-set/header changes, atomic writes, unchanged-content detection, and completion documentation from existing API comments.
+- Automatic suggestions while typing with a configurable character threshold, highlighted-item documentation, and global enable/disable switches for autocomplete and its help panel.
+- Live searchable Environment Reference window beside editor Options, with variable names, types, documentation, and updates as the current environment changes.
+- Categorized global Editor Options with independent theme-color, suggestion/help font-size, and reference font-size inheritance switches, all enabled by default; retained custom colors and four independent font-size controls.
+- Five visible autocomplete suggestion rows with a scrollable result list and a larger documentation area sized to its content within available editor space.
+- Environment Reference size/position persistence and a live-resizing draggable divider with a globally remembered position.
+- User-environment assert, error, pcall, and xpcall helpers; Exists now checks sanitized resource-relative paths through FS.
+- UserEnv.Refresh restores built-ins and clears previous-game entries on game load while retaining user control of overrides during environment reloads.
+
+### Changed
+
+- Expanded system documentation to explain responsibilities, inputs, and connections in plain language; FS now explains its virtual path map, relative paths, validation, and safer file access.
+- Added missing category/system landing pages, standardized Functions/Constants/Namespaces/Private organization, and grouped individual exporters beneath Exporter → Exporters.
+- Clarified that private UserEnv entries are internal API reference material, unavailable to game scripts.
+- Updated the documentation landing page with framed existing artwork and removed redundant headings and the intro-card label.
+- Moved API documentation generation out of application startup into the manual development-only command.
+- Consolidated HTML Static Gallery and HTML Preview into HTML with built-in interaction and selectable themes.
+- Moved seven deferred print, tabletop, and Unity-package exporters into Exporters/Planned; these targets remain unavailable.
+- Organized Game tools beneath New/Load/Browse, moved Wiki, Style Editor, Mechanics Viewer, Docs, and Rebuild Docs into Game, and separated maintenance actions.
+- Removed the File Export placeholder, renamed Edit CSV to Open CSV, and added a separator above License.
+- Replaced obsolete browser tutorials with ordered Lua topic files under Scripts/Tutorial and tutorial-image slots under Images/Tutorial.
+- Style export now offers resolved values without inheritance, the complete recursive inheritance chain, or Cancel; style import validates into the editor draft and asks before replacing matching names.
+- Removed unavailable legacy drawing exports/constants/color helpers and unused Card, ProcSys, and Session environment namespaces; retained active RGB/RGBA and internal environment-key trackers.
+- Deferred export cancellation, recent games, and a Show export folder action.
+
+### Fixed
+
+- Exporter changes clearing the drawing row, styles, and numeric-conversion markers during metadata refresh, causing processing and renderer errors.
+- Export options and repeat-export controls remaining usable during an active export; both grids now disable them and restore availability afterward.
+- Rebuild Docs calling an uninitialized global; the menu now loads the builder directly and stays unavailable until a game is loaded.
+- Broken or cyclic style-inheritance chains being accepted during export/import validation.
+- Missing completion data on first game load and stale row/header suggestions after environment changes.
+- Autocomplete immediately disappearing because focus checks compared different Lua wrappers for the same native editor control.
+- Long environment names expanding the reference list until its description pane became unreadably narrow.
+- Stale Refresh references and missing internal tracking declarations after removal of unused environment namespaces.
+
+</details>
+
+---
+
+
 <summary><strong>Alpha 0.2 — 2026-10-09</strong></summary>
 
 ### Added

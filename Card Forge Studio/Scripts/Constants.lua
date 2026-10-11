@@ -1,6 +1,17 @@
 --[[!
 @fqxn CFS.Constants
-@desc Application constants and read-only filename specifications used by Studio services.
+@desc
+<section aria-label="Constants overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Constants</h2><p style="font-size:1.15rem;margin:0">Shared constants let Studio services agree on names, paths, and processing choices.</p></div>
+<h3>How it fits into your work</h3><p>Services read common specifications when finding project files, setting up timers, and interpreting data.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Globals">Globals</a></h3><p style="margin:0">Globals connects the application services during startup.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.FS">File System</a></h3><p style="margin:0">FS is Studio's map of where project files belong.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Some values support retained archived code. Individual entries identify those uses rather than presenting every constant as a current user setting.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 --[[!
@@ -9,12 +20,6 @@
 @desc Enables development-only startup behavior. Documentation generation also requires BUILD_DOX.
 !]]
 constant("DEV_MODE", true);
---[[!
-@fqxn CFS.Constants.BUILD_DOX
-@pulsarlua boolean BUILD_DOX
-@desc Requests startup HTML and Pulsar documentation generation when DEV_MODE is also enabled.
-!]]
-constant("BUILD_DOX", true);
 
 -- Protected globals supplied by the launcher before any application script runs:
 -- APP_PATH: Absolute folder containing Card Forge Studio.exe, resolved by the launcher.
@@ -65,7 +70,7 @@ constant("_Docs",         pRoot.."/CFS Archive/Docs");
 
 local nTimerID = 99;
 --[[!
-@fqxn CFS.Modules.Constants.Private.GetNextTimerID
+@fqxn CFS.Modules.Constants.Private.Functions.GetNextTimerID
 @desc Allocates the next application timer identifier from the file-local counter.
 @vis private
 !]]
@@ -263,7 +268,7 @@ constant("DOX_EXPORT_FILENAME",     "API Documentation");
 
 
 --[[!
-@fqxn CFS.Modules.Constants.Private.BuildFileSpecTable
+@fqxn CFS.Modules.Constants.Private.Functions.BuildFileSpecTable
 @desc Builds a read-only file specification with basename, extension aliases, and complete filename.
 @vis private
 @param any sName Name.

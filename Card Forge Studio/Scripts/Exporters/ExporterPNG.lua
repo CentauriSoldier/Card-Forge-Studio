@@ -1,6 +1,22 @@
 --[[!
-@fqxn CFS.Modules.ExporterPNG
-@desc PNG options, percentage limits, face planning, remembered destinations, and rendering adapter.
+@fqxn CFS.Modules.Exporter.Exporters.ExporterPNG
+@desc
+<section aria-label="PNG Export overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">PNG Export</h2><p style="font-size:1.15rem;margin:0">PNG export turns your finished card artwork into individual image files.</p></div>
+<h3>How it fits into your work</h3><p>Choose the faces, percentage scale, destination, and export scope. The exporter plans the images and asks Forge to render them through the shared export coordinator.</p>
+<h3>Follow the handoffs</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">From cards to image files</h3><p style="margin:0">The PNG exporter plans the images needed for the selected cards, including the configured front and back behavior. It uses Forge to render the artwork at the requested size. The export coordinator handles the destination and staged file handoff; this format-specific component supplies the PNG work.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">Preview settings and output settings</h3><p style="margin:0">Export size changes the rendered image dimensions. Card-canvas preview colors are viewing aids and do not become the exported card background. Output naming and destination choices belong to the export workflow, while the drawing scripts determine the artwork itself. A collision or rendering error is a reason to stop the export, not silently replace an existing image.</p></article>
+</div>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Exporter">Exporter</a></h3><p style="margin:0">The export coordinator turns a planned batch into finished output files.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Forge">Forge</a></h3><p style="margin:0">Forge is the visual workbench that turns selected card data and drawing instructions into artwork.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.ExportOptions">ExportOptions</a></h3><p style="margin:0">Export Options describes how the active set becomes PNG images.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.DataGrid">Data Grid</a></h3><p style="margin:0">The common grid supplies table controls for both data windows.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Options belong to the card set. The first destination defaults to the game's Exports folder; a saved destination takes precedence.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual functions, inputs, and results.</p>
+</section>
 !]]
 
 -- PNG export settings, output planning, and rendering adapter.
@@ -25,7 +41,7 @@ local tKeys = {
     directory = "LastExportFolder",
 };
 --[[!
-@fqxn CFS.Modules.ExporterPNG.load
+@fqxn CFS.Modules.Exporter.Exporters.ExporterPNG.Functions.load
 @pulsarlua function ExporterPNG.load
 @desc Reads this card set's PNG options and normalizes missing or invalid values.
 @param string pInfo Card-set metadata INI path.
@@ -47,7 +63,7 @@ function ExporterPNG.load(pInfo)
     return tResult;
 end
 --[[!
-@fqxn CFS.Modules.ExporterPNG.model
+@fqxn CFS.Modules.Exporter.Exporters.ExporterPNG.Functions.model
 @pulsarlua function ExporterPNG.model
 @desc Creates a transactional PNG settings model which preserves unrelated INI metadata.
 @param string pInfo Card-set metadata INI path.
@@ -57,7 +73,7 @@ function ExporterPNG.model(pInfo)
     local tModel = Common.model({{path = pInfo, name = "Card-set export options", kind = "ini"}});
     local tValues = ExporterPNG.load(pInfo);
     --[[!
-    @fqxn CFS.Modules.ExporterPNG.model.saveOptions
+    @fqxn CFS.Modules.Exporter.Exporters.ExporterPNG.Functions.model.saveOptions
     @desc Validates PNG options and saves only their INI section, retaining metadata and the remembered export folder.
     @param table tNew PNG options to persist.
     @note Rejects external file changes and uses staged replacement with rollback.
@@ -75,7 +91,7 @@ function ExporterPNG.model(pInfo)
         local tLines, tSeen, bSection, bFound = {}, {}, false, false;
         -- Complete only this exporter section; preserve metadata and other format sections.
         --[[!
-        @fqxn CFS.Modules.Exporters.ExporterPNG.Private.missing
+        @fqxn CFS.Modules.Exporter.Exporters.ExporterPNG.Private.Functions.missing
         @desc Appends absent PNG export-setting keys to the current metadata section.
         @vis private
         !]]
@@ -114,7 +130,7 @@ function ExporterPNG.model(pInfo)
     return tModel;
 end
 --[[!
-@fqxn CFS.Modules.ExporterPNG.dimensions
+@fqxn CFS.Modules.Exporter.Exporters.ExporterPNG.Functions.dimensions
 @pulsarlua function ExporterPNG.dimensions
 @desc Calculates scaled raster dimensions and enforces the percentage and pixel limits.
 @param number nWidth Native card width.
@@ -131,7 +147,7 @@ function ExporterPNG.dimensions(nWidth, nHeight, nPercent)
     return nOutputWidth, nOutputHeight;
 end
 --[[!
-@fqxn CFS.Modules.ExporterPNG.plan
+@fqxn CFS.Modules.Exporter.Exporters.ExporterPNG.Functions.plan
 @pulsarlua function ExporterPNG.plan
 @desc Builds ordered PNG filenames for selected fronts and shared or individual backs.
 @param table tRows Source row identifiers.
@@ -144,7 +160,7 @@ function ExporterPNG.plan(tRows, tOptions, tNames, nTotal)
     assert(#tRows > 0, "No cards to export.");
     local tPlan, tSeen = {}, {};
     --[[!
-    @fqxn CFS.Modules.Exporters.ExporterPNG.Private.add
+    @fqxn CFS.Modules.Exporter.Exporters.ExporterPNG.Private.Functions.add
     @desc Validates a source row and appends its requested face to the PNG output plan.
     @param any nRow Row.
     @param any sFace Face.
@@ -167,7 +183,7 @@ function ExporterPNG.plan(tRows, tOptions, tNames, nTotal)
     return tPlan;
 end
 --[[!
-@fqxn CFS.Modules.ExporterPNG.render
+@fqxn CFS.Modules.Exporter.Exporters.ExporterPNG.Functions.render
 @pulsarlua function ExporterPNG.render
 @desc Renders one card face as a PNG using Forge's isolated export drawing context.
 @param string sFace Front or back.
@@ -180,7 +196,7 @@ function ExporterPNG.render(sFace, pFile, nPercent)
 end
 
 --[[!
-@fqxn CFS.Modules.ExporterPNG.run
+@fqxn CFS.Modules.Exporter.Exporters.ExporterPNG.Functions.run
 @pulsarlua function ExporterPNG.run
 @desc Adapts PNG row and face records to the generic service's staged export job.
 @param string pDirectory Destination folder.

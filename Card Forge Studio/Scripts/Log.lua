@@ -1,6 +1,21 @@
 --[[!
 @fqxn CFS.Classes.Log
-@desc Static logging service providing disk records, in-memory entries, and native-window notifications.
+@desc
+<section aria-label="Log overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Log</h2><p style="font-size:1.15rem;margin:0">Logging records Studio activity and preserves useful context when something goes wrong.</p></div>
+<h3>How it fits into your work</h3><p>Messages are retained in memory and written to disk. The log window presents readable cards with individual and whole-log copying.</p>
+<h3>Follow the handoffs</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">A record you can return to</h3><p style="margin:0">The log keeps records for inspection and provides them to the Log window. Instead of relying on a message that disappears, you can review what was reported and copy a record or the visible log when investigating a problem.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">Reporting is different from recovery</h3><p style="margin:0">The Errors service can route a failure into logging, and the window presents that information. Recording a failure does not undo an edit or retry a save. The operation that failed still decides whether to stop, preserve a draft, or offer another attempt.</p></article>
+</div>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.Log">Log</a></h3><p style="margin:0">The log window displays recorded messages as readable cards.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Errors">Errors</a></h3><p style="margin:0">Error reporting gives services a shared way to record failures without opening modal windows.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">The service records messages and the window displays them. Copying a message does not alter the disk log.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Ported from the archived Log class. The service owns disk and memory;
@@ -13,7 +28,7 @@ local _tListeners   = {};
 local _sSpacer      = "\r\n\r\n";
 
 --[[!
-@fqxn CFS.Classes.Log.Private.DateTime
+@fqxn CFS.Classes.Log.Private.Functions.DateTime
 @desc Formats the current local date and time for log records.
 @vis private
 !]]
@@ -22,7 +37,7 @@ local function DateTime()
 end
 
 --[[!
-@fqxn CFS.Classes.Log.Private.Notify
+@fqxn CFS.Classes.Log.Private.Functions.Notify
 @desc Notifies subscribers that the in-memory log entries changed.
 @vis private
 !]]
@@ -33,7 +48,7 @@ local function Notify()
 end
 
 --[[!
-@fqxn CFS.Classes.Log.Private.LogIt
+@fqxn CFS.Classes.Log.Private.Functions.LogIt
 @desc Appends formatted text to the disk log, stores an in-memory entry, and notifies listeners. The skip-write argument is retained but disk writing is unconditional.
 @param any vMessage Message.
 @param any vLevel Level.
@@ -182,7 +197,7 @@ return class("Log",
     },
     {--PRIVATE
         --[[!
-        @fqxn CFS.Classes.Log.Private.Log
+        @fqxn CFS.Classes.Log.Private.Functions.Log
         @desc Private class constructor; the logging service exposes static operations.
         @vis private
         !]]

@@ -1,6 +1,18 @@
 --[[!
 @fqxn CFS.Windows.Editors.Common
-@desc Source-file draft validation and transactional saving shared by game and card-set editors.
+@desc
+<section aria-label="Editors.Common overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Editors.Common</h2><p style="font-size:1.15rem;margin:0">The shared editor helper supplies consistent drafts and save protections.</p></div>
+<h3>How it fits into your work</h3><p>Game and card-set editors gather drafts, validate them, and stage writes with external-edit checks.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.GameEditor">GameEditor</a></h3><p style="margin:0">Game Editor organizes the shared scripts used throughout a game.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.CardSetEditor">CardSetEditor</a></h3><p style="margin:0">Card Set Editor brings the active set's scripts and notes together.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.EditorSettings">EditorSettings</a></h3><p style="margin:0">Shared settings keep the code editors consistent across projects.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Documentation">Documentation</a></h3><p style="margin:0">This helper keeps generated documentation names aligned when a game or card set is renamed.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">The common helper handles files; individual editors decide which files and controls to present.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Shared source draft, saving, and editor controls for the two source windows.
@@ -11,7 +23,7 @@ local WindowState = require("Windows.WindowState");
 local Common = {};
 
 --[[!
-@fqxn CFS.Windows.Editors.Common.Private.read
+@fqxn CFS.Windows.Editors.Common.Private.Functions.read
 @desc Reads the complete source file in binary mode and checks read and close success.
 @vis private
 @param any pFile File path.
@@ -23,7 +35,7 @@ local function read(pFile)
     return sText;
 end
 --[[!
-@fqxn CFS.Windows.Editors.Common.Private.temporary
+@fqxn CFS.Windows.Editors.Common.Private.Functions.temporary
 @desc Creates and closes a temporary file beside the target for staged source changes.
 @vis private
 @param any pFile File path.
@@ -38,7 +50,7 @@ local function temporary(pFile, sSuffix)
     return pTemp;
 end
 --[[!
-@fqxn CFS.Windows.Editors.Common.model
+@fqxn CFS.Windows.Editors.Common.Functions.model
 @pulsarlua function Common.model
 @desc Loads source records into an in-memory draft model with syntax checks and transactional saves.
 @param any tFiles Source-file records.
@@ -126,7 +138,7 @@ function Common.model(tFiles)
     return tModel;
 end
 --[[!
-@fqxn CFS.Windows.Editors.Common.create
+@fqxn CFS.Windows.Editors.Common.Functions.create
 @pulsarlua function Common.create
 @desc Creates a source editor with shared preferences, file tabs, validation, protected saving, and optional persistent navigation.
 @param any dParent Parent window.
@@ -164,7 +176,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
     local oTimer = wx.wxTimer(dFrame, wx.wxNewId());
     local bClosed = false;
     --[[!
-    @fqxn CFS.Windows.Editors.Common.Private.pull
+    @fqxn CFS.Windows.Editors.Common.Private.Functions.pull
     @desc Copies text from instantiated editor controls into their source drafts.
     @vis private
     !]]
@@ -172,7 +184,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
         for nIndex, oCode in pairs(tFileEditors) do tModel.files[nIndex].text = oCode:GetText(); end
     end
     --[[!
-    @fqxn CFS.Windows.Editors.Common.Private.refresh
+    @fqxn CFS.Windows.Editors.Common.Private.Functions.refresh
     @desc Synchronizes drafts, syntax status, dirty tab labels, Save enablement, and the frame title.
     @vis private
     !]]
@@ -192,7 +204,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
         return bValid;
     end
     --[[!
-    @fqxn CFS.Windows.Editors.Common.Private.protect
+    @fqxn CFS.Windows.Editors.Common.Private.Functions.protect
     @desc Wraps an editor action so failures are logged and displayed in the status area.
     @vis private
     @param any fAction Action.
@@ -208,7 +220,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
         end;
     end
     --[[!
-    @fqxn CFS.Windows.Editors.Common.Private.createCode
+    @fqxn CFS.Windows.Editors.Common.Private.Functions.createCode
     @desc Creates an editor for one draft and connects delayed validation after text changes.
     @vis private
     @param any nIndex Index.
@@ -218,6 +230,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
         local tFile = tModel.files[nIndex];
         local oCode = wxstc.wxStyledTextCtrl(dParent, wx.wxID_ANY);
         EditorSettings.configure(oCode, tFile.kind);
+        if (tFile.kind == "lua") then require("Autocomplete").Attach(oCode, (tFile.path or ""):find("RowProc", 1, true) ~= nil); end
         oCode:SetText(tFile.text); oCode:EmptyUndoBuffer();
         oCode:Connect(wxstc.wxEVT_STC_CHANGE, function() oTimer:StartOnce(250); end);
         tEditors[#tEditors + 1] = oCode; tFileEditors[nIndex] = oCode;
@@ -232,7 +245,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
     local oBar, oTheme, oFontSize, unregister = EditorSettings.bar(dPanel, tEditors);
     oLayout:Add(oBar, 0, wx.wxEXPAND + wx.wxALL, 8);
     --[[!
-    @fqxn CFS.Windows.Editors.Common.Private.ensurePage
+    @fqxn CFS.Windows.Editors.Common.Private.Functions.ensurePage
     @desc Activates the selected group, lazily creates its editor, and updates group indicators and editor visibility.
     @vis private
     @param any oBook Book.
@@ -268,7 +281,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
             oBook:SetMinSize(wx.wxSize(-1, nHeight)); oBook:SetMaxSize(wx.wxSize(-1, nHeight));
             oBook:Connect(wxaui.wxEVT_COMMAND_AUINOTEBOOK_PAGE_CHANGED, protect(function(oEvent) ensurePage(oBook); oEvent:Skip(); end));
             --[[!
-            @fqxn CFS.Windows.Editors.Common.Private.activate
+            @fqxn CFS.Windows.Editors.Common.Private.Functions.activate
             @desc Activates the clicked source group and propagates the mouse event.
             @vis private
             @param any oEvent Event.
@@ -300,7 +313,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
         end
     end
     --[[!
-    @fqxn CFS.Windows.Editors.Common.Private.openFile
+    @fqxn CFS.Windows.Editors.Common.Private.Functions.openFile
     @desc Selects an open file or creates a missing file without overwriting, then appends and activates its tab.
     @vis private
     @param any tFile File.
@@ -337,7 +350,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
     local oFrameLayout = wx.wxBoxSizer(wx.wxVERTICAL);
     oFrameLayout:Add(dPanel, 1, wx.wxEXPAND); dFrame:SetSizer(oFrameLayout);
     --[[!
-    @fqxn CFS.Windows.Editors.Common.Private.save
+    @fqxn CFS.Windows.Editors.Common.Private.Functions.save
     @desc Pulls drafts, applies save-time preferences, saves the source transaction, and refreshes dirty indicators.
     @vis private
     !]]
@@ -350,7 +363,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
         Log.Note(tOptions.savedMessage or "Card-set source saved. Live file monitoring will apply the changes.");
     end
     --[[!
-    @fqxn CFS.Windows.Editors.Common.Private.allowClose
+    @fqxn CFS.Windows.Editors.Common.Private.Functions.allowClose
     @desc Asks whether unsaved drafts should be saved, discarded, or kept open.
     @vis private
     !]]
@@ -380,7 +393,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
                 local sNewline = sText:find("\r\n", 1, true) and "\r\n" or "\n";
                 local tLines, bSection, bWritten = {}, false, false;
                 --[[!
-                @fqxn CFS.Windows.Editors.Common.Private.append
+                @fqxn CFS.Windows.Editors.Common.Private.Functions.append
                 @desc Adds the active-file key to the navigation INI section once.
                 @vis private
                 !]]
@@ -418,13 +431,13 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
     refresh(); dFrame:Show(true); dFrame:Layout();
     return {frame = dFrame, book = dBook, books = tBooks, barIndicators = tBarIndicators, newButtons = tNewButtons, openFile = openFile, editors = tEditors, fileEditors = tFileEditors, editingArea = dEditingArea, model = tModel, theme = oTheme, fontSize = oFontSize, refresh = refresh, save = save,
         --[[!
-        @fqxn CFS.Windows.Editors.Common.Private.close
+        @fqxn CFS.Windows.Editors.Common.Private.Functions.close
         @desc Closes through unsaved-draft protection; returns immediately if already closed.
         @vis private
         !]]
         close = function() if (bClosed) then return true; end return dFrame:Close(); end,
         --[[!
-        @fqxn CFS.Windows.Editors.Common.Private.show
+        @fqxn CFS.Windows.Editors.Common.Private.Functions.show
         @desc Shows and raises the source editor frame.
         @vis private
         !]]

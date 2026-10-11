@@ -1,6 +1,20 @@
 --[[!
 @fqxn CFS.Classes.Game
-@desc Game discovery, creation, activation, and card-set metadata access.
+@desc
+<section aria-label="Game overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Game</h2><p style="font-size:1.15rem;margin:0">A game is the home for a whole project: its name, shared settings, and collection of card sets.</p></div>
+<h3>How it fits into your work</h3><p>Choose a game, then one of its card sets. Creating a project prepares its files; activation selects it for work. Game keeps project identity separate from the cards you are editing.</p>
+<figure style="margin:1.5rem 0"><figcaption style="font-weight:700;margin-bottom:.8rem">The big picture</figcaption><div role="img" aria-label="Discover a game then Activate the project then Choose a card set then Load and preview" style="display:flex;flex-wrap:wrap;align-items:center;gap:.7rem"><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Discover a game</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Activate the project</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Choose a card set</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Load and preview</span></div></figure>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.FS">File System</a></h3><p style="margin:0">Game asks FS to discover project folders, create starter files, and validate paths before activation.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.CardSet">Card Set</a></h3><p style="margin:0">Game discovers and caches the card sets owned by its project. Choosing one is the next step after game activation.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">Activation asks ProcSys to prepare the new game and release the previous card preview. Loading a set happens separately.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.GameEditor">GameEditor</a></h3><p style="margin:0">The editor changes the shared Environment and Config files that belong to the game.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Activation does not load a card set or automatically rebuild game documentation. ProcSys handles the working data after a set is chosen.</p></aside>
+<h3>A game’s lifecycle</h3><ol><li><strong>Discover:</strong> Studio scans game folders and reads usable metadata for the chooser.</li><li><strong>Create:</strong> a new game receives its starter folders and files, then returns as an object ready for the caller to activate.</li><li><strong>Activate:</strong> paths are prepared, card sets are discovered, and the previous set’s processing state is cleared.</li><li><strong>Work:</strong> choose a card set to load its data and scripts. Game remains the project owner while the other services do the editing and rendering.</li></ol><p>Think of Game as the project binder: it knows which collection belongs where. It does not need to do the work of the spreadsheet, drawing desk, or export service.</p>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 local _tGames       = {}; --keys are uuids, values are {Game = GameObject, Name = NameString}
@@ -9,7 +23,7 @@ local _oActiveGame  = false;
 -- CardSet is imported when discovery is requested.
 
 --[[!
-@fqxn CFS.Classes.Game.Private.SortByName
+@fqxn CFS.Classes.Game.Private.Functions.SortByName
 @desc Compares game or card-set objects by display name.
 @param any oItemA o Item A.
 
@@ -20,7 +34,7 @@ local function SortByName(oItemA, oItemB)
 end
 
 --[[!
-@fqxn CFS.Classes.Game.Private.UpdateCardSets
+@fqxn CFS.Classes.Game.Private.Functions.UpdateCardSets
 @desc Rebuilds card-set discovery for this game.
 !]]
 local function UpdateCardSets(this, cdat)
@@ -83,6 +97,19 @@ return class("Game",
             _oActiveGame = oGame;
 
             Log.Note("Game.Activate: Game loaded.");
+        end,
+
+
+        --[[!
+        @fqxn CFS.Classes.Game.Methods.Deactivate
+        @pulsarlua function Game.Deactivate
+        @desc Closes active processing and filesystem state without removing the game from discovery or deleting its files.
+        !]]
+        Deactivate = function()
+            ProcSys.CloseGame();
+            FS.Game.Clear();
+            _oActiveGame = false;
+            Log.Note("Game closed: no active game.");
         end,
 
 

@@ -1,6 +1,24 @@
 --[[!
 @fqxn CFS.Modules.ProcSys
-@desc Coordinates live files, game environments, CSV processing, rendering, selection, saving, and exports.
+@desc
+<section aria-label="Processing System overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Processing System</h2><p style="font-size:1.15rem;margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></div>
+<h3>How it fits into your work</h3><p>Loading a set reads the CSV and scripts, prepares the environment, processes rows, and connects drawing callbacks. Later file changes are queued and applied by the processing timer.</p>
+<figure style="margin:1.5rem 0"><figcaption style="font-weight:700;margin-bottom:.8rem">The big picture</figcaption><div role="img" aria-label="Project files then User environment then Processed rows then Selected card then Forge preview" style="display:flex;flex-wrap:wrap;align-items:center;gap:.7rem"><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Project files</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">User environment</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Processed rows</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Selected card</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Forge preview</span></div></figure>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.Game">Game</a></h3><p style="margin:0">Game activation selects the project and clears the previous card-set state.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.CardSet">Card Set</a></h3><p style="margin:0">The selected set supplies metadata and the file locations for loading.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.UserEnv">User Environment</a></h3><p style="margin:0">ProcSys loads shared Config and Environment values before evaluating set scripts.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys.CSV">Card Data Processing</a></h3><p style="margin:0">The CSV processor evaluates code cells and row instructions to create final values.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.LiveFileRepo">Live File Repository</a></h3><p style="margin:0">The watcher reports file edits; ProcSys queues and applies the resulting reloads.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.DataSession">Shared Data Session</a></h3><p style="margin:0">The shared session connects source and final values to both grids.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Forge">Forge</a></h3><p style="margin:0">ProcSys supplies drawing callbacks and the selected processed row, then requests redraws.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys.Save">Card Data Saving</a></h3><p style="margin:0">The saving service handles source rows and code-column definitions with conflict checks.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Base Data is the source and Final Data is its processed result. A watcher notification is not itself an immediate redraw.</p></aside>
+<h3>What happens after an edit?</h3><p>Changing a source value and saving a drawing script are different events, but both need to reach the same preview. ProcSys keeps that handoff orderly: it identifies the changed input, updates the affected processing or drawing instructions, and asks Forge to display the selected card again.</p><p>The two grids are views of one working set. Their selection remains tied to the original source card even when the visible rows are sorted or filtered.</p>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Module.
@@ -34,7 +52,7 @@ local _tLiveChanges = {};
 
 
 --[[!
-@fqxn CFS.Modules.ProcSys.Private.captureWatchFiles
+@fqxn CFS.Modules.ProcSys.Private.Functions.captureWatchFiles
 @desc Rebuilds the active game and card-set watch list and starts its LiveFileRepo timers.
 @note Watcher callbacks queue changes by category; OnTimer applies those changes separately.
 !]]
@@ -44,7 +62,7 @@ local function captureWatchFiles()
     _tLiveChanges = {};
 
     local tFiles = {
-        [FS.Game.Styles] = "Styles",
+        [(FS.GetResourceRoot().."/Styles.ini")] = "Styles",
     };
 
     if (_oActiveCardSet) then
@@ -62,7 +80,7 @@ local function captureWatchFiles()
 
     -- Include Lua scripts recursively so edits to ENV and CFG helpers trigger a reload.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.scripts
+    @fqxn CFS.Modules.ProcSys.Private.Functions.scripts
     @desc Collects Lua source records from a native directory.
     @param any pFolder Folder.
     @vis private
@@ -88,7 +106,7 @@ local function captureWatchFiles()
         oFolder:delete();
     end
 
-    scripts(FS.Game.Scripts);
+    scripts((FS.GetResourceRoot().."/Scripts"));
 
     -- File timers only queue changes; the application timer performs the actual update.
     local nID = 0;
@@ -107,7 +125,7 @@ end
 
 
 --[[!
-@fqxn CFS.Modules.ProcSys.Private.readFile
+@fqxn CFS.Modules.ProcSys.Private.Functions.readFile
 @desc Reads a source file as bytes and checks both reading and closing errors.
 @param string pFile Source path.
 @return string sText Complete file contents.
@@ -125,7 +143,7 @@ end
 
 
 --[[!
-@fqxn CFS.Modules.ProcSys.BindSession
+@fqxn CFS.Modules.ProcSys.Functions.BindSession
 @pulsarlua function ProcSys.BindSession
 @desc Connects grid editing, selection, saving, and export callbacks to the active processing state.
 @param table tSession Data session whose options receive callbacks.
@@ -142,7 +160,7 @@ function ProcSys.BindSession(tSession)
 
     -- Expose card names, metadata path, and dimensions to export controls.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.tSession_options_exportContext
+    @fqxn CFS.Modules.ProcSys.Private.Functions.tSession_options_exportContext
     @desc Returns the active card-set export metadata and card names, or nil when no set is loaded.
     @vis private
     !]]
@@ -160,6 +178,8 @@ function ProcSys.BindSession(tSession)
         return {
             info   = FS.CardSet.Info,
             names  = tNames,
+            headers = _tData.headers,
+            final   = _tData.final,
             width  = _oActiveCardSet.GetCardWidth(),
             height = _oActiveCardSet.GetCardHeight()
         };
@@ -168,7 +188,7 @@ function ProcSys.BindSession(tSession)
 
     -- Broadcast the latest status to every subscribed grid window.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.exportStatus
+    @fqxn CFS.Modules.ProcSys.Private.Functions.exportStatus
     @desc Publishes the current export status to registered listeners.
     @param any sText Text.
     @vis private
@@ -185,7 +205,7 @@ function ProcSys.BindSession(tSession)
 
     -- Apply an edit to the processed model and refresh the selected card data.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.tSession_options_onEdit
+    @fqxn CFS.Modules.ProcSys.Private.Functions.tSession_options_onEdit
     @desc Processes one edited source cell and refreshes the selected render row when needed.
     @param any nRow Row.
     @param any sHeader Header.
@@ -205,7 +225,7 @@ function ProcSys.BindSession(tSession)
 
     -- Export the requested source rows and restore the previously selected card, including on failure.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.tSession_options_onExport
+    @fqxn CFS.Modules.ProcSys.Private.Functions.tSession_options_onExport
     @desc Builds and executes the selected format's export plan with progress updates.
     @param any tRows Rows.
     @param any pDirectory Directory.
@@ -215,40 +235,47 @@ function ProcSys.BindSession(tSession)
     tSession.options.onExport = function(tRows, pDirectory, tSettings)
         assert(_tData and _oActiveCardSet, "No card set is loaded.");
         assert(not tSession.editing, "Finish editing before exporting.");
+        assert(not tSession.exporting, "An export is already running.");
 
         local service   = require("Exporter").get(tSettings.type);
         local tContext  = tSession.options.exportContext();
         local nRestore  = _nSelectedRow;
 
-        exportStatus("Preparing PNG export...");
+        -- Shared busy state blocks both grids; cleanup runs after every export outcome.
+        tSession.exporting = true;
         local bOK, nCount = xpcall(function()
-            local tPlan = service.plan(tRows, tSettings, tContext.names, #_tData.final);
+            tSession.refresh();
+            exportStatus("Preparing "..tSettings.type.." export...");
+            local tPlan = service.plan(tRows, tSettings, tContext.names, #_tData.final, tContext.width, tContext.height, tContext);
 
             return service.run(pDirectory, tPlan, function(nRow, sFace, pFile)
                 _tData.select(nRow);
                 service.render(sFace, pFile, tSettings.scale or 100);
             end, function(sPhase, nDone, nTotal, tFile)
-                local sCard         = tFile and (" | Row "..tFile.row.." - "..tContext.names[tFile.row].." | "..tFile.face) or "";
+                local sCard         = tFile and tFile.row and (" | Row "..tFile.row.." - "..tContext.names[tFile.row].." | "..tFile.face) or "";
                 local nCompleted    = sPhase == "Writing" and (nTotal + nDone) or nDone;
                 local nPercent      = math.floor(100 * nCompleted / (2 * nTotal));
 
-                exportStatus(sPhase.." PNG images: "..nDone.." / "..nTotal.." | "..nPercent.."%"..sCard);
+                exportStatus(sPhase.." "..tSettings.type.." output files: "..nDone.." / "..nTotal.." | "..nPercent.."%"..sCard);
             end);
         end, debug.traceback);
 
-        if (nRestore) then
-            _tData.select(nRestore);
-        end
+        local bRestored, sRestoreError = pcall(function()
+            if (nRestore) then _tData.select(nRestore); end
+        end);
+        tSession.exporting = false;
+        tSession.refresh();
+        if (bOK and not bRestored) then bOK, nCount = false, sRestoreError; end
 
         if (not bOK) then
 
-            exportStatus("PNG export failed. See Log for details.");
+            exportStatus(tSettings.type.." export failed. See Log for details.");
             error(nCount, 0);
 
         end
 
-        exportStatus("Export complete: "..nCount.." PNG images.");
-        Log.Note("PNG export completed: "..nCount.." images.");
+        exportStatus("Export complete: "..nCount.." "..tSettings.type.." output files.");
+        Log.Note(tSettings.type.." export completed: "..nCount.." output files.");
 
         return nCount;
     end
@@ -256,7 +283,7 @@ function ProcSys.BindSession(tSession)
 
     -- Reprocess one source row and update its displayed final values.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.tSession_options_onReprocess
+    @fqxn CFS.Modules.ProcSys.Private.Functions.tSession_options_onReprocess
     @desc Reprocesses a source row and returns updated final values.
     @param any nRow Row.
     @vis private
@@ -278,7 +305,7 @@ function ProcSys.BindSession(tSession)
 
     -- Save CSV with conflict protection and backup support; retain the new file baseline.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.tSession_options_onSave
+    @fqxn CFS.Modules.ProcSys.Private.Functions.tSession_options_onSave
     @desc Saves base CSV rows and code-column definitions and updates the saved-source snapshot.
     @param any tRows Rows.
     @vis private
@@ -295,7 +322,7 @@ function ProcSys.BindSession(tSession)
 
     -- Keep the renderer's active row in sync with grid selection.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.tSession_options_onSelection
+    @fqxn CFS.Modules.ProcSys.Private.Functions.tSession_options_onSelection
     @desc Updates the selected source row and drawing environment when selection changes.
     @param any nRow Row.
     @vis private
@@ -310,7 +337,7 @@ function ProcSys.BindSession(tSession)
 
     -- Reload saved structural changes and restore a valid card selection.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.tSession_options_onReloadStructure
+    @fqxn CFS.Modules.ProcSys.Private.Functions.tSession_options_onReloadStructure
     @desc Reloads the active set after structural changes and restores a valid previous row selection.
     @vis private
     !]]
@@ -327,7 +354,7 @@ function ProcSys.BindSession(tSession)
 
     -- Build and process candidate rows; failure never replaces the active model.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.tSession_options_onStructure
+    @fqxn CFS.Modules.ProcSys.Private.Functions.tSession_options_onStructure
     @desc Builds and processes draft card or column changes before committing the resulting structure.
     @param any sAction Action.
     @param any vHeader Header.
@@ -445,6 +472,7 @@ function ProcSys.BindSession(tSession)
         local tCandidate = _tData.rebuild(tHeaders, tBase, tCodes);
 
         _tData = tCandidate;
+        require("Autocomplete").SetHeaders(tCandidate.headers);
         _nSelectedRow = nil;
 
         return tCandidate;
@@ -453,7 +481,7 @@ function ProcSys.BindSession(tSession)
 
     -- Register a status listener and return its unsubscribe function.
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.tSession_options_subscribeExportStatus
+    @fqxn CFS.Modules.ProcSys.Private.Functions.tSession_options_subscribeExportStatus
     @desc Registers an export-status listener, immediately publishes current status, and returns an unsubscribe callback.
     @param any fListener Listener.
     @vis private
@@ -473,7 +501,7 @@ end
 
 
 --[[!
-@fqxn CFS.Modules.ProcSys.GetActiveCardSet
+@fqxn CFS.Modules.ProcSys.Functions.GetActiveCardSet
 @pulsarlua function ProcSys.GetActiveCardSet
 @desc Returns the currently loaded card set.
 @return CardSet|boolean oCardSet Active card set, or false when none is loaded.
@@ -484,7 +512,7 @@ end
 
 
 --[[!
-@fqxn CFS.Modules.ProcSys.GetActiveGame
+@fqxn CFS.Modules.ProcSys.Functions.GetActiveGame
 @pulsarlua function ProcSys.GetActiveGame
 @desc Returns the currently prepared game.
 @return Game|boolean oGame Active game, or false when none is prepared.
@@ -495,7 +523,7 @@ end
 
 
 --[[!
-@fqxn CFS.Modules.ProcSys.LoadCardSet
+@fqxn CFS.Modules.ProcSys.Functions.LoadCardSet
 @pulsarlua function ProcSys.LoadCardSet
 @desc Loads game scripts, row processing, CSV data, and drawing functions, then rebuilds file monitoring.
 @param CardSet oCardSet Card set to activate.
@@ -513,7 +541,7 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
     Import = ImportSystem.Import;
 
     FontStyle = FontStyle or require("FontStyle");
-    FontStyle.UpdateINI(FS.Game.Styles);
+    FontStyle.UpdateINI((FS.GetResourceRoot().."/Styles.ini"));
 
     Forge = Forge or require("Forge");
 
@@ -529,7 +557,7 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
     }, true);
 
     --[[!
-    @fqxn CFS.Modules.ProcSys.Private.runFile
+    @fqxn CFS.Modules.ProcSys.Private.Functions.runFile
     @desc Loads and executes a game or card-set Lua source file in the user environment.
     @param any pFile File.
     @vis private
@@ -538,12 +566,12 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
         return assert(load(readFile(pFile), "@"..pFile, "t", UserEnv.Get()))();
     end
 
-    local tCFG = runFile(FS.Game.Scripts.."/"..FILESPEC_GAME_CFG.Full);
+    local tCFG = runFile((FS.GetResourceRoot().."/Scripts").."/"..FILESPEC_GAME_CFG.Full);
 
     assert(rawtype(tCFG) == "table", "CFG must return a table.");
     UserEnv.UserUpdateCFG(tCFG);
 
-    local tENV = runFile(FS.Game.Scripts.."/"..FILESPEC_GAME_ENV.Full);
+    local tENV = runFile((FS.GetResourceRoot().."/Scripts").."/"..FILESPEC_GAME_ENV.Full);
 
     assert(rawtype(tENV) == "table", "ENV must return a table.");
     UserEnv.UserUpdateENV(tENV);
@@ -606,17 +634,22 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
         tData.select(_nSelectedRow);
     end
 
+    require("Autocomplete").SetHeaders(tHeaders);
+    require("Autocomplete").Flush();
     return tData;
 end
 
 
 --[[!
-@fqxn CFS.Modules.ProcSys.OnTimer
+@fqxn CFS.Modules.ProcSys.Functions.OnTimer
 @pulsarlua function ProcSys.OnTimer
 @desc Applies queued file changes to the active data, user environment, metadata, and Forge renderer.
 @note Skips processing while busy or editing. External CSV reload follows the session policy; errors are logged and the busy flag is cleared.
 !]]
 function ProcSys.OnTimer()
+    if (not _bLiveBusy and not (_tSession and (_tSession.editing or _tSession.exporting))) then
+        require("Autocomplete").Flush();
+    end
     if (_bLiveBusy or (_tSession and _tSession.editing) or next(_tLiveChanges) == nil) then
         return;
     end
@@ -627,7 +660,7 @@ function ProcSys.OnTimer()
     local bOK, sError = xpcall(function()
         -- Evaluate the selected script in UserEnv and use its returned value.
         --[[!
-        @fqxn CFS.Modules.ProcSys.Private.runFile2
+        @fqxn CFS.Modules.ProcSys.Private.Functions.runFile2
         @desc Loads and executes a game or card-set Lua source file in the user environment.
         @param any pFile File.
         @vis private
@@ -674,7 +707,7 @@ function ProcSys.OnTimer()
                 _sCardSetName = _oActiveCardSet.GetName(),
                 _nCardWidth   = _oActiveCardSet.GetCardWidth(),
                 _nCardHeight  = _oActiveCardSet.GetCardHeight(),
-            }, true);
+            });
 
             Forge.SetActiveCardSet(_oActiveCardSet);
 
@@ -687,7 +720,7 @@ function ProcSys.OnTimer()
 
         if (tChanged.Styles and FontStyle) then
 
-            FontStyle.UpdateINI(FS.Game.Styles);
+            FontStyle.UpdateINI((FS.GetResourceRoot().."/Styles.ini"));
 
         end
 
@@ -697,12 +730,12 @@ function ProcSys.OnTimer()
 
         -- Reload CFG before ENV, using the same private user environment as card scripts.
         if (tChanged.Environment) then
-            local tCFG = runFile(FS.Game.Scripts.."/"..FILESPEC_GAME_CFG.Full);
+            local tCFG = runFile((FS.GetResourceRoot().."/Scripts").."/"..FILESPEC_GAME_CFG.Full);
 
             assert(rawtype(tCFG) == "table", "CFG must return a table.");
             UserEnv.UserUpdateCFG(tCFG);
 
-            local tENV = runFile(FS.Game.Scripts.."/"..FILESPEC_GAME_ENV.Full);
+            local tENV = runFile((FS.GetResourceRoot().."/Scripts").."/"..FILESPEC_GAME_ENV.Full);
 
             assert(rawtype(tENV) == "table", "ENV must return a table.");
             UserEnv.UserUpdateENV(tENV);
@@ -786,6 +819,8 @@ function ProcSys.OnTimer()
     end, debug.traceback);
     _bLiveBusy = false;
 
+    if (bOK) then require("Autocomplete").Flush(); end
+
     if (not bOK) then
         Log.Error(sError);
     end
@@ -794,14 +829,23 @@ end
 
 
 --[[!
-@fqxn CFS.Modules.ProcSys.PrepGame
+@fqxn CFS.Modules.ProcSys.Functions.PrepGame
 @pulsarlua function ProcSys.PrepGame
-@desc Sets the active game, clears card-set state, rebuilds monitoring, and releases the previous Forge card.
+@desc Resets an existing user environment to its built-ins for game loading, sets the active game, clears card-set state, rebuilds monitoring, and releases the previous Forge card.
 @param Game oGame Game to activate.
 !]]
 function ProcSys.PrepGame(oGame)
     assert(type(oGame) == "Game", "ProcSys.PrepGame requires a Game object.");
 
+    Import = require("Globals.ImportSystem").Import;
+    FontStyle = FontStyle or require("FontStyle");
+    FontStyle.UpdateINI(FS.GetResourceRoot().."/Styles.ini");
+    Forge = Forge or require("Forge");
+    UserEnv = UserEnv or require("Globals.UserEnv");
+    UserEnv.Refresh();
+
+    require("Autocomplete").SetActive(true);
+    require("Autocomplete").Flush();
     _oActiveGame                        = oGame;
     _oActiveCardSet, _tData, _nSelectedRow = false, nil, nil;
     _pActiveCSV, _pActiveBackup, _sCSVOriginal = nil, nil, nil;
@@ -816,13 +860,48 @@ end
 
 
 --[[!
-@fqxn CFS.Modules.ProcSys.Shutdown
+@fqxn CFS.Modules.ProcSys.Functions.Shutdown
 @pulsarlua function ProcSys.Shutdown
 @desc Stops file monitoring and clears queued changes.
 !]]
 function ProcSys.Shutdown()
     _oLiveFiles.Reset();
     _tLiveChanges = {};
+end
+
+--[[!
+@fqxn CFS.Modules.ProcSys.Functions.CloseCardSet
+@pulsarlua function ProcSys.CloseCardSet
+@desc Clears the active card set, data, drawing environment and set watchers while retaining the active game.
+!]]
+function ProcSys.CloseCardSet()
+    assert(not (_tSession and _tSession.exporting), "Wait for the export to finish before closing the card set.");
+    _oActiveCardSet, _tData, _nSelectedRow = false, nil, nil;
+    _pActiveCSV, _pActiveBackup, _sCSVOriginal, _sCodeColumnsOriginal = nil, nil, nil, nil;
+    if (UserEnv) then UserEnv.ProcSysUpdateRoot({}, true); end
+    FS.CardSet.Clear();
+    if (Forge) then Forge.Release(); end
+    if (_tSession) then _tSession.setData({}, {}, {}, {}); end
+    if (_oActiveGame) then captureWatchFiles(); else ProcSys.Shutdown(); end
+    require("Autocomplete").SetHeaders({});
+    if (_oActiveGame) then require("Autocomplete").Flush(); end
+    Log.Note("Card set closed: no active card set.");
+end
+
+--[[!
+@fqxn CFS.Modules.ProcSys.Functions.CloseGame
+@pulsarlua function ProcSys.CloseGame
+@desc Clears active processing and script state and stops all project file watchers without deleting files.
+!]]
+function ProcSys.CloseGame()
+    assert(not (_tSession and _tSession.exporting), "Wait for the export to finish before closing the game.");
+    require("Autocomplete").SetActive(false);
+    _oActiveGame = false;
+    ProcSys.CloseCardSet();
+    if (UserEnv) then
+        UserEnv.UserUpdateENV({});
+        UserEnv.UserUpdateCFG({});
+    end
 end
 
 return ProcSys;

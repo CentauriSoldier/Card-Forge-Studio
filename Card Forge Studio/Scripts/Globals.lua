@@ -1,6 +1,18 @@
 --[[!
 @fqxn CFS.Modules.Globals
-@desc Initializes application services, protected globals, development documentation builds, and status callbacks.
+@desc
+<section aria-label="Globals overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Globals</h2><p style="font-size:1.15rem;margin:0">Globals connects the application services during startup.</p></div>
+<h3>How it fits into your work</h3><p>Setup loads dependencies and connects logging, filesystem, processing, and status services. Development documentation generation requires both development flags.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Constants">Constants</a></h3><p style="margin:0">Shared constants let Studio services agree on names, paths, and processing choices.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.FS">File System</a></h3><p style="margin:0">FS is Studio's map of where project files belong.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.Log">Log</a></h3><p style="margin:0">Logging records Studio activity and preserves useful context when something goes wrong.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Development builds generate HTML and a Pulsar package, install the package, then delete its ZIP only after successful extraction. This is separate from a loaded game's documentation.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 assert(APP_PATH, "The launcher must initialize APP_PATH before Globals.");
@@ -18,7 +30,7 @@ local vGlobalRead = tGlobalMeta.__index;
 local fGlobalWrite = tGlobalMeta.__newindex;
 
 --[[!
-@fqxn CFS.Modules.Globals.Private.tGlobalMeta___index
+@fqxn CFS.Modules.Globals.Private.Functions.tGlobalMeta___index
 @desc Reads launcher-protected globals before delegating to the LuaEx global reader.
 @param any tGlobal Global.
 @param any sKey Key.
@@ -39,7 +51,7 @@ tGlobalMeta.__index = function(tGlobal, sKey)
 end
 
 --[[!
-@fqxn CFS.Modules.Globals.Private.tGlobalMeta___newindex
+@fqxn CFS.Modules.Globals.Private.Functions.tGlobalMeta___newindex
 @desc Preserves the launcher write guard for protected globals and delegates other writes to LuaEx.
 @param any tGlobal Global.
 @param any sKey Key.
@@ -56,131 +68,7 @@ end
 
 require("Constants");
 
-if (DEV_MODE and BUILD_DOX) then
-    local Dox      = Dox;
-    local DoxLua   = DoxLua;
-    local base64   = base64;
-    local error    = error;
-    local ipairs   = ipairs;
-    local os       = os;
-    local string   = string;
-    local table    = table;
-    local tostring = tostring;
-    local utf8     = utf8;
-    local wx       = require("wx");
 
-    --[[!
-    @fqxn CFS.Modules.Globals.Private.CollectLuaFiles
-    @desc Collects Studio Lua sources recursively, excluding the linked Plugins tree. Paths are sorted before import for reproducible builds.
-    @param string pFolder Source folder to inspect.
-    @param table tFiles Collected source paths.
-    !]]
-    local function CollectLuaFiles(pFolder, tFiles)
-        local oFolder = wx.wxDir(pFolder);
-
-        if (not oFolder:IsOpened()) then
-            oFolder:delete();
-            error("Cannot inspect documentation source folder: "..pFolder, 2);
-        end
-
-        local bFound, sName = oFolder:GetFirst("", wx.wxDIR_FILES + wx.wxDIR_DIRS);
-
-        while (bFound) do
-            local pEntry = pFolder.."/"..sName;
-
-            if (wx.wxDirExists(pEntry)) then
-                if (sName:lower() ~= "plugins") then
-                    CollectLuaFiles(pEntry, tFiles);
-                end
-            elseif (sName:lower():match("%.lua$")) then
-                table.insert(tFiles, pEntry);
-            end
-
-            bFound, sName = oFolder:GetNext();
-        end
-
-        oFolder:delete();
-    end
-
-
-    --[[!
-    @fqxn CFS.Modules.Globals.Private.InstallPulsarPackage
-    @desc Extracts the generated package into Pulsar's packages directory. The ZIP is retained after installation failure and removed only after successful extraction.
-    @param string pZIP Generated package archive.
-    @param string pPackages Pulsar package directory.
-    !]]
-    local function InstallPulsarPackage(pZIP, pPackages)
-        -- PowerShell literal strings and an encoded command preserve path characters.
-        local sArchive     = "'"..pZIP:gsub("'", "''").."'";
-        local sDestination = "'"..pPackages:gsub("'", "''").."'";
-        local sScript      = "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; "..
-                        "$root = [System.IO.Path]::GetFullPath("..sDestination.."); "..
-                        "[System.IO.Directory]::CreateDirectory($root) | Out-Null; "..
-                        "$root = $root.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar; "..
-                        "$zip = [System.IO.Compression.ZipFile]::OpenRead("..sArchive.."); "..
-                        "try { foreach ($entry in $zip.Entries) { "..
-                        "$target = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($root, $entry.FullName)); "..
-                        "if (-not $target.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'ZIP path outside package directory'; }; "..
-                        "if ($entry.FullName.EndsWith('/')) { [System.IO.Directory]::CreateDirectory($target) | Out-Null; } "..
-                        "else { [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($target)) | Out-Null; "..
-                        "[System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true); }; "..
-                        "}; } finally { $zip.Dispose(); };";
-        local tEncoded     = {};
-
-        for _, nCodePoint in utf8.codes(sScript) do
-            if (nCodePoint <= 0xFFFF) then
-                table.insert(tEncoded, string.pack("<I2", nCodePoint));
-            else
-                nCodePoint = nCodePoint - 0x10000;
-                table.insert(tEncoded, string.pack("<I2I2", 0xD800 + (nCodePoint >> 10), 0xDC00 + (nCodePoint & 0x3FF)));
-            end
-        end
-
-        local sCommand = "powershell.exe -WindowStyle Hidden -NoProfile -NonInteractive -EncodedCommand "..base64.enc(table.concat(tEncoded));
-        local bOK      = os.execute(sCommand);
-
-        if (not bOK) then
-            error("Pulsar package installation failed; ZIP retained at "..pZIP, 2);
-        end
-
-        local bRemoved, sError = os.remove(pZIP);
-
-        if (not bRemoved) then
-            error("Pulsar package installed, but its ZIP could not be removed: "..tostring(sError), 2);
-        end
-    end
-
-
-    local pDocs     = APP_PATH.."/Docs";
-    local pProfile  = os.getenv("USERPROFILE");
-    local tFiles    = {};
-
-    if (not pProfile or pProfile == "") then
-        error("Cannot find the Windows profile for Pulsar package installation.", 2);
-    end
-
-    if (not wx.wxDirExists(pDocs) and not wx.wxFileName.Mkdir(pDocs, 511, wx.wxPATH_MKDIR_FULL)) then
-        error("Cannot create documentation output folder: "..pDocs, 2);
-    end
-
-    CollectLuaFiles(_Scripts, tFiles);
-    table.sort(tFiles);
-
-    local oDox = DoxLua("CFS");
-
-    for _, pFile in ipairs(tFiles) do
-        oDox.importFile(pFile, true);
-    end
-
-    oDox.refresh();
-    oDox.setOutputPath(pDocs);
-    oDox.export("index");
-    oDox.setBuilder(Dox.BUILDER.PULSAR_LUA);
-
-    local pZIP = oDox.export("CFS");
-
-    InstallPulsarPackage(pZIP, pProfile.."/.pulsar/packages");
-end
 
 local wx = require("wx");
 assert(wx.wxFont.AddPrivateFont(_Fonts.."/CRYSTAL-Regular.ttf"), "Cannot load the bundled CRYSTAL font.");
@@ -198,7 +86,7 @@ _bLoaded = false;
 
 -- These services retain their original dependencies until their individual ports are complete.
 --[[!
-@fqxn CFS.Modules.Globals.LoadGameModules
+@fqxn CFS.Modules.Globals.Functions.LoadGameModules
 @pulsarlua function LoadGameModules
 @desc Loads retained game services and publishes their global entry points; several legacy services still require porting before use.
 @vis public
@@ -224,7 +112,7 @@ local dStatusFrame;
 local sStatusText = "";
 
 --[[!
-@fqxn CFS.Modules.Globals.Status.Set
+@fqxn CFS.Modules.Globals.Status.Functions.Set
 @pulsarlua function Status.Set
 @desc Sets status text and updates the main native frame when it is attached.
 @param any vStatus Status.
@@ -239,7 +127,7 @@ function Status.Set(vStatus)
 end
 
 --[[!
-@fqxn CFS.Modules.Globals.Status.Append
+@fqxn CFS.Modules.Globals.Status.Functions.Append
 @pulsarlua function Status.Append
 @desc Appends a status line through the shared status setter.
 @param any vStatus Status.
@@ -253,7 +141,7 @@ end
 
 
 --[[!
-@fqxn CFS.Modules.Globals.BuildJSON
+@fqxn CFS.Modules.Globals.Functions.BuildJSON
 @pulsarlua function BuildJSON
 @desc Builds the tutorial-data script with ordered sections and Base64-encoded HTML items.
 @param any tSections Sections.
@@ -325,7 +213,7 @@ end
 
 
 --[[!
-@fqxn CFS.Modules.Globals.OnStartUp
+@fqxn CFS.Modules.Globals.Functions.OnStartUp
 @pulsarlua function OnStartUp
 @desc Seeds random generation, attaches the status frame, and installs duplicate-suppressed runtime error reporting.
 @param any dMainFrame Main frame.
@@ -342,7 +230,7 @@ function OnStartUp(dMainFrame)
     local sLastError = "";
 
     --[[!
-    @fqxn CFS.Modules.Globals.CustomRuntimeErrorHandler
+    @fqxn CFS.Modules.Globals.Functions.CustomRuntimeErrorHandler
 @pulsarlua function CustomRuntimeErrorHandler
     @desc Reports a runtime error only when it differs from the previous error.
     @param any sError Error.

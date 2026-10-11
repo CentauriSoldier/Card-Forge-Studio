@@ -1,6 +1,18 @@
 --[[!
 @fqxn CFS.Windows.GameEditor
-@desc Grouped Environment and Config source editor with source discovery and New-file selection.
+@desc
+<section aria-label="GameEditor overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">GameEditor</h2><p style="font-size:1.15rem;margin:0">Game Editor organizes the shared scripts used throughout a game.</p></div>
+<h3>How it fits into your work</h3><p>Work in Environment and Config groups, select or create source files, and save validated drafts.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.Game">Game</a></h3><p style="margin:0">A game is the home for a whole project: its name, shared settings, and collection of card sets.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.UserEnv">User Environment</a></h3><p style="margin:0">UserEnv is the shared workspace where game scripts find configuration, helper values, and the APIs Studio exposes.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.Editors.Common">Editors.Common</a></h3><p style="margin:0">The shared editor helper supplies consistent drafts and save protections.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.EditorSettings">EditorSettings</a></h3><p style="margin:0">Shared settings keep the code editors consistent across projects.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Shared game source is separate from individual card-set drawing and processing scripts.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Game source window: Environment above Config, with files in depth-first order.
@@ -9,7 +21,7 @@ local Common = require("Windows.Editors.Common");
 local GameEditor = {};
 
 --[[!
-@fqxn CFS.Windows.GameEditor.Private.alphabetical
+@fqxn CFS.Windows.GameEditor.Private.Functions.alphabetical
 @desc Compares source names case-insensitively, with a case-sensitive tie breaker.
 @vis private
 @param any sLeft Left.
@@ -21,7 +33,7 @@ local function alphabetical(sLeft, sRight)
 end
 
 --[[!
-@fqxn CFS.Windows.GameEditor.Private.names
+@fqxn CFS.Windows.GameEditor.Private.Functions.names
 @desc Lists and sorts visible and hidden entries matching the requested directory flags.
 @vis private
 @param any pFolder Folder.
@@ -41,7 +53,7 @@ local function names(pFolder, nFlags)
 end
 
 --[[!
-@fqxn CFS.Windows.GameEditor.files
+@fqxn CFS.Windows.GameEditor.Functions.files
 @pulsarlua function GameEditor.files
 @desc Lists ENV/CFG root scripts and recursively discovers Lua, INI, and text files in their groups.
 @param any pScripts Scripts.
@@ -72,7 +84,7 @@ function GameEditor.files(pScripts, pEnvironment, pConfig)
 end
 
 --[[!
-@fqxn CFS.Windows.GameEditor.file
+@fqxn CFS.Windows.GameEditor.Functions.file
 @pulsarlua function GameEditor.file
 @desc Validates a supported source filename inside its root and returns a grouped editor-file record.
 @param any pRoot Root folder.
@@ -91,7 +103,7 @@ function GameEditor.file(pRoot, pFile, nGroup)
     return {name = pNormalizedFile:sub(#pNormalizedRoot + 1), path = pNormalizedFile, kind = sExtension == "txt" and "text" or sExtension, group = nGroup};
 end
 --[[!
-@fqxn CFS.Windows.GameEditor.create
+@fqxn CFS.Windows.GameEditor.Functions.create
 @pulsarlua function GameEditor.create
 @desc Creates the game source editor with separate Environment and Config groups, New-file selection, and window state.
 @param any dParent Parent window.
@@ -104,7 +116,7 @@ function GameEditor.create(dParent, pScripts, pEnvironment, pConfig, tOptions)
     tOptions = tOptions or {};
     tOptions.groups = {"Environment", "Config"};
     --[[!
-    @fqxn CFS.Windows.GameEditor.Private.tOptions_newFile
+    @fqxn CFS.Windows.GameEditor.Private.Functions.tOptions_newFile
     @desc Prompts for a filename in the selected ENV/CFG root and validates its location and extension.
     @vis private
     @param any dFrame Frame.

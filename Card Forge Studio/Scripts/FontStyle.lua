@@ -1,6 +1,21 @@
 --[[!
 @fqxn CFS.Classes.FontStyle
-@desc Parses inherited style INI sections and renders native text with spacing, backgrounds, and layered effects.
+@desc
+<section aria-label="Font Style overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Font Style</h2><p style="font-size:1.15rem;margin:0">FontStyle gives card text a reusable visual identity.</p></div>
+<h3>How it fits into your work</h3><p>Define styles in the game's style INI file, preview them in Style Editor, and use them when drawing text. Inherited settings let one style build on another instead of repeating every choice.</p>
+<h3>Follow the handoffs</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">One style, several places</h3><p style="margin:0">A named text style gathers the appearance choices used for lettering. Styles can inherit values from another style, so related text can share a foundation while changing selected details. The style reader resolves those values; Forge uses the result when drawing styled text.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">Where to make a change</h3><p style="margin:0">Edit the style definitions to change the named appearance, and use the style editor’s sample to inspect it. The card drawing script chooses which named style to use. FontStyle connects those definitions to rendering; it does not decide the card’s text, position, or data values for you.</p></article>
+</div>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.StyleEditor">StyleEditor</a></h3><p style="margin:0">The editor lets you adjust style drafts and see a live sample before saving.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Forge">Forge</a></h3><p style="margin:0">Forge uses FontStyle when drawing styled text onto a card.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys watches the game style file and responds when saved settings change.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Card text styling is separate from grid colors and the documentation website theme.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 local class         = class;
@@ -22,7 +37,7 @@ local Color         = {};
 local DrawingFont   = {};
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.Color_RGBA
+@fqxn CFS.Classes.FontStyle.Private.Functions.Color_RGBA
 @desc Packs red, green, blue, and alpha channels into an RGBA integer.
 @param any nR R.
 @param any nG G.
@@ -32,28 +47,28 @@ local DrawingFont   = {};
 !]]
 Color.RGBA = function(nR, nG, nB, nA) return (nR << 24) | (nG << 16) | (nB << 8) | nA end
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.Color_GetRed
+@fqxn CFS.Classes.FontStyle.Private.Functions.Color_GetRed
 @desc Extracts the red byte from a packed RGBA value.
 @param any oColor Color.
 @vis private
 !]]
 Color.GetRed = function(oColor) return (oColor >> 24) & 255 end
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.Color_GetGreen
+@fqxn CFS.Classes.FontStyle.Private.Functions.Color_GetGreen
 @desc Extracts the green byte from a packed RGBA value.
 @param any oColor Color.
 @vis private
 !]]
 Color.GetGreen = function(oColor) return (oColor >> 16) & 255 end
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.Color_GetBlue
+@fqxn CFS.Classes.FontStyle.Private.Functions.Color_GetBlue
 @desc Extracts the blue byte from a packed RGBA value.
 @param any oColor Color.
 @vis private
 !]]
 Color.GetBlue = function(oColor) return (oColor >> 8) & 255 end
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.Color_GetAlpha
+@fqxn CFS.Classes.FontStyle.Private.Functions.Color_GetAlpha
 @desc Extracts the alpha byte from a packed RGBA value.
 @param any oColor Color.
 @vis private
@@ -61,7 +76,7 @@ Color.GetBlue = function(oColor) return (oColor >> 8) & 255 end
 Color.GetAlpha = function(oColor) return oColor & 255 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.Color_TryFromString
+@fqxn CFS.Classes.FontStyle.Private.Functions.Color_TryFromString
 @desc Parses supported color text into a packed RGBA value.
 @param any sValue Value.
 @vis private
@@ -95,7 +110,7 @@ function Color.TryFromString(sValue)
 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.DrawingFont_Load
+@fqxn CFS.Classes.FontStyle.Private.Functions.DrawingFont_Load
 @desc Creates a native font with the requested family, size, and style flags.
 @param any sFamily Family.
 @param any nSize Size.
@@ -113,7 +128,7 @@ function DrawingFont.Load(sFamily, nSize, tOptions)
 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.Ini
+@fqxn CFS.Classes.FontStyle.Private.Functions.Ini
 @desc Creates an INI-reader adapter for style sections and inherited values.
 @param any pFile File.
 @vis private
@@ -145,7 +160,7 @@ local function Ini(pFile)
 
     return {
         --[[!
-        @fqxn CFS.Classes.FontStyle.Private.GetValue
+        @fqxn CFS.Classes.FontStyle.Private.Functions.GetValue
         @desc Reads a style key, following inheritance until a value is found or a section repeats.
         @param any sSection Section.
         @param any sKey Key.
@@ -164,7 +179,7 @@ local function Ini(pFile)
             return "";
         end,
         --[[!
-        @fqxn CFS.Classes.FontStyle.Private.GetValueNames
+        @fqxn CFS.Classes.FontStyle.Private.Functions.GetValueNames
         @desc Returns sorted keys for a style section.
         @param any sSection Section.
         @vis private
@@ -176,7 +191,7 @@ local function Ini(pFile)
             return tKeys;
         end,
         --[[!
-        @fqxn CFS.Classes.FontStyle.Private.GetSectionNames
+        @fqxn CFS.Classes.FontStyle.Private.Functions.GetSectionNames
         @desc Returns the style section names.
         @vis private
         !]]
@@ -206,7 +221,7 @@ local _tParsedStyles    = {};
 local FontStyle;
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.XPCallError
+@fqxn CFS.Classes.FontStyle.Private.Functions.XPCallError
 @desc Formats a font-style error with a stack traceback.
 @param any vErr Err.
 @vis private
@@ -216,7 +231,7 @@ local function XPCallError(vErr)
 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.GetEffectBounds
+@fqxn CFS.Classes.FontStyle.Private.Functions.GetEffectBounds
 @desc Computes text bounds including enabled shadow, extrusion, and glow offsets.
 @param any nW W.
 @param any nH H.
@@ -241,7 +256,7 @@ local function GetEffectBounds(nW, nH,
     local nMaxY = nH;
 
     --[[!
-    @fqxn CFS.Classes.FontStyle.Private.ApplyDelta
+    @fqxn CFS.Classes.FontStyle.Private.Functions.ApplyDelta
     @desc Extends effect bounds by a supplied horizontal and vertical offset.
     @param any nDX Dx.
     @param any nDY Dy.
@@ -281,7 +296,7 @@ local function GetEffectBounds(nW, nH,
 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.DrawTextRun
+@fqxn CFS.Classes.FontStyle.Private.Functions.DrawTextRun
 @desc Draws a text run using the configured spacing and rotation.
 @param any pri Pri.
 @param any D D.
@@ -311,7 +326,7 @@ local function DrawTextRun(pri, D, nX, nY, sText, nAngle, nColor)
 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.MeasureTextRun
+@fqxn CFS.Classes.FontStyle.Private.Functions.MeasureTextRun
 @desc Measures a text run while accounting for configured letter spacing.
 @param any pri Pri.
 @param any D D.
@@ -329,7 +344,7 @@ local function MeasureTextRun(pri, D, sText)
 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.ReadStyleFile
+@fqxn CFS.Classes.FontStyle.Private.Functions.ReadStyleFile
 @desc Reads the active style file through the live-file repository.
 @vis private
 !]]
@@ -349,7 +364,7 @@ local function ReadStyleFile()
 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.BuildFontSignature
+@fqxn CFS.Classes.FontStyle.Private.Functions.BuildFontSignature
 @desc Builds a comparison signature from parsed font settings.
 @param any tParsed Parsed.
 @vis private
@@ -372,7 +387,7 @@ local function BuildFontSignature(tParsed)
 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.BuildEffectSignature
+@fqxn CFS.Classes.FontStyle.Private.Functions.BuildEffectSignature
 @desc Builds a comparison signature from parsed text-effect settings.
 @param any tParsed Parsed.
 @vis private
@@ -416,7 +431,7 @@ local function BuildEffectSignature(tParsed)
 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.ParseFontStyleINI
+@fqxn CFS.Classes.FontStyle.Private.Functions.ParseFontStyleINI
 @desc Parses a named style and its inherited values through the supplied or default INI reader.
 @param any sSectionName Section name.
 @param any oReader Reader.
@@ -434,7 +449,7 @@ local function ParseFontStyleINI(sSectionName, oReader)
         if (istable(tValueNames) and #tValueNames > 0) then
 
             --[[!
-            @fqxn CFS.Classes.FontStyle.Private.val
+            @fqxn CFS.Classes.FontStyle.Private.Functions.val
             @desc Resolves a value from the current inherited style section.
             @param any sValName Val name.
             @vis private
@@ -533,7 +548,7 @@ local function ParseFontStyleINI(sSectionName, oReader)
 end
 
 --[[!
-@fqxn CFS.Classes.FontStyle.Private.SyncStyles
+@fqxn CFS.Classes.FontStyle.Private.Functions.SyncStyles
 @desc Synchronizes cached styles and parsed settings with the active style file.
 @vis private
 !]]
@@ -839,7 +854,7 @@ OutlineColor__AUTOA_        = _oClear,
 OutlineThickness__AUTOA_    = 0,
 
         --[[!
-        @fqxn CFS.Classes.FontStyle.Private.DrawGlow
+        @fqxn CFS.Classes.FontStyle.Private.Functions.DrawGlow
         @desc Draws enabled glow layers before the main text.
         @param any sObject Object.
         @param any D D.
@@ -862,7 +877,7 @@ OutlineThickness__AUTOA_    = 0,
             for nDistance = nRadius, 1, -1 do
                 local nMix = nDistance / nRadius;
                 --[[!
-                @fqxn CFS.Classes.FontStyle.Private.channel
+                @fqxn CFS.Classes.FontStyle.Private.Functions.channel
                 @desc Extracts a color channel for glow interpolation.
                 @param any fChannel Channel.
                 @vis private
@@ -889,7 +904,7 @@ OutlineThickness__AUTOA_    = 0,
         end,
 
         --[[!
-        @fqxn CFS.Classes.FontStyle.Private.Draw3D
+        @fqxn CFS.Classes.FontStyle.Private.Functions.Draw3D
         @desc Draws extrusion layers using the configured depth, step, and color.
         @param any sObject Object.
         @param any D D.
@@ -919,7 +934,7 @@ OutlineThickness__AUTOA_    = 0,
         end,
 
         --[[!
-        @fqxn CFS.Classes.FontStyle.Private.DrawOutline
+        @fqxn CFS.Classes.FontStyle.Private.Functions.DrawOutline
         @desc Draws text offsets using the configured outline thickness and color.
         @param any sObject Object.
         @param any D D.
@@ -965,7 +980,7 @@ OutlineThickness__AUTOA_    = 0,
         end,
 
         --[[!
-        @fqxn CFS.Classes.FontStyle.Private.DrawShadow
+        @fqxn CFS.Classes.FontStyle.Private.Functions.DrawShadow
         @desc Draws the configured text shadow before the main text.
         @param any sObject Object.
         @param any D D.

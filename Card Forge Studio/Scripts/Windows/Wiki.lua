@@ -1,6 +1,17 @@
 --[[!
 @fqxn CFS.Windows.Wiki
-@desc Game wiki editor with page navigation, rich text, code highlighting, and protected saves.
+@desc
+<section aria-label="Wiki overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Wiki</h2><p style="font-size:1.15rem;margin:0">The Wiki keeps written game material alongside card-making tools.</p></div>
+<h3>How it fits into your work</h3><p>Navigate pages, edit rich text, include code and images, and save with external-edit checks.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Wiki.Document">Wiki.Document</a></h3><p style="margin:0">Wiki Document turns rich text into the stored document format and back.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Wiki.Store">Wiki.Store</a></h3><p style="margin:0">Wiki Store manages page drafts and associated image assets.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Wiki.Themes">Wiki.Themes</a></h3><p style="margin:0">Wiki Themes supplies reading and editing palettes for game documents.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Wiki page storage is separate from the generated Studio API website.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Per-game wiki window. All page edits remain a draft until Save.
@@ -14,7 +25,7 @@ local _tWindowState = {savePosition = true, saveSize = true, saveVisible = false
 WindowState.register("Wiki", _tWindowState);
 
 --[[!
-@fqxn CFS.Windows.Wiki.create
+@fqxn CFS.Windows.Wiki.Functions.create
 @pulsarlua function Wiki.create
 @desc Creates the game wiki editor with page navigation, rich-text formatting, draft storage, themes, and protected saving.
 @param any dParent Parent window.
@@ -35,7 +46,7 @@ function Wiki.create(dParent, pRoot, tOptions)
     local oToolbar = wx.wxWrapSizer(wx.wxHORIZONTAL);
     local tGroupParents = {};
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.group
+    @fqxn CFS.Windows.Wiki.Private.Functions.group
     @desc Creates a toolbar group with a shared background and horizontal controls.
     @vis private
     !]]
@@ -54,7 +65,7 @@ function Wiki.create(dParent, pRoot, tOptions)
     local oPages, oPreferences = group(), group();
     local oFormat, oFontGroup, oColors, oParagraphs, oLists, oInsert, oLinks, oHistory = group(), group(), group(), group(), group(), group(), group(), group();
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.sizeControl
+    @fqxn CFS.Windows.Wiki.Private.Functions.sizeControl
     @desc Sets a readable font and minimum size for a toolbar control.
     @param any oControl Control.
     @param any nWidth Width.
@@ -81,7 +92,7 @@ function Wiki.create(dParent, pRoot, tOptions)
     local sPreference = INIFile.GetValue(FS.AppCFG, "Wiki", "Theme");
     for nIndex, tTheme in ipairs(Themes) do if (tTheme.name == sPreference) then nTheme = nIndex; end end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.message
+    @fqxn CFS.Windows.Wiki.Private.Functions.message
     @desc Updates the wiki status message and panel layout.
     @param any sText Text.
     @vis private
@@ -90,7 +101,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         oMessage:SetLabel(sText or ""); dPanel:Layout();
     end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.protect
+    @fqxn CFS.Windows.Wiki.Private.Functions.protect
     @desc Wraps a wiki action and displays and logs failures.
     @param any fCallback Callback.
     @vis private
@@ -103,7 +114,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         end;
     end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.title
+    @fqxn CFS.Windows.Wiki.Private.Functions.title
     @desc Updates the frame title with the selected page and dirty indicator.
     @vis private
     !]]
@@ -111,7 +122,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         dFrame:SetTitle("Game Wiki"..(nPage and " - "..tStore.pages[nPage].title or "")..(tStore.dirty and " *" or ""));
     end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.theme
+    @fqxn CFS.Windows.Wiki.Private.Functions.theme
     @desc Applies the selected wiki palette to the document and navigation tree.
     @vis private
     !]]
@@ -123,7 +134,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         oEditor:Refresh(); oTree:Refresh();
     end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.capture
+    @fqxn CFS.Windows.Wiki.Private.Functions.capture
     @desc Copies a modified editor page into the wiki draft and clears the editor modified flag.
     @vis private
     !]]
@@ -134,7 +145,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         end
     end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.load
+    @fqxn CFS.Windows.Wiki.Private.Functions.load
     @desc Captures the previous page, loads the requested page, applies theme and highlighting, and optionally jumps to an anchor.
     @param any nID Id.
     @param any sAnchor Anchor.
@@ -153,7 +164,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         if (sAnchor and sAnchor ~= "") then assert(Document.jump(oEditor, sAnchor), "The linked section no longer exists."); end
     end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.rebuild
+    @fqxn CFS.Windows.Wiki.Private.Functions.rebuild
     @desc Rebuilds the filtered page tree while retaining page IDs for navigation.
     @vis private
     !]]
@@ -171,7 +182,7 @@ function Wiki.create(dParent, pRoot, tOptions)
             end
         end
         --[[!
-        @fqxn CFS.Windows.Wiki.Private.children
+        @fqxn CFS.Windows.Wiki.Private.Functions.children
         @desc Recursively adds included child pages to the navigation tree.
         @param any nParent Parent.
         @param any oParent Parent.
@@ -190,7 +201,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         children(0, oRoot); oTree:ExpandAll(); bLoading = false;
     end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.prompt
+    @fqxn CFS.Windows.Wiki.Private.Functions.prompt
     @desc Returns entered text from a modal prompt or nil after cancellation.
     @param any sMessage Message.
     @param any sInitial Initial.
@@ -202,7 +213,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         if (nAnswer == wx.wxID_OK) then return sValue; end
     end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.choosePage
+    @fqxn CFS.Windows.Wiki.Private.Functions.choosePage
     @desc Prompts for a page ID, optionally including the top-level root.
     @param any sMessage Message.
     @param any bRoot Root.
@@ -220,7 +231,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         return tPages[nChoice + (bRoot and 0 or 1)].id;
     end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.button
+    @fqxn CFS.Windows.Wiki.Private.Functions.button
     @desc Creates a formatting toolbar button and connects a protected action.
     @param any oSizer Sizer.
     @param any sLabel Label.
@@ -244,7 +255,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         return oButton;
     end
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.requirePage
+    @fqxn CFS.Windows.Wiki.Private.Functions.requirePage
     @desc Rejects formatting operations when no page is selected.
     @vis private
     !]]
@@ -296,7 +307,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         nTheme = nSelected; theme();
     end));
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.style
+    @fqxn CFS.Windows.Wiki.Private.Functions.style
     @desc Applies text or paragraph attributes as an undoable formatting operation.
     @param any fSet Set.
     @param any bParagraph Paragraph.
@@ -344,7 +355,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         dDialog:Destroy(); oData:delete();
     end);
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.colorPalette
+    @fqxn CFS.Windows.Wiki.Private.Functions.colorPalette
     @desc Presents color choices for text or highlight formatting.
     @param any sLabel Label.
     @param any bHighlight Highlight.
@@ -355,7 +366,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         local oMenu = wx.wxMenu(); local tMenuIDs = {};
         local tColors = {{"Black", "#000000"}, {"White", "#FFFFFF"}, {"Gray", "#808080"}, {"Red", "#E53935"}, {"Orange", "#FB8C00"}, {"Yellow", "#FDD835"}, {"Green", "#43A047"}, {"Cyan", "#00ACC1"}, {"Blue", "#1E88E5"}, {"Purple", "#8E24AA"}, {"Pink", "#D81B60"}};
         --[[!
-        @fqxn CFS.Windows.Wiki.Private.apply
+        @fqxn CFS.Windows.Wiki.Private.Functions.apply
         @desc Applies the chosen text or highlight color to the editor selection.
         @param any oColor Color.
         @vis private
@@ -483,7 +494,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         INIFile.SetValue(FS.AppCFG, "Wiki", "Zoom", tostring(nValue));
     end));
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.save
+    @fqxn CFS.Windows.Wiki.Private.Functions.save
     @desc Captures the current page, saves the store, and updates title and status.
     @vis private
     !]]
@@ -503,7 +514,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         dToolbar:InvalidateBestSize(); dPanel:Layout(); oEvent:Skip();
     end);
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.checkboxHit
+    @fqxn CFS.Windows.Wiki.Private.Functions.checkboxHit
     @desc Maps the native click position to the rich-text position for checkbox interaction.
     @param any oPoint Point.
     @vis private
@@ -558,7 +569,7 @@ function Wiki.create(dParent, pRoot, tOptions)
         elseif (sURL:match("^https?://")) then assert(wx.wxLaunchDefaultBrowser(sURL), "Could not open the link."); end
     end));
     --[[!
-    @fqxn CFS.Windows.Wiki.Private.allowClose
+    @fqxn CFS.Windows.Wiki.Private.Functions.allowClose
     @desc Captures drafts and asks whether unsaved wiki changes should be saved or retained.
     @vis private
     !]]
@@ -590,13 +601,13 @@ function Wiki.create(dParent, pRoot, tOptions)
     return {frame = dFrame, editor = oEditor, tree = oTree, store = tStore, theme = oTheme, buttons = tButtons, heading = oHeading, search = oSearch, zoom = oZoom, language = oLanguage, font = oFont, toolbar = dToolbar,
         load = load, save = save, rebuild = rebuild,
         --[[!
-        @fqxn CFS.Windows.Wiki.Private.show
+        @fqxn CFS.Windows.Wiki.Private.Functions.show
         @desc Shows and raises the wiki window.
         @vis private
         !]]
         show = function() dFrame:Show(true); dFrame:Raise(); end,
         --[[!
-        @fqxn CFS.Windows.Wiki.Private.close
+        @fqxn CFS.Windows.Wiki.Private.Functions.close
         @desc Closes the wiki through its unsaved-draft protection.
         @vis private
         !]]

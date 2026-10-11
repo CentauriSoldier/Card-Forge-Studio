@@ -1,6 +1,18 @@
 --[[!
 @fqxn CFS.Windows.Options
-@desc Application and Forge preferences and staged game/card-set metadata editing.
+@desc
+<section aria-label="Options overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Options</h2><p style="font-size:1.15rem;margin:0">Options puts application preferences and project information in one place.</p></div>
+<h3>How it fits into your work</h3><p>Choose sections for windows, Forge, grids, game information, and card-set information. Forge contains background, guide, and preview controls.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Forge">Forge</a></h3><p style="margin:0">Forge is the visual workbench that turns selected card data and drawing instructions into artwork.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.GridStyle">GridStyle</a></h3><p style="margin:0">GridStyle keeps row stripes, text, and index colors consistent between data windows.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.WindowState">WindowState</a></h3><p style="margin:0">WindowState remembers useful native-window choices outside game folders.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Documentation">Documentation</a></h3><p style="margin:0">This helper keeps generated documentation names aligned when a game or card set is renamed.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Grid color samples preview draft choices. Apply and OK commit settings; Cancel does not commit new choices.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Categorized application options and guide controls.
@@ -10,7 +22,7 @@ local WindowState = require("Windows.WindowState");
 local Options = {};
 
 --[[!
-@fqxn CFS.Windows.Options.Private.center
+@fqxn CFS.Windows.Options.Private.Functions.center
 @desc Centers on a shown parent or within the primary display when the parent is unavailable for centering.
 @param any dDialog Dialog.
 @param any dParent Parent.
@@ -27,7 +39,7 @@ end
 
 -- Edit only known metadata keys and retain unrelated sections and values.
 --[[!
-@fqxn CFS.Windows.Options.Private.metadata
+@fqxn CFS.Windows.Options.Private.Functions.metadata
 @desc Updates requested SETTINGS keys while preserving other INI text and its newline style.
 @param any sText Text.
 @param any tValues Values.
@@ -37,7 +49,7 @@ local function metadata(sText, tValues)
     local sNewline = sText:find("\r\n", 1, true) and "\r\n" or "\n";
     local tLines, tSeen, bSettings, bFound = {}, {}, false, false;
     --[[!
-    @fqxn CFS.Windows.Options.Private.missing
+    @fqxn CFS.Windows.Options.Private.Functions.missing
     @desc Appends requested metadata keys not already written in the SETTINGS section.
     @vis private
     !]]
@@ -74,7 +86,7 @@ local function metadata(sText, tValues)
 end
 
 --[[!
-@fqxn CFS.Windows.Options.create
+@fqxn CFS.Windows.Options.Functions.create
 @pulsarlua function Options.create
 @desc Creates application, Forge, game, and card-set options with staged metadata changes and protected Apply handling.
 @param any dParent Parent window.
@@ -99,14 +111,15 @@ function Options.create(dParent, tContext)
     oBody:Add(dContent, 1, wx.wxEXPAND + wx.wxALL, 12);
     local tPages, tControls = {}, {};
     --[[!
-    @fqxn CFS.Windows.Options.Private.page
+    @fqxn CFS.Windows.Options.Private.Functions.page
     @desc Creates an options page with a title and description.
     @param any sTitle Title.
     @param any sDescription Description.
     @vis private
     !]]
-    local function page(sTitle, sDescription)
-        local dPage = wx.wxPanel(dContent, wx.wxID_ANY);
+    local function page(sTitle, sDescription, bScroll)
+        local dPage = bScroll and wx.wxScrolledWindow(dContent, wx.wxID_ANY) or wx.wxPanel(dContent, wx.wxID_ANY);
+        if (bScroll) then dPage:SetScrollRate(0, 12); end
         local oPage = wx.wxBoxSizer(wx.wxVERTICAL);
         local oTitle = wx.wxStaticText(dPage, wx.wxID_ANY, sTitle);
         local oFont = oTitle:GetFont(); oFont:SetWeight(wx.wxFONTWEIGHT_BOLD); oFont:SetPointSize(14); oTitle:SetFont(oFont);
@@ -117,7 +130,7 @@ function Options.create(dParent, tContext)
         return dPage, oPage;
     end
     --[[!
-    @fqxn CFS.Windows.Options.Private.check
+    @fqxn CFS.Windows.Options.Private.Functions.check
     @desc Creates a checkbox initialized from the current option value.
     @param any dPage Page.
     @param any oPage Page.
@@ -130,7 +143,7 @@ function Options.create(dParent, tContext)
         oPage:Add(oControl, 0, wx.wxBOTTOM, 14); return oControl;
     end
     --[[!
-    @fqxn CFS.Windows.Options.Private.field
+    @fqxn CFS.Windows.Options.Private.Functions.field
     @desc Creates a labeled text field initialized from the current option value.
     @param any dPage Page.
     @param any oPage Page.
@@ -264,7 +277,7 @@ function Options.create(dParent, tContext)
     tControls.gridPreview = oGridPreview;
 
     --[[!
-    @fqxn CFS.Windows.Options.Private.previewGridColors
+    @fqxn CFS.Windows.Options.Private.Functions.previewGridColors
     @desc Repaints fixed sample rows from unsaved picker values without modifying preferences or data windows.
     @vis private
     !]]
@@ -300,7 +313,7 @@ function Options.create(dParent, tContext)
 
     local tFiles = {};
     --[[!
-    @fqxn CFS.Windows.Options.Private.info
+    @fqxn CFS.Windows.Options.Private.Functions.info
     @desc Creates game or card-set metadata controls backed by a staged source model.
     @param any sTitle Title.
     @param any pInfo Info.
@@ -309,7 +322,7 @@ function Options.create(dParent, tContext)
     !]]
     local function info(sTitle, pInfo, bCardSet)
         local dInfo, oInfo = page(sTitle, bCardSet and "Card-set name and render dimensions. Saving updates the live renderer through file monitoring."
-            or "The name of the loaded game. Other game configuration is available in Game > Edit Source.");
+            or "The name of the loaded game. Other game configuration is available in Game > Edit Source.", not bCardSet);
         if (not pInfo or pInfo == "" or not wx.wxFileExists(pInfo)) then
             oInfo:Add(wx.wxStaticText(dInfo, wx.wxID_ANY, "Load a "..(bCardSet and "card set" or "game").." to edit these settings."), 0);
             return;
@@ -321,13 +334,77 @@ function Options.create(dParent, tContext)
             tInfo.width = field(dInfo, oInfo, "Card width (pixels)", INIFile.GetValue(pInfo, "SETTINGS", "CardWidth"));
             tInfo.height = field(dInfo, oInfo, "Card height (pixels)", INIFile.GetValue(pInfo, "SETTINGS", "CardHeight"));
         end
+        if (not bCardSet) then
+            local dDocs = wx.wxPanel(dInfo, wx.wxID_ANY);
+            local oDocs = wx.wxStaticBoxSizer(wx.wxVERTICAL, dDocs, "Docs");
+            dDocs:SetSizer(oDocs);
+            oInfo:Add(dDocs, 0, wx.wxEXPAND + wx.wxTOP, 12);
+            --[[!
+            @fqxn CFS.Windows.Options.Private.Functions.docChoice
+            @desc Creates a game-specific documentation theme selector initialized from saved metadata.
+            @param string sLabel Display label.
+            @param string sSetting Metadata key.
+            @param table tNames Supported theme names.
+            @param string sDefault Default theme name.
+            @vis private
+            !]]
+            local function docChoice(sLabel, sSetting, tNames, sDefault)
+                oDocs:Add(wx.wxStaticText(dDocs, wx.wxID_ANY, sLabel), 0, wx.wxBOTTOM, 6);
+                local oChoice = wx.wxChoice(dDocs, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxDefaultSize, tNames);
+                local sSaved = INIFile.GetValue(pInfo, "SETTINGS", sSetting);
+                if (sSaved == "") then sSaved = sDefault; end
+                assert(oChoice:SetStringSelection(sSaved), "Unknown saved documentation theme: "..sSaved);
+                oDocs:Add(oChoice, 0, wx.wxEXPAND + wx.wxBOTTOM, 12);
+                return oChoice;
+            end
+            tInfo.docsTheme = docChoice("Documentation page theme", "DocsTheme", {"ALUCARD", "CATPPUCCIN_FRAPPE", "CATPPUCCIN_LATTE", "CATPPUCCIN_MACCHIATO", "CATPPUCCIN_MOCHA", "DRACULA", "GRUVBOX_DARK", "GRUVBOX_LIGHT", "MIDNIGHT_BLUE", "NORD", "ROSE_PINE", "ROSE_PINE_DAWN", "ROSE_PINE_MOON", "SOLARIZED_DARK", "SOLARIZED_LIGHT", "SYNTHWAVE_PROTOCOL", "TOKYO_NIGHT", "TOKYO_NIGHT_MOON", "TOKYO_NIGHT_STORM", "ZENBURN"}, "MIDNIGHT_BLUE");
+            tInfo.docsPrism = docChoice("Code highlighting theme", "DocsPrismTheme", {"COY", "DARK", "DEFAULT", "FUNKY", "OKAIDIA", "SOLARIZED_LIGHT", "TOMORROW_NIGHT", "TWILIGHT"}, "OKAIDIA");
+            tInfo.docsStudio = check(dDocs, oDocs, "Include Card Forge Studio API documentation", INIFile.GetValue(pInfo, "SETTINGS", "DocsIncludeStudio"):lower() == "true");
+            tInfo.docsPlugins = check(dDocs, oDocs, "Include plugin documentation", INIFile.GetValue(pInfo, "SETTINGS", "IncludePlugins"):lower() == "true");
+            oDocs:Add(wx.wxStaticText(dDocs, wx.wxID_ANY, "Save source edits before rebuilding."), 0, wx.wxBOTTOM, 12);
+            -- Prism 1.30.0 color samples from its published themes; browser shadows and textures are not rendered here.
+            local tPrismColors = {
+                COY = {text = "#000000", background = "#fdfdfd", comment = "#7D8B99", keyword = "#1990b8", string = "#2f9c0a"},
+                DARK = {text = "#ffffff", background = "#4c4033", comment = "#998066", keyword = "#d1949e", string = "#bde052"},
+                DEFAULT = {text = "#000000", background = "#f5f2f0", comment = "#708090", keyword = "#0077aa", string = "#669900"},
+                FUNKY = {text = "#ffffff", background = "#000000", comment = "#aaaaaa", keyword = "#ff1493", string = "#ffff00"},
+                OKAIDIA = {text = "#f8f8f2", background = "#272822", comment = "#8292a2", keyword = "#66d9ef", string = "#a6e22e"},
+                SOLARIZED_LIGHT = {text = "#657b83", background = "#fdf6e3", comment = "#93a1a1", keyword = "#859900", string = "#2aa198"},
+                TOMORROW_NIGHT = {text = "#cccccc", background = "#2d2d2d", comment = "#999999", keyword = "#cc99cd", string = "#7ec699"},
+                TWILIGHT = {text = "#ffffff", background = "#141414", comment = "#787878", keyword = "#f9ee9a", string = "#919e6b"},
+            };
+            local tPageThemes = require("Plugins.LuaEx.inc.classes.util.Dox.Builders.HTML.Themes");
+            local oPreview = wx.wxHtmlWindow(dDocs, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(-1, 170));
+            oPreview:SetMinSize(wx.wxSize(320, 170));
+            oDocs:Add(oPreview, 0, wx.wxEXPAND + wx.wxTOP + wx.wxBOTTOM, 8);
+            tInfo.docsPreview = oPreview;
+            --[[!
+            @fqxn CFS.Windows.Options.Private.Functions.previewDocs
+            @desc Refreshes the compact documentation and syntax color sample from draft theme choices without saving them. Browser-specific shadows and textures are omitted.
+            @vis private
+            !]]
+            local function previewDocs()
+                local sTheme = Dox.THEME[tInfo.docsTheme:GetStringSelection()].value;
+                local tColors = {};
+                for sKey, sValue in tPageThemes[sTheme].css:gmatch("%-%-([%w%-]+):%s*(#[%x]+)") do tColors[sKey] = sValue; end
+                local tCode = tPrismColors[tInfo.docsPrism:GetStringSelection()];
+                local sHTML = '<html><body bgcolor="'..tColors.page..'" text="'..tColors.text..'"><table width="100%" cellpadding="8" cellspacing="0"><tr><td bgcolor="'..tColors['surface-raised']..'"><font color="'..tColors.accent..'"><b>Documentation preview</b></font><br>A small example of your game documentation.</td></tr><tr><td bgcolor="'..tCode.background..'"><font face="Consolas" color="'..tCode.text..'"><font color="'..tCode.comment..'">-- Example game script</font><br><font color="'..tCode.keyword..'">local</font> title = <font color="'..tCode.string..'">&quot;Example Card&quot;</font><br><font color="'..tCode.keyword..'">return</font> title</font></td></tr></table></body></html>';
+                tInfo.docsPreviewHTML = sHTML;
+                oPreview:SetPage(sHTML);
+            end
+            tInfo.previewDocs = previewDocs;
+            tInfo.docsTheme:Connect(wx.wxEVT_COMMAND_CHOICE_SELECTED, previewDocs);
+            tInfo.docsPrism:Connect(wx.wxEVT_COMMAND_CHOICE_SELECTED, previewDocs);
+            previewDocs();
+            oDocs:Add(wx.wxStaticText(dDocs, wx.wxID_ANY, "Live color sample; browser textures and shadows may differ."), 0, wx.wxBOTTOM, 8);
+        end
         tControls[bCardSet and "card" or "game"] = tInfo;
     end
     info("Game", tContext.game and FS.Game.Info, false);
     info("Card Set", tContext.cardSet and FS.CardSet.Info, true);
     local tModel = require("Windows.Editors.Common").model(tFiles);
     --[[!
-    @fqxn CFS.Windows.Options.Private.select
+    @fqxn CFS.Windows.Options.Private.Functions.select
     @desc Shows the selected options page and updates the category selector.
     @param any nIndex Index.
     @vis private
@@ -382,7 +459,7 @@ function Options.create(dParent, tContext)
         oEvent:Skip();
     end);
     --[[!
-    @fqxn CFS.Windows.Options.Private.apply
+    @fqxn CFS.Windows.Options.Private.Functions.apply
     @desc Validates metadata, stages matching documentation renames, persists settings, and notifies the caller of accepted changes.
     @vis private
     !]]
@@ -393,6 +470,12 @@ function Options.create(dParent, tContext)
                 local sName = tInfo.name:GetValue():match("^%s*(.-)%s*$");
                 assert(sName ~= "" and not sName:find("[\r\n]"), "Enter a nonempty, single-line "..sKey.." name.");
                 local tValues = {{"Name", sName}};
+                if (sKey == "game") then
+                    tValues[#tValues + 1] = {"DocsTheme", tInfo.docsTheme:GetStringSelection()};
+                    tValues[#tValues + 1] = {"DocsPrismTheme", tInfo.docsPrism:GetStringSelection()};
+                    tValues[#tValues + 1] = {"DocsIncludeStudio", tInfo.docsStudio:GetValue() and "true" or "false"};
+                    tValues[#tValues + 1] = {"IncludePlugins", tInfo.docsPlugins:GetValue() and "true" or "false"};
+                end
                 if (sKey == "card") then
                     for _, tDimension in ipairs({{"CardWidth", tInfo.width}, {"CardHeight", tInfo.height}}) do
                         local nValue = tonumber(tDimension[2]:GetValue());
@@ -446,7 +529,7 @@ function Options.create(dParent, tContext)
         return true;
     end
     --[[!
-    @fqxn CFS.Windows.Options.Private.protectedApply
+    @fqxn CFS.Windows.Options.Private.Functions.protectedApply
     @desc Applies changes and displays failures without closing; closes only after successful application when requested.
     @param any bClose Close.
     @vis private
@@ -466,7 +549,7 @@ function Options.create(dParent, tContext)
 end
 
 --[[!
-@fqxn CFS.Windows.Options.show
+@fqxn CFS.Windows.Options.Functions.show
 @pulsarlua function Options.show
 @desc Runs the main Options dialog and destroys it after closing.
 @param any dParent Parent window.

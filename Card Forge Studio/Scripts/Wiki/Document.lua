@@ -1,6 +1,21 @@
 --[[!
 @fqxn CFS.Modules.Wiki.Document
-@desc Rich-text XML serialization, headings, lists, checkboxes, code boxes, syntax highlighting, and theme application.
+@desc
+<section aria-label="Wiki.Document overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Wiki.Document</h2><p style="font-size:1.15rem;margin:0">Wiki Document turns rich text into the stored document format and back.</p></div>
+<h3>How it fits into your work</h3><p>Headings, lists, checkboxes, code boxes, highlighting, and theme application are parts of the document.</p>
+<h3>Follow the handoffs</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">From editor contents to a stored page</h3><p style="margin:0">The document layer represents the rich page contents used by Wiki: headings, lists, checkboxes, and code boxes as well as ordinary text. It converts between the editor’s document and the stored representation so reopening a page can restore its structure.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">How it fits with the other Wiki pieces</h3><p style="margin:0">The Wiki window provides the editing experience. Store handles page identity and files. This layer handles the contents of a page, including anchors used to identify locations within it. Keeping those roles separate lets a page have a stable identity while its text and formatting change.</p></article>
+</div>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.Wiki">Wiki</a></h3><p style="margin:0">The Wiki keeps written game material alongside card-making tools.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Wiki.Store">Wiki.Store</a></h3><p style="margin:0">Wiki Store manages page drafts and associated image assets.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Wiki.Themes">Wiki.Themes</a></h3><p style="margin:0">Wiki Themes supplies reading and editing palettes for game documents.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Document formatting and page storage are separate responsibilities.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual functions, inputs, and results.</p>
+</section>
 !]]
 
 -- Native rich-text documents and stable section anchors.
@@ -8,7 +23,7 @@ local wx = require("wx");
 local Document = {};
 local _oXMLHandler;
 --[[!
-@fqxn CFS.Modules.Wiki.Document.Private.ensureHandler
+@fqxn CFS.Modules.Wiki.Document.Private.Functions.ensureHandler
 @desc Registers the native rich-text XML handler when it is not already available.
 @vis private
 !]]
@@ -19,7 +34,7 @@ local function ensureHandler()
     end
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.Private.temporary
+@fqxn CFS.Modules.Wiki.Document.Private.Functions.temporary
 @desc Runs a callback with a temporary file and removes the file before returning or propagating failure.
 @vis private
 @param any fCallback Callback function.
@@ -35,7 +50,7 @@ local function temporary(fCallback)
     return vResult;
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.capture
+@fqxn CFS.Modules.Wiki.Document.Functions.capture
 @pulsarlua function Document.capture
 @desc Serializes the rich-text buffer to XML while preserving its modified flag.
 @param any oEditor Editor.
@@ -57,7 +72,7 @@ function Document.capture(oEditor)
     end);
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.load
+@fqxn CFS.Modules.Wiki.Document.Functions.load
 @pulsarlua function Document.load
 @desc Loads XML into the editor or clears it for an empty page.
 @param any oEditor Editor.
@@ -75,7 +90,7 @@ function Document.load(oEditor, sXML)
     oEditor:DiscardEdits();
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.sections
+@fqxn CFS.Modules.Wiki.Document.Functions.sections
 @pulsarlua function Document.sections
 @desc Collects unique heading anchors and their positions.
 @param any oEditor Editor.
@@ -97,7 +112,7 @@ function Document.sections(oEditor)
     return tSections;
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.jump
+@fqxn CFS.Modules.Wiki.Document.Functions.jump
 @pulsarlua function Document.jump
 @desc Moves the caret and scrolls to a matching heading anchor, reporting whether it was found.
 @param any oEditor Editor.
@@ -114,7 +129,7 @@ function Document.jump(oEditor, sAnchor)
     return false;
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.heading
+@fqxn CFS.Modules.Wiki.Document.Functions.heading
 @pulsarlua function Document.heading
 @desc Applies heading formatting and a page-local anchor to the current paragraph or selection.
 @param any oEditor Editor.
@@ -147,7 +162,7 @@ function Document.heading(oEditor, nLevel)
     until (nPosition >= nEnd)
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.Private.listParagraph
+@fqxn CFS.Modules.Wiki.Document.Private.Functions.listParagraph
 @desc Returns the paragraph range, text, and attributes for list operations.
 @vis private
 @param any oEditor Editor.
@@ -161,7 +176,7 @@ local function listParagraph(oEditor, nPosition)
     return oRange, oParagraph:GetTextForRange(oRange), a;
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.Private.paragraphStyle
+@fqxn CFS.Modules.Wiki.Document.Private.Functions.paragraphStyle
 @desc Applies paragraph-only attributes as an undoable operation.
 @vis private
 @param any oEditor Editor.
@@ -172,7 +187,7 @@ local function paragraphStyle(oEditor, oRange, a)
     oEditor:SetStyleEx(wx.wxRichTextRange(oRange:GetStart(), oRange:GetEnd() + 1), a, wx.wxRICHTEXT_SETSTYLE_WITH_UNDO + wx.wxRICHTEXT_SETSTYLE_PARAGRAPHS_ONLY);
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.Private.checkboxFont
+@fqxn CFS.Modules.Wiki.Document.Private.Functions.checkboxFont
 @desc Uses the symbol font for checkbox glyphs while adapting their size to surrounding text.
 @vis private
 @param any oEditor Editor.
@@ -193,7 +208,7 @@ local function checkboxFont(oEditor, nPosition)
     a:delete();
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.checkboxes
+@fqxn CFS.Modules.Wiki.Document.Functions.checkboxes
 @pulsarlua function Document.checkboxes
 @desc Normalizes checkbox glyph formatting in nested content outside code boxes.
 @param any oEditor Editor.
@@ -202,7 +217,7 @@ function Document.checkboxes(oEditor)
     local oOriginal = oEditor:GetFocusObject(); local nCaret = oEditor:GetInsertionPoint(); local oSelection = oEditor:GetSelectionRange();
     local oBoxClass = wx.wxClassInfo.FindClass("wxRichTextParagraphLayoutBox"); local oCompositeClass = wx.wxClassInfo.FindClass("wxRichTextCompositeObject");
     --[[!
-    @fqxn CFS.Modules.Wiki.Document.Private.visit
+    @fqxn CFS.Modules.Wiki.Document.Private.Functions.visit
     @desc Traverses nested rich-text objects for the enclosing document-formatting operation.
     @param any oObject Object.
     @vis private
@@ -225,7 +240,7 @@ function Document.checkboxes(oEditor)
     if (oSelection:GetEnd() > oSelection:GetStart()) then oEditor:SetSelection(oSelection:GetStart(), oSelection:GetEnd()); end
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.checkbox
+@fqxn CFS.Modules.Wiki.Document.Functions.checkbox
 @pulsarlua function Document.checkbox
 @desc Inserts an unchecked checkbox at the paragraph start unless one already exists.
 @param any oEditor Editor.
@@ -239,7 +254,7 @@ function Document.checkbox(oEditor)
     oEditor:EndBatchUndo(); a:delete(); oEditor:SetFocus();
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.toggleCheck
+@fqxn CFS.Modules.Wiki.Document.Functions.toggleCheck
 @pulsarlua function Document.toggleCheck
 @desc Toggles a paragraph checkbox, optionally requiring a hit on its glyph.
 @param any oEditor Editor.
@@ -262,7 +277,7 @@ function Document.toggleCheck(oEditor, nPosition, bHitOnly)
     return true;
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.listEnter
+@fqxn CFS.Modules.Wiki.Document.Functions.listEnter
 @pulsarlua function Document.listEnter
 @desc Continues a list or checkbox item, or exits an empty item, as an undoable operation.
 @param any oEditor Editor.
@@ -286,7 +301,7 @@ function Document.listEnter(oEditor)
     oEditor:EndBatchUndo(); a:delete(); return true;
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.listIndent
+@fqxn CFS.Modules.Wiki.Document.Functions.listIndent
 @pulsarlua function Document.listIndent
 @desc Adjusts list indentation and ordered-list numbering style while preserving checkbox behavior.
 @param any oEditor Editor.
@@ -313,7 +328,7 @@ function Document.listIndent(oEditor, bOutdent)
     paragraphStyle(oEditor, oRange, a); a:delete(); return true;
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.Private.codePadding
+@fqxn CFS.Modules.Wiki.Document.Private.Functions.codePadding
 @desc Applies ten-pixel padding on all sides of a code box.
 @vis private
 @param any oStyle Style.
@@ -326,7 +341,7 @@ local function codePadding(oStyle)
     oPadding:GetBottom():SetValue(10, wx.wxTEXT_ATTR_UNITS_PIXELS);
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.code
+@fqxn CFS.Modules.Wiki.Document.Functions.code
 @pulsarlua function Document.code
 @desc Creates or updates a code box carrying its explicit language marker.
 @param any oEditor Editor.
@@ -352,7 +367,7 @@ function Document.code(oEditor, sLanguage)
     a:delete(); oEditor:SetFocus();
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.exitCode
+@fqxn CFS.Modules.Wiki.Document.Functions.exitCode
 @pulsarlua function Document.exitCode
 @desc Moves editing from a code box into a normal paragraph.
 @param any oEditor Editor.
@@ -367,7 +382,7 @@ function Document.exitCode(oEditor)
     return true;
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.highlight
+@fqxn CFS.Modules.Wiki.Document.Functions.highlight
 @pulsarlua function Document.highlight
 @desc Uses a styled-text lexer to color code boxes while preserving selection and modified state.
 @param any oEditor Editor.
@@ -383,7 +398,7 @@ function Document.highlight(oEditor, oLexer)
     local oBoxClass = wx.wxClassInfo.FindClass("wxRichTextParagraphLayoutBox");
     local oCompositeClass = wx.wxClassInfo.FindClass("wxRichTextCompositeObject");
     --[[!
-    @fqxn CFS.Modules.Wiki.Document.Private.visit2
+    @fqxn CFS.Modules.Wiki.Document.Private.Functions.visit2
     @desc Traverses nested rich-text objects for the enclosing document-formatting operation.
     @param any oObject Object.
     @vis private
@@ -398,7 +413,7 @@ function Document.highlight(oEditor, oLexer)
             oLexer:SetKeyWords(0, tKeywords[sLanguage] or ""); oLexer:SetText(sText); oLexer:Colourise(0, -1);
             local tColors = {}; local sPrefix = tPrefixes[sLanguage];
             --[[!
-            @fqxn CFS.Modules.Wiki.Document.Private.colors
+            @fqxn CFS.Modules.Wiki.Document.Private.Functions.colors
             @desc Maps language token-style constants to the configured syntax colors.
             @param any tNames Names.
             @param any sColor Color.
@@ -413,7 +428,7 @@ function Document.highlight(oEditor, oLexer)
             colors({"NUMBER", "VALUE"}, "#F78C6C"); colors({"OPERATOR", "ATTRIBUTE", "PREPROCESSOR"}, "#89DDFF");
             local nPosition, nStart, sLast = 0, 0, nil;
             --[[!
-            @fqxn CFS.Modules.Wiki.Document.Private.apply
+            @fqxn CFS.Modules.Wiki.Document.Private.Functions.apply
             @desc Applies syntax color attributes to a nonempty run of rich-text characters.
             @param any nEnd End.
             @vis private
@@ -440,7 +455,7 @@ function Document.highlight(oEditor, oLexer)
     oEditor:GetBuffer():Modify(bModified);
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Document.theme
+@fqxn CFS.Modules.Wiki.Document.Functions.theme
 @pulsarlua function Document.theme
 @desc Applies background and foreground colors to normal content outside code boxes.
 @param any oEditor Editor.
@@ -452,7 +467,7 @@ function Document.theme(oEditor, sBackground, sForeground)
     local oBoxClass = wx.wxClassInfo.FindClass("wxRichTextParagraphLayoutBox");
     local oCompositeClass = wx.wxClassInfo.FindClass("wxRichTextCompositeObject");
     --[[!
-    @fqxn CFS.Modules.Wiki.Document.Private.visit3
+    @fqxn CFS.Modules.Wiki.Document.Private.Functions.visit3
     @desc Traverses nested rich-text objects for the enclosing document-formatting operation.
     @param any oObject Object.
     @vis private

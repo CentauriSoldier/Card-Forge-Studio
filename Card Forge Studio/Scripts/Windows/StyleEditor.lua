@@ -1,6 +1,17 @@
 --[[!
 @fqxn CFS.Windows.StyleEditor
-@desc Style draft management, inherited settings, validation, and live native text previews.
+@desc
+<section aria-label="StyleEditor overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">StyleEditor</h2><p style="font-size:1.15rem;margin:0">Style Editor shapes reusable card text through controls and a live sample.</p></div>
+<h3>How it fits into your work</h3><p>Adjust inherited style drafts, inspect the native text preview, and validate settings before saving. Export can resolve inheritance into independent values or include the complete chain of referenced styles. Import validates a merged draft and asks before replacing matching names; Save commits it to the active sheet.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.FontStyle">Font Style</a></h3><p style="margin:0">FontStyle gives card text a reusable visual identity.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Forge">Forge</a></h3><p style="margin:0">Forge is the visual workbench that turns selected card data and drawing instructions into artwork.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.FS">File System</a></h3><p style="margin:0">FS is Studio's map of where project files belong.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">The preview helps evaluate text styling; grid colors and documentation themes are separate.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Draft style editing. Only Save writes the active game's style file.
@@ -25,7 +36,7 @@ for _, tGroup in ipairs(tGroups) do
 end
 
 --[[!
-@fqxn CFS.Windows.StyleEditor.Private.readFile
+@fqxn CFS.Windows.StyleEditor.Private.Functions.readFile
 @desc Reads a complete style file in binary mode and checks reading and closing.
 @param any pFile File.
 @vis private
@@ -38,7 +49,7 @@ local function readFile(pFile)
 end
 
 --[[!
-@fqxn CFS.Windows.StyleEditor.Private.channels
+@fqxn CFS.Windows.StyleEditor.Private.Functions.channels
 @desc Parses hexadecimal or channel-list color text into color components.
 @param any sValue Value.
 @vis private
@@ -62,7 +73,7 @@ local function channels(sValue)
 end
 
 --[[!
-@fqxn CFS.Windows.StyleEditor.model
+@fqxn CFS.Windows.StyleEditor.Functions.model
 @pulsarlua function StyleEditor.model
 @desc Loads a style INI into an editable model with inheritance resolution, validation, rename dependencies, and protected saving.
 @param any pFile File path.
@@ -153,7 +164,7 @@ function StyleEditor.model(pFile)
         end
     end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.name
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.name
     @desc Normalizes and validates a unique style name.
     @param any sName Name.
     @vis private
@@ -167,7 +178,7 @@ function StyleEditor.model(pFile)
         return sName;
     end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.names
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.names
     @desc Rebuilds the sorted style-name list and marks the model dirty.
     @vis private
     !]]
@@ -279,18 +290,35 @@ function StyleEditor.model(pFile)
     end
     --[[!
     @fqxn CFS.Windows.StyleEditor.Model.exportText
-    @desc Serializes the selected style sections to INI text.
+    @desc Serializes selected styles. The flatten mode resolves references to values; include adds all referenced styles recursively. The draft is unchanged.
     @param any tSelected Selected.
+    @param string sMode Optional flatten or include inheritance mode.
     @vis public
     !]]
-    function tModel.exportText(tSelected)
+    function tModel.exportText(tSelected, sMode)
         assert(#tSelected > 0, "Select at least one style.");
         local tIncluded, tMissing, tLines = {}, {}, {};
         for _, sName in ipairs(tSelected) do
             assert(tModel.sections[sName], "Selected style does not exist.");
             tIncluded[sName] = true;
         end
-        for _, sName in ipairs(tSelected) do
+        local tExport = {};
+        for _, sName in ipairs(tSelected) do tExport[#tExport + 1] = sName; end
+        if (sMode == "include") then
+            local nIndex = 1;
+            while (nIndex <= #tExport) do
+                for sKey, sValue in pairs(tModel.sections[tExport[nIndex]]) do
+                    local sSource = sValue:match("^%s*<%s*(.-)%s*>%s*$");
+                    if (sSource) then
+                        assert(tModel.sections[sSource], "Missing inherited style: "..sSource);
+                        tModel.resolve(tExport[nIndex], sKey);
+                        if (not tIncluded[sSource]) then tIncluded[sSource] = true; tExport[#tExport + 1] = sSource; end
+                    end
+                end
+                nIndex = nIndex + 1;
+            end
+        end
+        for _, sName in ipairs(tExport) do
             tLines[#tLines + 1] = "["..sName.."]";
             local tKeys = {};
             for sKey in pairs(tModel.sections[sName]) do tKeys[#tKeys + 1] = sKey; end
@@ -298,7 +326,16 @@ function StyleEditor.model(pFile)
             for _, sKey in ipairs(tKeys) do
                 local sValue = tModel.sections[sName][sKey];
                 local sSource = sValue:match("^%s*<%s*(.-)%s*>%s*$");
-                if (sSource and not tIncluded[sSource]) then tMissing[sSource] = true; end
+                if (sSource and sMode == "flatten") then
+                    local sCurrent, tSeen = sName, {};
+                    while (sCurrent) do
+                        assert(not tSeen[sCurrent], "Inheritance cycle for "..sKey..".");
+                        tSeen[sCurrent] = true;
+                        local tSection = assert(tModel.sections[sCurrent], "Missing inherited style: "..sCurrent);
+                        sCurrent = (tSection[sKey] or ""):match("^%s*<%s*(.-)%s*>%s*$");
+                    end
+                    sValue = tModel.resolve(sName, sKey);
+                elseif (sSource and not tIncluded[sSource]) then tMissing[sSource] = true; end
                 tLines[#tLines + 1] = sKey.."="..sValue;
             end
             tLines[#tLines + 1] = "";
@@ -309,6 +346,44 @@ function StyleEditor.model(pFile)
         return table.concat(tLines, "\r\n"), tWarnings;
     end
     --[[!
+    @fqxn CFS.Windows.StyleEditor.Model.importFile
+    @desc Validates a merged style sheet before adding it to the draft. Matching names require replacement permission; files remain unchanged until Save.
+    @param string pImport Source INI file.
+    @param boolean bReplace Allow replacing matching style names.
+    @vis public
+    !]]
+    function tModel.importFile(pImport, bReplace)
+        local tIncoming = StyleEditor.model(pImport);
+        assert(#tIncoming.names > 0, "The imported sheet has no styles.");
+        local tCandidate = StyleEditor.model(pFile);
+        tCandidate.sections = {};
+        for sName, tValues in pairs(tModel.sections) do tCandidate.sections[sName] = tValues; end
+        for _, sName in ipairs(tIncoming.names) do
+            assert(not sName:find("[%c%[%]<>/\\=]"), "Invalid imported style name: "..sName);
+            for sExisting in pairs(tModel.sections) do
+                assert(sExisting:upper() ~= sName:upper() or sExisting == sName, "Imported name differs only by case: "..sName);
+            end
+            assert(bReplace or not tModel.sections[sName], "Style already exists: "..sName);
+            tCandidate.sections[sName] = tIncoming.sections[sName];
+        end
+        for sName, tValues in pairs(tCandidate.sections) do
+            for sKey, sValue in pairs(tValues) do
+                local sSource = sValue:match("^%s*<%s*(.-)%s*>%s*$");
+                assert(not sSource or tCandidate.sections[sSource], "Missing inherited style: "..tostring(sSource));
+                tCandidate.resolve(sName, sKey);
+                tCandidate.validate(sName, sKey);
+            end
+        end
+        for _, sName in ipairs(tIncoming.names) do
+            if (tModel.sections[sName]) then tRemoved[sName] = true; end
+            tModel.sections[sName] = tIncoming.sections[sName];
+            tChanged[sName] = {};
+            for sKey, sValue in pairs(tIncoming.sections[sName]) do tChanged[sName][sKey] = sValue; end
+        end
+        names();
+        return #tIncoming.names;
+    end
+    --[[!
     @fqxn CFS.Windows.StyleEditor.Model.parsed
     @desc Parses a draft style through an adapter without writing the source file.
     @param any sName Name.
@@ -317,7 +392,7 @@ function StyleEditor.model(pFile)
     function tModel.parsed(sName)
         return FontStyle.Parse(sName, {
             --[[!
-            @fqxn CFS.Windows.StyleEditor.Private.GetValue
+            @fqxn CFS.Windows.StyleEditor.Private.Functions.GetValue
             @desc Resolves a draft style value through the model's inheritance lookup.
             @param any sSection Section.
             @param any sKey Key.
@@ -325,7 +400,7 @@ function StyleEditor.model(pFile)
             !]]
             GetValue = function(sSection, sKey) return tModel.resolve(sSection, sKey); end,
             --[[!
-            @fqxn CFS.Windows.StyleEditor.Private.GetValueNames
+            @fqxn CFS.Windows.StyleEditor.Private.Functions.GetValueNames
             @desc Returns keys from a draft style section.
             @param any sSection Section.
             @vis private
@@ -383,7 +458,7 @@ function StyleEditor.model(pFile)
 end
 
 --[[!
-@fqxn CFS.Windows.StyleEditor.Private.colour
+@fqxn CFS.Windows.StyleEditor.Private.Functions.colour
 @desc Converts a packed RGBA integer to a native color.
 @param any nColor Color.
 @vis private
@@ -393,7 +468,7 @@ local function colour(nColor)
 end
 
 --[[!
-@fqxn CFS.Windows.StyleEditor.Private.drawing
+@fqxn CFS.Windows.StyleEditor.Private.Functions.drawing
 @desc Adapts native graphics and device contexts to the font-style drawing interface.
 @param any oGC Gc.
 @param any oDC Dc.
@@ -403,34 +478,34 @@ local function drawing(oGC, oDC)
     local oFont = wx.wxNORMAL_FONT;
     local D = {};
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.D_SetDrawingFont
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.D_SetDrawingFont
     @desc Installs the font in the style-preview device and graphics contexts.
     @param any oNewFont New font.
     @vis private
     !]]
     D.SetDrawingFont = function(oNewFont) oFont = oNewFont; oDC:SetFont(oFont); oGC:SetFont(oFont, wx.wxBLACK); end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.D_SetFilteringMode
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.D_SetFilteringMode
     @desc Compatibility hook; native graphics composition supplies filtering behavior.
     @vis private
     !]]
     D.SetFilteringMode = function() end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.D_GetTextWidth
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.D_GetTextWidth
     @desc Measures text width in the style-preview graphics context.
     @param any sText Text.
     @vis private
     !]]
     D.GetTextWidth = function(sText) local nW = oGC:GetTextExtent(sText); return nW; end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.D_GetTextHeight
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.D_GetTextHeight
     @desc Measures text height in the style-preview graphics context.
     @param any sText Text.
     @vis private
     !]]
     D.GetTextHeight = function(sText) local _, nH = oGC:GetTextExtent(sText); return nH; end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.D_DrawText
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.D_DrawText
     @desc Draws preview text in the supplied packed color.
     @param any nX X.
     @param any nY Y.
@@ -440,7 +515,7 @@ local function drawing(oGC, oDC)
     !]]
     D.DrawText = function(nX, nY, sText, nColor) oGC:SetFont(oFont, colour(nColor)); oGC:DrawText(sText, nX, nY); end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.D_DrawAngledText
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.D_DrawAngledText
     @desc Draws preview text rotated by the supplied angle in degrees.
     @param any nX X.
     @param any nY Y.
@@ -451,7 +526,7 @@ local function drawing(oGC, oDC)
     !]]
     D.DrawAngledText = function(nX, nY, sText, nAngle, nColor) oGC:SetFont(oFont, colour(nColor)); oGC:DrawText(sText, nX, nY, math.rad(nAngle)); end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.D_DrawRectangle
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.D_DrawRectangle
     @desc Draws a filled preview rectangle without an outline.
     @param any nX X.
     @param any nY Y.
@@ -466,7 +541,7 @@ local function drawing(oGC, oDC)
         oGC:DrawRectangle(nX, nY, nW, nH);
     end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.D_DrawTextBackground
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.D_DrawTextBackground
     @desc Draws a padded preview background in a temporarily transformed graphics state.
     @param any nX X.
     @param any nY Y.
@@ -487,7 +562,7 @@ end
 StyleEditor.drawing = drawing;
 
 --[[!
-@fqxn CFS.Windows.StyleEditor.create
+@fqxn CFS.Windows.StyleEditor.Functions.create
 @pulsarlua function StyleEditor.create
 @desc Creates the style editor, live preview, and style-management controls from the loaded style model.
 @param any dParent Parent window.
@@ -518,7 +593,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
     local sPreviewFont = "";
     local refresh;
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.protect
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.protect
     @desc Wraps a style-editor action and displays and logs failures.
     @param any fAction Action.
     @vis private
@@ -531,7 +606,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
         end;
     end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.edited
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.edited
     @desc Validates a changed field and updates the draft unless controls are being loaded.
     @param any sKey Key.
     @param any sValue Value.
@@ -580,7 +655,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
                 oInput = wx.wxColourPickerCtrl(dPage, wx.wxID_ANY, wx.wxBLACK);
                 oAlpha = wx.wxSpinCtrl(dPage, wx.wxID_ANY, "255", wx.wxDefaultPosition, wx.wxSize(80, -1), wx.wxSP_ARROW_KEYS, 0, 255, 255);
                 --[[!
-                @fqxn CFS.Windows.StyleEditor.Private.changed
+                @fqxn CFS.Windows.StyleEditor.Private.Functions.changed
                 @desc Copies the selected color and alpha controls into the edited style field.
                 @vis private
                 !]]
@@ -620,7 +695,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
     local oStyles = wx.wxBoxSizer(wx.wxVERTICAL);
     oStyles:Add(oList, 1, wx.wxEXPAND);
     local tStyleButtons = {};
-    for _, sAction in ipairs({"New", "Duplicate", "Rename", "Delete", "Export"}) do
+    for _, sAction in ipairs({"New", "Duplicate", "Rename", "Delete", "Import", "Export"}) do
         local oButton = wx.wxButton(dPanel, wx.wxID_ANY, sAction);
         tStyleButtons[sAction] = oButton;
         oStyles:Add(oButton, 0, wx.wxEXPAND + wx.wxTOP, 4);
@@ -662,7 +737,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
     oLayout:Add(oButtons, 0, wx.wxEXPAND + wx.wxALL, 6);
     dPanel:SetSizer(oLayout);
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.refresh
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.refresh
     @desc Refreshes style controls, validation state, and the live preview.
     @param any sEditedKey Edited key.
     @vis private
@@ -706,7 +781,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
         for _, dCanvas in ipairs(tSamples) do dCanvas:Refresh(false); end
     end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.refreshNames
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.refreshNames
     @desc Repopulates the style list and updates control enablement for the selected style.
     @vis private
     !]]
@@ -721,7 +796,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
         refresh();
     end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.requestName
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.requestName
     @desc Prompts for a style name and returns nil when cancelled.
     @param any sTitle Title.
     @param any sDefault Default.
@@ -748,9 +823,19 @@ function StyleEditor.create(dParent, pFile, tOptions)
                 local tSelected = {};
                 for nIndex = 0, tIndices:GetCount() - 1 do tSelected[#tSelected + 1] = tModel.names[tIndices:Item(nIndex) + 1]; end
                 local sText, tMissing = tModel.exportText(tSelected);
-                if (#tMissing > 0) then
-                    local nAnswer = wx.wxMessageBox("These inherited styles are absent from the export: "..table.concat(tMissing, ", ")..".\n\nExport anyway with those references unchanged?", "Missing inherited styles", wx.wxYES_NO + wx.wxNO_DEFAULT + wx.wxICON_QUESTION, dFrame);
-                    if (nAnswer ~= wx.wxYES) then return; end
+                local bInheritance = #tMissing > 0;
+                for _, sName in ipairs(tSelected) do
+                    for _, sValue in pairs(tModel.sections[sName]) do
+                        if (sValue:match("^%s*<%s*(.-)%s*>%s*$")) then bInheritance = true; end
+                    end
+                end
+                if (bInheritance) then
+                    local dMode = wx.wxSingleChoiceDialog(dFrame, "Choose how to export inherited styles. Cancel stops the export.", "Style inheritance", {"Without inheritance (keep resolved values)", "Include all inherited styles"});
+                    dMode:CentreOnParent();
+                    local bAccepted = dMode:ShowModal() == wx.wxID_OK;
+                    local nMode = dMode:GetSelection(); dMode:Destroy();
+                    if (not bAccepted) then return; end
+                    sText = tModel.exportText(tSelected, nMode == 0 and "flatten" or "include");
                 end
                 local dFile = wx.wxFileDialog(dFrame, "Export styles", "", "Styles.ini", "Style sheets (*.ini)|*.ini", wx.wxFD_SAVE + wx.wxFD_OVERWRITE_PROMPT);
                 local bSave = dFile:ShowModal() == wx.wxID_OK;
@@ -774,6 +859,21 @@ function StyleEditor.create(dParent, pFile, tOptions)
                 assert(bOK, sError);
                 oMessage:SetLabel("Selected styles exported. The draft remains unchanged.");
                 return;
+            elseif (sAction == "Import") then
+                local dFile = wx.wxFileDialog(dFrame, "Import styles", "", "", "Style sheets (*.ini)|*.ini", wx.wxFD_OPEN + wx.wxFD_FILE_MUST_EXIST);
+                local bImport = dFile:ShowModal() == wx.wxID_OK;
+                local pImport = dFile:GetPath(); dFile:Destroy();
+                if (not bImport) then return; end
+                local tIncoming = StyleEditor.model(pImport);
+                local tMatching = {};
+                for _, sName in ipairs(tIncoming.names) do if (tModel.sections[sName]) then tMatching[#tMatching + 1] = sName; end end
+                if (#tMatching > 0) then
+                    local nAnswer = wx.wxMessageBox("Replace these styles in the draft? "..table.concat(tMatching, ", ")..".\n\nThe active file changes only when you Save.", "Matching styles", wx.wxYES_NO + wx.wxNO_DEFAULT + wx.wxICON_QUESTION, dFrame);
+                    if (nAnswer ~= wx.wxYES) then return; end
+                end
+                local nImported = tModel.importFile(pImport, #tMatching > 0);
+                sSelected = tIncoming.names[1]; refreshNames();
+                oMessage:SetLabel(tostring(nImported).." styles imported into the draft. Save to keep them.");
             elseif (sAction == "Delete") then
                 local tDependents = tModel.dependencies(sSelected);
                 local sQuestion = "Delete "..sSelected.." from the draft? Game scripts using this name will need updating.";
@@ -800,7 +900,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
         end));
     end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.save
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.save
     @desc Rejects invalid fields, saves the style draft, and refreshes the preview and status.
     @vis private
     !]]
@@ -811,7 +911,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
         oMessage:SetLabel("Styles saved. Live cards will update through the file watcher.");
     end
     --[[!
-    @fqxn CFS.Windows.StyleEditor.Private.allowClose
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.allowClose
     @desc Asks whether style drafts should be saved, discarded, or kept open.
     @vis private
     !]]
@@ -842,13 +942,13 @@ function StyleEditor.create(dParent, pFile, tOptions)
     dFrame:Show(true); dPanel:Layout();
     return {frame = dFrame, model = tModel, controls = tControls, samples = tSamples, save = save, refresh = refresh,
         --[[!
-        @fqxn CFS.Windows.StyleEditor.Private.close
+        @fqxn CFS.Windows.StyleEditor.Private.Functions.close
         @desc Closes the style editor through its draft-protection handling.
         @vis private
         !]]
         close = function() if (bClosed) then return true; end return dFrame:Close(); end,
         --[[!
-        @fqxn CFS.Windows.StyleEditor.Private.show
+        @fqxn CFS.Windows.StyleEditor.Private.Functions.show
         @desc Shows and raises the style editor.
         @vis private
         !]]

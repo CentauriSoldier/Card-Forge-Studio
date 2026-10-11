@@ -1,6 +1,17 @@
 --[[!
 @fqxn CFS.Windows.CodeEditor
-@desc Modal Base64 code-cell editor with syntax validation and shared editor preferences.
+@desc
+<section aria-label="CodeEditor overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">CodeEditor</h2><p style="font-size:1.15rem;margin:0">Code Editor is a focused editor for a code cell's stored script.</p></div>
+<h3>How it fits into your work</h3><p>Open the cell, edit with shared preferences, and validate the draft before accepting it.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.DataGrid">Data Grid</a></h3><p style="margin:0">The common grid supplies table controls for both data windows.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys.CSV">Card Data Processing</a></h3><p style="margin:0">The CSV processor connects entered values with the values used to draw a card.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.EditorSettings">EditorSettings</a></h3><p style="margin:0">Shared settings keep the code editors consistent across projects.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Code-cell scripts are interpreted through the processing environment; the grid's display is not the raw encoded storage.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Modal Lua code-cell editor. The draft stays in memory until Apply.
@@ -18,7 +29,7 @@ local _tWindowState = {
 WindowState.register("CodeEditor", _tWindowState);
 
 --[[!
-@fqxn CFS.Windows.CodeEditor.create
+@fqxn CFS.Windows.CodeEditor.Functions.create
 @pulsarlua function CodeEditor.create
 @desc Creates a modal Lua code-cell editor from Base64 text. Invalid syntax disables Apply and the draft stays in memory.
 @param any dParent Parent window.
@@ -40,12 +51,13 @@ function CodeEditor.create(dParent, sEncoded, sTitle)
     local sResult;
 
     EditorSettings.configure(oCode, "lua");
+    require("Autocomplete").Attach(oCode);
     local oThemeBar, oTheme, oFontSize, unregister = EditorSettings.bar(dDialog, {oCode});
     oCode:SetText(Base64.dec(sEncoded));
     oCode:EmptyUndoBuffer();
 
     --[[!
-    @fqxn CFS.Windows.CodeEditor.Private.checkSyntax
+    @fqxn CFS.Windows.CodeEditor.Private.Functions.checkSyntax
     @desc Compiles the draft without running it, displays syntax errors, and updates Apply enablement.
     @vis private
     !]]
@@ -100,7 +112,7 @@ function CodeEditor.create(dParent, sEncoded, sTitle)
 end
 
 --[[!
-@fqxn CFS.Windows.CodeEditor.edit
+@fqxn CFS.Windows.CodeEditor.Functions.edit
 @pulsarlua function CodeEditor.edit
 @desc Runs the code-cell editor; returns Base64 text after Apply or nil after cancellation, then releases native state.
 @param any dParent Parent window.

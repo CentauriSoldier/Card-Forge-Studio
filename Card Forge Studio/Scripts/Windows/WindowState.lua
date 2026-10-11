@@ -1,6 +1,18 @@
 --[[!
 @fqxn CFS.Windows.WindowState
-@desc Shared native window geometry and visibility persistence outside game folders.
+@desc
+<section aria-label="WindowState overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">WindowState</h2><p style="font-size:1.15rem;margin:0">WindowState remembers useful native-window choices outside game folders.</p></div>
+<h3>How it fits into your work</h3><p>Registered windows restore supported geometry and visibility policies when opened again.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.Main">Main</a></h3><p style="margin:0">The main Studio window connects your project, preview, and editing tools.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.LoadGame">LoadGame</a></h3><p style="margin:0">The game chooser presents projects as easy-to-scan logo cards.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.LoadCardSet">LoadCardSet</a></h3><p style="margin:0">The card-set chooser presents the active game's sets as logo cards.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.Options">Options</a></h3><p style="margin:0">Options puts application preferences and project information in one place.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Different windows can use different policies; not every dialog restores its screen position.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Shared native window geometry, stored outside the application and game folders.
@@ -12,7 +24,7 @@ local _tWindows = {};
 local _bRaising = false;
 
 --[[!
-@fqxn CFS.Windows.WindowState.getRaiseTogether
+@fqxn CFS.Windows.WindowState.Functions.getRaiseTogether
 @pulsarlua function WindowState.getRaiseTogether
 @desc Reads the preference controlling whether native windows are raised together.
 !]]
@@ -21,7 +33,7 @@ function WindowState.getRaiseTogether()
 end
 
 --[[!
-@fqxn CFS.Windows.WindowState.setRaiseTogether
+@fqxn CFS.Windows.WindowState.Functions.setRaiseTogether
 @pulsarlua function WindowState.setRaiseTogether
 @desc Persists the Boolean preference for raising native windows together.
 @param any bEnabled Enabled.
@@ -32,7 +44,7 @@ function WindowState.setRaiseTogether(bEnabled)
 end
 
 --[[!
-@fqxn CFS.Windows.WindowState.raiseOthers
+@fqxn CFS.Windows.WindowState.Functions.raiseOthers
 @pulsarlua function WindowState.raiseOthers
 @desc Raises shown, non-minimized registered frames and suppresses recursive activation.
 @param any dWindow Window.
@@ -48,7 +60,7 @@ function WindowState.raiseOthers(dWindow)
 end
 
 --[[!
-@fqxn CFS.Windows.WindowState.register
+@fqxn CFS.Windows.WindowState.Functions.register
 @pulsarlua function WindowState.register
 @desc Registers position, size, and visibility persistence policies for a named window.
 @param any sName Name.
@@ -60,7 +72,7 @@ function WindowState.register(sName, tOptions)
 end
 
 --[[!
-@fqxn CFS.Windows.WindowState.isOpen
+@fqxn CFS.Windows.WindowState.Functions.isOpen
 @pulsarlua function WindowState.isOpen
 @desc Reads saved visibility; returns nil when visibility is not stored or no value exists.
 @param any sName Name.
@@ -78,7 +90,7 @@ function WindowState.isOpen(sName, pFile)
 end
 
 --[[!
-@fqxn CFS.Windows.WindowState.bind
+@fqxn CFS.Windows.WindowState.Functions.bind
 @pulsarlua function WindowState.bind
 @desc Restores window state and binds delayed saves to native events. Returns save and close callbacks for the shared configuration.
 @param any dWindow Window.
@@ -117,7 +129,7 @@ function WindowState.bind(dWindow, sName, pFile)
     local sPrefix = "/Windows/"..sName.."/";
 
     --[[!
-    @fqxn CFS.Windows.WindowState.Private.readNumber
+    @fqxn CFS.Windows.WindowState.Private.Functions.readNumber
     @desc Reads a numeric value from the current window configuration section.
     @vis private
     @param any sKey Setting or field key.
@@ -128,7 +140,7 @@ function WindowState.bind(dWindow, sName, pFile)
     end
 
     --[[!
-    @fqxn CFS.Windows.WindowState.Private.save
+    @fqxn CFS.Windows.WindowState.Private.Functions.save
     @desc Persists permitted geometry and visibility, skipping minimized windows and preserving normal geometry while maximized.
     @vis private
     !]]
@@ -170,7 +182,7 @@ function WindowState.bind(dWindow, sName, pFile)
     if (tOptions.saveSize and readNumber("Maximized") == 1) then dWindow:Maximize(true); end
 
     --[[!
-    @fqxn CFS.Windows.WindowState.Private.changed
+    @fqxn CFS.Windows.WindowState.Private.Functions.changed
     @desc Schedules a delayed save for a shown, non-minimized window and propagates the native event.
     @vis private
     @param any oEvent Event.
@@ -201,7 +213,7 @@ function WindowState.bind(dWindow, sName, pFile)
     return {
         save = save,
         --[[!
-        @fqxn CFS.Windows.WindowState.Private.close
+        @fqxn CFS.Windows.WindowState.Private.Functions.close
         @desc Stops timers, saves final state, and releases the configuration when its last user closes.
         @vis private
         !]]

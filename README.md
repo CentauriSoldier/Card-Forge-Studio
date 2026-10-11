@@ -1,122 +1,68 @@
-![Card Forge Studio Banner](assets/img/banner.png)
+![Card Forge Studio](assets/img/banner.png)
 
-# 🔥 Card Forge Studio (***ALPHA***)
+<h1 align="center">Card Forge Studio</h1>
 
-> **Design. Build. Export. Dominate.**  
-> Card Forge Studio is a blazing-fast, open-source tool for creating professional card game assets at scale.
+<h3 align="center">Your ideas. A whole deck of possibilities.</h3>
 
-Card Forge Studio is built for designers, developers, and worldbuilders who need **speed**, **power**, and **control**.  
-Generating thousands of cards from data in seconds.
+## ✨ What is Card Forge Studio?
 
-> *“In the land of bloated editors and slow pipelines, a mighty forge was built.”*
+A free desktop editor suite for building card games: turn CSV data, Lua layouts, and artwork into complete decks, with live previews and flexible exports.
 
----
+Create, refine, and share card games in a **live coding environment** built around your data and your imagination. Your project stays in ordinary files you control. Write a layout once, feed it your card data, and watch your deck take shape—with live previews as you work.
 
-**Version:** 2025.306.14
-[Changelog](Changelog.md)
+<p align="center"><strong>Beta · Windows available now · macOS and Linux planned</strong></p>
 
----
+<p align="center">
+  <a href="https://github.com/CentauriSoldier/Card-Forge-Studio/releases"><strong>Download releases</strong></a> &nbsp; · &nbsp;
+  <a href="https://cardforge.studio">Website</a> &nbsp; · &nbsp;
+  <a href="https://github.com/CentauriSoldier/Card-Forge-Studio/issues">Feedback &amp; feature requests</a>
+</p>
 
-## ⚔️ What Is Card Forge Studio?
+<table>
+  <tr><td>
+    <h3>🔒 Your content. Your control.</h3>
+    <p><strong>No subscription fees. No proprietary scripting language. No hosted service required to create your cards.</strong> Free, open source, and built around Lua and files you own.</p>
+    <p><strong>A complete, free editor suite for your card game.</strong> Scripts, layouts, CSV data, styles, previews, and exports together.</p>
+    <p>Your projects stay on your computer. Editing, processing, and exporting happen locally; you decide what to share. <strong>It’s your content.</strong></p>
+  </td></tr>
+</table>
 
-Card Forge Studio is a desktop tool for:
+## 🃏 Build the deck you imagined
 
-- Designing card layouts  
-- Binding data to templates  
-- Mass-generating card images  
-- Exporting print-ready assets  
+<table>
+  <tr>
+    <td width="50%" valign="top"><h3>⚡ Lightning-fast rendering and exports</h3><p>Keep your ideas moving with live previews and fast bulk card generation, from your next layout tweak to the finished deck.</p></td>
+    <td width="50%" valign="top"><h3>🎨 One layout, an entire card set</h3><p>Combine CSV data, Lua drawing scripts, artwork, and reusable text styles. Add processing rules to calculate card values and keep your data consistent.</p></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><h3>🔄 Your files are the workflow</h3><p>Data, drawing scripts, processing rules, configuration, styles, and artwork remain editable project files. Save changes in Studio’s editors—or your own tools—and its file watchers pick up supported changes, update the working environment, reprocess affected data, and refresh the preview. No rebuilding the whole project just to see your next idea.</p></td>
+    <td width="50%" valign="top"><h3>💡 Code with context</h3><p>Dynamic autocomplete knows your game helpers, configuration, and card columns. Inline documentation and a searchable Environment Reference keep the right information close.</p></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><h3>📦 Export for the next step</h3><p>Create PNG artwork, Generic or LÖVE 11.5 atlases, finalized CSV/JSON/Lua data, themed interactive HTML galleries, or a ZIP combining your chosen outputs.</p></td>
+    <td width="50%" valign="top"><h3>🤝 Share editable projects</h3><p>Export and import complete games or standalone card sets with their assets, version checks, validation, and missing-file repairs.</p></td>
+  </tr>
+  <tr><td colspan="2"><h3>📚 Learn inside the app</h3><p>Basic and advanced tutorials walk through the workflow; API documentation is there when you want the details.</p></td></tr>
+</table>
 
-It’s built to handle *real* production workloads—no fluff, no bloat, no waiting.
+Customize editor colors and fonts, build reusable styles, and keep your project settings with the game or card set they belong to.
 
----
 
-## 🚀 Features
 
-- **Ultra-Fast Rendering** – Generate hundreds or thousands of cards in moments  
-- **Data-Driven** – CSV pipelines for bulk creation  
-- **Template System** – Reusable, modular card layouts  
-- **Image Export** – High-resolution, print-ready output  
-- **Deterministic Builds** – Same input, same output, every time  
-- **Open Source** – Free forever, hackable, yours  
+## 🚀 Start creating
 
----
+Windows is the current release platform; **macOS and Linux support are planned**. Download a Windows release, extract the ZIP, and launch **Card Forge Studio.exe**. Open **Help → Tutorials**, then create a game and its first card set.
 
-<details>
-<summary><strong>📜 Version 0.01</strong></summary>
+Card layouts and processing use **Lua**. You bring the design; the editors, previews, and reference tools help you build it.
 
-### v0.01 — Genesis
+## 💬 Help shape the beta
 
-#### Added
-- Initial commit
-- Core pipeline established  
-- Data-driven generation online  
-- Template system operational  
-- High-speed image export working
-</details>
+Found a bug or have an idea? [Open an issue](https://github.com/CentauriSoldier/Card-Forge-Studio/issues), or use **Help → Feedback** inside the app. See the [changelog](Changelog.md) for recent work.
 
----
+Print/PDF, additional engine packages, and tabletop-platform exporters remain planned.
 
-## 🧠 Programming Required
+[Support the project on Patreon](https://www.patreon.com/CentauriSoldier)
 
-Card Forge Studio is powerful because it **demands code**.
+## 📜 License
 
-This is not a drag-and-drop toy. Card Forge Studio is built on a real engine, using:
-
-- **AutoPlay Media Studio** – the host environment  
-  https://www.indigorose.com/autoplay-media-studio/
-
-- **Lua** – the scripting language that drives everything  
-  https://www.lua.org/
-
-- **LuaEx** – an extended standard library    
-  https://github.com/CentauriSoldier/LuaEx
-
-Layouts, pipelines, generation logic, data transforms—*you write them*.  
-Every system is scriptable. Every behavior is deterministic. Every build is under your control.
-
-That’s the trade:
-
-- You bring logic.  
-- Card Forge Studio gives you raw power.
-
-If you can think in data and express it in code, Card Forge Studio becomes a weapon for mass creation—capable of generating entire games in seconds with precision and repeatability.
-
-This is a forge for builders, not tourists.
-
----
-
-## 🧰 Use Cases
-
-- Tabletop & TCG designers  
-- Board game prototyping  
-- Procedural card generation  
-- Rapid iteration on balance and layout  
-- Print-on-demand pipelines  
-
-If your workflow involves *lots of cards*, Card Forge Studio is your war machine.
-
----
-
-## 🛠️ Philosophy
-
-Card Forge Studio is built around three principles:
-
-1. **Speed over ceremony**  
-2. **Power over prettiness**  
-3. **Creator control above all**
-
-This is not a toy.  
-It’s a forge.
-
----
-
-## 📦 Status
-
-Card Forge Studio is under active development.  
-The goal is a lean, brutal toolchain that turns structured data into finished card art with zero friction.
-
----
-
-## 🩸 License
-
-Card Forge Studio is open-source, free to use, and licensed under **The Unlicense** wherever possible. AutoPlay Media Studio and AutoPlay Media Studio Plugins are licensed seperately and are property of their respective owners.
+Card Forge Studio uses [The Unlicense](LICENSE) wherever applicable. Third-party components retain their own licenses.

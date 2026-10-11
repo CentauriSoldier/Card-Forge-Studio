@@ -1,13 +1,27 @@
 --[[!
 @fqxn CFS.Modules.Wiki.Store
-@desc Wiki page and image-asset drafts with stable IDs and conflict-aware disk persistence.
+@desc
+<section aria-label="Wiki.Store overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Wiki.Store</h2><p style="font-size:1.15rem;margin:0">Wiki Store manages page drafts and associated image assets.</p></div>
+<h3>How it fits into your work</h3><p>Stable identities preserve page links through renames, while conflict-aware persistence protects disk changes.</p>
+<h3>Follow the handoffs</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">A page has an identity as well as a title</h3><p style="margin:0">The store handles Wiki pages and their files using stable page identities. A title is what the reader sees; changing that title does not mean the page must be treated as a completely unrelated document. Draft handling lets the editing workflow keep track of work before its final save.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">The file handoff</h3><p style="margin:0">The Wiki window supplies the editing actions, Document supplies the page representation, and Store handles persistence and associated assets. Outside-file changes need checking before replacement, so an open editor is not assumed to be the only writer. This component stores written game material; it does not process card CSV rows or render card artwork.</p></article>
+</div>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.Wiki">Wiki</a></h3><p style="margin:0">The Wiki keeps written game material alongside card-making tools.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Wiki.Document">Wiki.Document</a></h3><p style="margin:0">Wiki Document turns rich text into the stored document format and back.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Draft edits and saved content are separate until the save operation succeeds.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual functions, inputs, and results.</p>
+</section>
 !]]
 
 -- Portable page storage. Stable IDs keep links intact across renames.
 local wx = require("wx");
 local Store = {};
 --[[!
-@fqxn CFS.Modules.Wiki.Store.Private.read
+@fqxn CFS.Modules.Wiki.Store.Private.Functions.read
 @desc Reads binary file contents or returns nil when opening fails; checks successful reading and closing.
 @vis private
 @param any pFile File path.
@@ -20,7 +34,7 @@ local function read(pFile)
     return sData;
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Store.Private.encode
+@fqxn CFS.Modules.Wiki.Store.Private.Functions.encode
 @desc Encodes bytes as hexadecimal for tab-separated wiki storage.
 @vis private
 @param any sText Text content.
@@ -29,7 +43,7 @@ local function encode(sText)
     return (sText:gsub(".", function(sChar) return string.format("%02X", sChar:byte()); end));
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Store.Private.decode
+@fqxn CFS.Modules.Wiki.Store.Private.Functions.decode
 @desc Validates hexadecimal storage and decodes the original bytes.
 @vis private
 @param any sText Text content.
@@ -39,7 +53,7 @@ local function decode(sText)
     return (sText:gsub("%x%x", function(sPair) return string.char(tonumber(sPair, 16)); end));
 end
 --[[!
-@fqxn CFS.Modules.Wiki.Store.open
+@fqxn CFS.Modules.Wiki.Store.Functions.open
 @pulsarlua function Store.open
 @desc Loads Wiki.dat, validates page IDs and parent chains, and returns a draft store with stable page IDs.
 @param any pRoot Root folder.

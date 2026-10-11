@@ -1,6 +1,18 @@
 --[[!
 @fqxn CFS.Modules.Exporter
-@desc Format lookup and safe staged export commits; format-specific behavior belongs to individual exporters.
+@desc
+<section aria-label="Exporter overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Exporter</h2><p style="font-size:1.15rem;margin:0">The export coordinator turns a planned batch into finished output files.</p></div>
+<h3>How it fits into your work</h3><p>A dedicated exporter decides what to produce. This coordinator stages the files first, then commits their final names while reporting progress.</p>
+<figure style="margin:1.5rem 0"><figcaption style="font-weight:700;margin-bottom:.8rem">The big picture</figcaption><div role="img" aria-label="Output plan then Stage files then Commit names then Finished export" style="display:flex;flex-wrap:wrap;align-items:center;gap:.7rem"><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Output plan</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Stage files</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Commit names</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Finished export</span></div></figure>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Exporter.Exporters.ExporterPNG">PNG Export</a></h3><p style="margin:0">The PNG exporter chooses faces, names, scale, and rendering instructions.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Forge">Forge</a></h3><p style="margin:0">Forge performs the card-image rendering used by PNG output.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.ExportOptions">ExportOptions</a></h3><p style="margin:0">The options dialog stores the active set’s output choices; the coordinator receives the resulting plan.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Existing destination files are not overwritten. Failure cleanup is limited to files created by the current job. Deferred exporter skeletons are not enabled formats.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Format-independent export lookup and staged file commit.
@@ -9,7 +21,7 @@ local Exporter = {};
 
 
 --[[!
-@fqxn CFS.Modules.Exporter.get
+@fqxn CFS.Modules.Exporter.Functions.get
 @pulsarlua function Exporter.get
 @desc Loads the dedicated exporter module for a requested format.
 @param string sType Export format identifier matching an Exporter module suffix.
@@ -23,7 +35,7 @@ end
 
 
 --[[!
-@fqxn CFS.Modules.Exporter.run
+@fqxn CFS.Modules.Exporter.Functions.run
 @pulsarlua function Exporter.run
 @desc Stages all planned outputs before committing them without overwriting existing files. On failure, removes staged files and outputs created by this job.
 @param string pDirectory Destination folder.

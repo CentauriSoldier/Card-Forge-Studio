@@ -1,6 +1,17 @@
 --[[!
 @fqxn CFS.Windows.Loaders.Common
-@desc Styled game and card-set chooser with square-logo validation and independent window dimensions.
+@desc
+<section aria-label="Loaders.Common overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Loaders.Common</h2><p style="font-size:1.15rem;margin:0">The shared chooser supplies the same visual language for games and card sets.</p></div>
+<h3>How it fits into your work</h3><p>It builds logo cards, validates square images, and preserves each chooser's independent size settings.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.LoadGame">LoadGame</a></h3><p style="margin:0">The game chooser presents projects as easy-to-scan logo cards.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.LoadCardSet">LoadCardSet</a></h3><p style="margin:0">The card-set chooser presents the active game's sets as logo cards.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.WindowState">WindowState</a></h3><p style="margin:0">WindowState remembers useful native-window choices outside game folders.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Invalid logos use the shared fallback without rewriting project files.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 local wx          = require("wx");
@@ -9,7 +20,7 @@ local Common      = {};
 
 
 --[[!
-@fqxn CFS.Windows.Loaders.Common.Private.logo
+@fqxn CFS.Windows.Loaders.Common.Private.Functions.logo
 @desc Loads a square PNG from the game root, or the shared placeholder. Never changes game files.
 @param string pRoot Game folder.
 @return wxBitmap Square thumbnail bitmap.
@@ -47,7 +58,7 @@ end
 
 
 --[[!
-@fqxn CFS.Windows.Loaders.Common.Show
+@fqxn CFS.Windows.Loaders.Common.Functions.Show
 @pulsarlua function Common.Show
 @desc Presents game cards with square artwork, keyboard navigation, and an explicit selected state.
 @param wxWindow dParent Parent window.
@@ -91,7 +102,7 @@ function Common.Show(dParent, tGames, tOptions)
     oLayout:Add(dList, 1, wx.wxEXPAND);
 
     --[[!
-    @fqxn CFS.Windows.Loaders.Common.Private.select
+    @fqxn CFS.Windows.Loaders.Common.Private.Functions.select
     @desc Marks the selected logo card and updates selection visuals and confirmation enablement.
     @param any nIndex Index.
     @vis private

@@ -1,6 +1,19 @@
 --[[!
 @fqxn CFS.Windows.DataGrid
-@desc Native grid controls and common actions for base and final data views.
+@desc
+<section aria-label="Data Grid overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Data Grid</h2><p style="font-size:1.15rem;margin:0">The common grid supplies table controls for both data windows.</p></div>
+<h3>How it fits into your work</h3><p>Search, filter, sort, select cards, create rows, and choose an export scope from the common interface.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.DataSession">Shared Data Session</a></h3><p style="margin:0">The shared session keeps both grids looking at the same underlying cards.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.GridStyle">GridStyle</a></h3><p style="margin:0">GridStyle keeps row stripes, text, and index colors consistent between data windows.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.NewCards">NewCards</a></h3><p style="margin:0">New Cards collects the quantity for a batch of new source rows.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.Columns">Columns</a></h3><p style="margin:0">Column Management changes the source table structure with a focused interface.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.ExportOptions">ExportOptions</a></h3><p style="margin:0">Export Options saves the active set’s image, data, gallery, and package choices independently.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Base and final windows share the controls but keep their source-versus-result roles.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Native grid window shared by the editable and processed data views.
@@ -10,6 +23,7 @@ local dCodeEditor = require("Windows.CodeEditor");
 local dLog = require("Windows.Log");
 local Log = require("Log");
 local DataGrid = {};
+local tExportTypes = {"PNG", "Atlas", "CSV", "JSON", "Lua", "HTML", "Zip"};
 local WindowState = require("Windows.WindowState");
 local _tWindowStates = {
     BaseData = {
@@ -26,7 +40,7 @@ local _tWindowStates = {
 for sName, tOptions in pairs(_tWindowStates) do WindowState.register(sName, tOptions); end
 
 --[[!
-@fqxn CFS.Windows.DataGrid.create
+@fqxn CFS.Windows.DataGrid.Functions.create
 @pulsarlua function DataGrid.create
 @desc Creates a base or final data grid bound to a shared session, including filtering, sorting, export, selection, and synchronized scrolling.
 @param any tSession Session.
@@ -50,7 +64,7 @@ function DataGrid.create(tSession, bFinal)
     local oLeftActions  = wx.wxBoxSizer(wx.wxHORIZONTAL);
     local oExportActions = wx.wxBoxSizer(wx.wxHORIZONTAL);
     --[[!
-    @fqxn CFS.Windows.DataGrid.Private.readableButton
+    @fqxn CFS.Windows.DataGrid.Private.Functions.readableButton
     @desc Builds a bitmap-backed button with readable native-font text.
     @param any sLabel Label.
     @vis private
@@ -58,7 +72,7 @@ function DataGrid.create(tSession, bFinal)
     local function readableButton(sLabel)
         local oFont = wx.wxSystemSettings.GetFont(wx.wxSYS_DEFAULT_GUI_FONT);
         --[[!
-        @fqxn CFS.Windows.DataGrid.Private.bitmap
+        @fqxn CFS.Windows.DataGrid.Private.Functions.bitmap
         @desc Draws the button label into a padded bitmap using the requested text color.
         @param any sColor Color.
         @vis private
@@ -80,7 +94,7 @@ function DataGrid.create(tSession, bFinal)
     local oReprocess    = readableButton("Reprocess Row");
     local oSave         = readableButton("Save");
     local oEditCode     = readableButton("Edit Code");
-    local oExportType = wx.wxChoice(dPanel, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxDefaultSize, {"PNG"}); oExportType:SetSelection(0);
+    local oExportType = wx.wxChoice(dPanel, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxDefaultSize, {"PNG", "Atlas", "CSV", "JSON", "Lua", "HTML", "ZIP"}); oExportType:SetSelection(0);
     local oExportOptions = readableButton("Export Options");
     local tExportButtons = {};
     for _, sScope in ipairs({"Filtered", "Selected", "All"}) do tExportButtons[sScope] = readableButton("Export "..sScope); end
@@ -157,7 +171,7 @@ function DataGrid.create(tSession, bFinal)
     dFrame:Layout();
 
     --[[!
-    @fqxn CFS.Windows.DataGrid.Private.protect
+    @fqxn CFS.Windows.DataGrid.Private.Functions.protect
     @desc Wraps a grid action and reports failures through the error service.
     @param any fAction Action.
     @vis private
@@ -185,7 +199,7 @@ function DataGrid.create(tSession, bFinal)
     end));
 
     --[[!
-    @fqxn CFS.Windows.DataGrid.Private.refresh
+    @fqxn CFS.Windows.DataGrid.Private.Functions.refresh
     @desc Rebuilds grid values and controls from the shared session while preserving source-row identity.
     @vis private
     !]]
@@ -307,7 +321,11 @@ function DataGrid.create(tSession, bFinal)
         oReprocess:Enable(tSession.selected ~= nil and type(tSession.options.onReprocess) == "function");
         oSave:Enable(tSession.dirty and type(tSession.options.onSave) == "function");
         local tExport = tSession.options.exportContext and tSession.options.exportContext();
-        local bExport = tExport ~= nil and type(tSession.options.onExport) == "function";
+        local bExport = tExport ~= nil and not tSession.exporting and type(tSession.options.onExport) == "function";
+        if (tExport) then
+            local sSelected = require("Exporter").get("Atlas").load(tExport.info).selected;
+            for nIndex, sType in ipairs(tExportTypes) do if (sType == sSelected) then oExportType:SetSelection(nIndex - 1); end; end
+        end
         oExportType:Enable(bExport); oExportOptions:Enable(bExport);
         for sScope, oButton in pairs(tExportButtons) do oButton:Enable(bExport and (sScope == "All" and #tSession.base > 0 or sScope ~= "All" and nRows > 0)); end
         dFrame:SetStatusText(sExportStatus ~= "" and sExportStatus or (nRows.." of "..#tSession.base.." rows"..(bFinal and " | Read-only" or "")));
@@ -315,7 +333,7 @@ function DataGrid.create(tSession, bFinal)
     end
 
     --[[!
-    @fqxn CFS.Windows.DataGrid.Private.exportRows
+    @fqxn CFS.Windows.DataGrid.Private.Functions.exportRows
     @desc Collects all, visible, or selected source rows and invokes the connected export callback.
     @param any sScope Scope.
     @vis private
@@ -335,35 +353,39 @@ function DataGrid.create(tSession, bFinal)
         return tRows;
     end
     oExportOptions:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(function()
+        if (tSession.exporting) then return; end
         local tContext = assert(tSession.options.exportContext(), "Load a card set first.");
-        require("Windows.ExportOptions").show(dFrame, tContext.info, tContext.names, tContext.width, tContext.height);
+        require("Windows.ExportOptions").show(dFrame, tContext.info, tContext.names, tContext.width, tContext.height, tExportTypes[oExportType:GetSelection() + 1]);
     end));
     oExportType:Connect(wx.wxEVT_COMMAND_CHOICE_SELECTED, protect(function()
+        if (tSession.exporting) then return; end
         local tContext = assert(tSession.options.exportContext(), "Load a card set first.");
-        local tModel = require("Exporter").get("PNG").model(tContext.info); tModel.saveOptions(tModel.options);
+        local tModel = require("Exporter").get("Atlas").model(tContext.info); tModel.options.selected = tExportTypes[oExportType:GetSelection() + 1]; tModel.saveOptions(tModel.options); tSession.refresh();
     end));
     for sScope, oButton in pairs(tExportButtons) do
         oButton:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(function()
+            if (tSession.exporting) then return; end
             if (oGrid:IsCellEditControlEnabled()) then oGrid:SaveEditControlValue(); oGrid:DisableCellEditControl(); end
             local tContext = assert(tSession.options.exportContext(), "Load a card set first.");
             local tRows = exportRows(sScope); assert(#tRows > 0, "No selected cards to export.");
-            local tExportModel = require("Exporter").get("PNG").model(tContext.info);
+            local sType = tExportTypes[oExportType:GetSelection() + 1];
+            local tExportModel = require("Exporter").get(sType).model(tContext.info);
             local pInitial = tExportModel.options.directory;
 
             -- Each card set keeps its destination; first use starts in the game exports folder.
             if (pInitial == "" or not wx.wxDirExists(pInitial)) then
                 pInitial = FS.Game.Exports;
             end
-            local oDialog = wx.wxDirDialog(dFrame, "Choose an empty folder for PNG export", pInitial, wx.wxDD_DEFAULT_STYLE);
+            local oDialog = wx.wxDirDialog(dFrame, "Choose an empty folder for "..sType.." export", pInitial, wx.wxDD_DEFAULT_STYLE);
             local nResult = oDialog:ShowModal(); local pDirectory = oDialog:GetPath(); oDialog:Destroy();
             if (nResult ~= wx.wxID_OK) then return; end
             tExportModel.options.directory = pDirectory; tExportModel.saveOptions(tExportModel.options);
             local nCount = tSession.options.onExport(tRows, pDirectory, tExportModel.options);
-            if (not tSession.options.subscribeExportStatus) then dFrame:SetStatusText("Exported "..nCount.." PNG images."); end
+            if (not tSession.options.subscribeExportStatus) then dFrame:SetStatusText("Exported "..nCount.." "..sType.." output files."); end
         end));
     end
     --[[!
-    @fqxn CFS.Windows.DataGrid.Private.updateView
+    @fqxn CFS.Windows.DataGrid.Private.Functions.updateView
     @desc Copies search, filter, and sort controls into the session and refreshes the shared view.
     @vis private
     !]]
@@ -386,7 +408,7 @@ function DataGrid.create(tSession, bFinal)
     end
     oDescending:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, protect(updateView));
     --[[!
-    @fqxn CFS.Windows.DataGrid.Private.sortHeader
+    @fqxn CFS.Windows.DataGrid.Private.Functions.sortHeader
     @desc Selects a clicked column for sorting and toggles its direction when clicked again.
     @param any nColumn Column.
     @vis private
@@ -433,7 +455,7 @@ function DataGrid.create(tSession, bFinal)
     end));
 
     --[[!
-    @fqxn CFS.Windows.DataGrid.Private.editCode
+    @fqxn CFS.Windows.DataGrid.Private.Functions.editCode
     @desc Opens the selected base code cell in the modal code editor and applies accepted changes through the session.
     @vis private
     !]]
@@ -472,7 +494,7 @@ function DataGrid.create(tSession, bFinal)
     oScrollTimer = wx.wxTimer(dFrame, wx.wxNewId());
     local nLastX, nLastY = oGrid:GetViewStart();
     --[[!
-    @fqxn CFS.Windows.DataGrid.Private.syncScroll
+    @fqxn CFS.Windows.DataGrid.Private.Functions.syncScroll
     @desc Updates native grid scroll position from the shared session.
     @param any nX X.
     @param any nY Y.
@@ -513,13 +535,13 @@ function DataGrid.create(tSession, bFinal)
         filterColumn = oFilterColumn, filterText = oFilterText, sort = oSort,
         exportType = oExportType, exportOptions = oExportOptions, exportButtons = tExportButtons, exportRows = exportRows, descending = oDescending, editCode = editCode, sortHeader = sortHeader,
         --[[!
-        @fqxn CFS.Windows.DataGrid.Private.show
+        @fqxn CFS.Windows.DataGrid.Private.Functions.show
         @desc Shows and raises the data window.
         @vis private
         !]]
         show = function() dFrame:Show(true); dFrame:Layout(); dPanel:Layout(); dFrame:Raise(); end,
         --[[!
-        @fqxn CFS.Windows.DataGrid.Private.close
+        @fqxn CFS.Windows.DataGrid.Private.Functions.close
         @desc Closes the data window through its native close handling.
         @vis private
         !]]

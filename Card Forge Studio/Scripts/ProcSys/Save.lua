@@ -1,6 +1,21 @@
 --[[!
 @fqxn CFS.Modules.ProcSys.Save
-@desc Verifies and stages CSV and code-column saves with conflict detection and backup retention.
+@desc
+<section aria-label="Card Data Saving overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Card Data Saving</h2><p style="font-size:1.15rem;margin:0">The save service protects the connection between edited card data and disk files.</p></div>
+<h3>How it fits into your work</h3><p>It validates and stages CSV and code-column changes, checks for external edits, and manages retained CSV backups.</p>
+<h3>Follow the handoffs</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">Saving is a handoff, not just a button</h3><p style="margin:0">The shared data session supplies the edited source rows. This service turns those rows back into CSV, checks that the encoded data can be read back, and coordinates the data file with code-column definitions. A sorted or filtered screen is a view of the cards; it does not become the order saved to the source file.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">Checks before replacement</h3><p style="margin:0">The save path checks for outside edits and prepares a backup before replacing existing data. CSV and code-column changes are staged through the editor save machinery. Backup cleanup follows successful replacement. If a save reports a problem, inspect that report before retrying; a successful preview does not itself mean the files have been saved.</p></article>
+</div>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys.CSV">Card Data Processing</a></h3><p style="margin:0">The CSV processor connects entered values with the values used to draw a card.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.Columns">Columns</a></h3><p style="margin:0">Column Management changes the source table structure with a focused interface.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">All source rows are saved, including filtered-out rows. A conflict or failed write is reported rather than treated as success.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual functions, inputs, and results.</p>
+</section>
 !]]
 
 -- Write all source rows; grid sorting and filtering do not affect storage.
@@ -8,7 +23,7 @@ local wx = require("wx");
 local Save = {};
 
 --[[!
-@fqxn CFS.Modules.ProcSys.Save.Private.readFile
+@fqxn CFS.Modules.ProcSys.Save.Private.Functions.readFile
 @desc Reads a binary file and checks read and close success.
 @vis private
 @param any pFile File path.
@@ -23,7 +38,7 @@ local function readFile(pFile)
 end
 
 --[[!
-@fqxn CFS.Modules.ProcSys.Save.Private.backupFiles
+@fqxn CFS.Modules.ProcSys.Save.Private.Functions.backupFiles
 @desc Lists and sorts timestamped CSV backups owned by Studio.
 @vis private
 @param any pFolder Folder.
@@ -42,7 +57,7 @@ local function backupFiles(pFolder)
 end
 
 --[[!
-@fqxn CFS.Modules.ProcSys.Save.write
+@fqxn CFS.Modules.ProcSys.Save.Functions.write
 @pulsarlua function Save.write
 @desc Validates CSV round-trip contents and external edits, creates a verified backup, stages CSV/code-column changes, and prunes old backups after success.
 @param any pFile File path.

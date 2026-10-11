@@ -1,6 +1,20 @@
 --[[!
 @fqxn CFS.Windows.Main
-@desc Main Studio frame, Forge preview, menus, linked editors, and data-window coordination.
+@desc
+<section aria-label="Main overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Main</h2><p style="font-size:1.15rem;margin:0">The main Studio window connects your project, preview, and editing tools.</p></div>
+<h3>How it fits into your work</h3><p>Load a game and card set, open linked editors and data windows, and inspect cards in Forge.</p>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.Game">Game</a></h3><p style="margin:0">A game is the home for a whole project: its name, shared settings, and collection of card sets.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Forge">Forge</a></h3><p style="margin:0">Forge is the visual workbench that turns selected card data and drawing instructions into artwork.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.Options">Options</a></h3><p style="margin:0">Options puts application preferences and project information in one place.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.BaseData">BaseData</a></h3><p style="margin:0">Base Data is the table of values you actually edit.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.FinalData">FinalData</a></h3><p style="margin:0">Final Data shows the results after card values and scripts have been processed.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">The main window coordinates tools; individual services own data processing, rendering, and saving.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Native editor window. Studio and game services are connected by callbacks.
@@ -39,7 +53,7 @@ local dBaseData = require("Windows.BaseData");
 local dFinalData = require("Windows.FinalData");
 
 --[[!
-@fqxn CFS.Windows.Main.create
+@fqxn CFS.Windows.Main.Functions.create
 @pulsarlua function Main.create
 @desc Creates Studio menus, Forge preview, linked data windows, editor launch actions, and application timer processing.
 @param any tOptions Options table.
@@ -91,12 +105,12 @@ function Main.create(tOptions)
     local tWelcome = Welcome.create(_pRuntime);
     local sPage = "Welcome";
     local tDataSession = tOptions.dataSession or DataSession.create();
-    local dBaseWindow, dFinalWindow, dStyleWindow, dSourceWindow, dGameEditorWindow, dWikiWindow;
+    local dBaseWindow, dFinalWindow, dStyleWindow, dSourceWindow, dGameEditorWindow, dWikiWindow, dTutorialsWindow;
     local showPage;
     local bDataLoaded = false;
     local sActiveCardSetName = "";
     --[[!
-    @fqxn CFS.Windows.Main.Private.tDataSession_options_getCardSetName
+    @fqxn CFS.Windows.Main.Private.Functions.tDataSession_options_getCardSetName
     @desc Returns the active card-set display name or an empty string before loading.
     @vis private
     !]]
@@ -119,7 +133,7 @@ function Main.create(tOptions)
     oCoordinateLayout:Add(oNegativeCoordinates, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT, 4);
     dCoordinates:SetSizerAndFit(oCoordinateLayout);
     --[[!
-    @fqxn CFS.Windows.Main.Private.positionCoordinates
+    @fqxn CFS.Windows.Main.Private.Functions.positionCoordinates
     @desc Positions the coordinate overlay within the Forge panel.
     @vis private
     !]]
@@ -146,7 +160,7 @@ function Main.create(tOptions)
     dFrame:SetMinClientSize(wx.wxSize(360, 240));
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.reportError
+    @fqxn CFS.Windows.Main.Private.Functions.reportError
     @desc Sends an action failure to the shared error-reporting service.
     @param any sError Error.
     @vis private
@@ -156,7 +170,7 @@ function Main.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.protect
+    @fqxn CFS.Windows.Main.Private.Functions.protect
     @desc Wraps a main-window action and reports failures without propagating them into native event dispatch.
     @param any fCallback Callback.
     @vis private
@@ -179,7 +193,7 @@ function Main.create(tOptions)
             category = "Forge", state = tState,
             game = Game.GetActive(), cardSet = ProcSys.GetActiveCardSet(),
             --[[!
-            @fqxn CFS.Windows.Main.Private.changed
+            @fqxn CFS.Windows.Main.Private.Functions.changed
             @desc Refreshes relevant preview or loading preferences after accepted option changes.
             @vis private
             !]]
@@ -191,7 +205,7 @@ function Main.create(tOptions)
     end));
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.resizeCanvas
+    @fqxn CFS.Windows.Main.Private.Functions.resizeCanvas
     @desc Computes preview scale and placement from current canvas and card dimensions.
     @vis private
     !]]
@@ -207,7 +221,7 @@ function Main.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.drawCanvas
+    @fqxn CFS.Windows.Main.Private.Functions.drawCanvas
     @desc Paints the welcome view or card preview and enabled guides.
     @vis private
     !]]
@@ -220,7 +234,7 @@ function Main.create(tOptions)
 
         local tPens = {};
         --[[!
-        @fqxn CFS.Windows.Main.Private.pen
+        @fqxn CFS.Windows.Main.Private.Functions.pen
         @desc Creates and tracks a native pen for the current canvas paint pass.
         @param any sColor Color.
         @vis private
@@ -274,7 +288,7 @@ function Main.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.copyText
+    @fqxn CFS.Windows.Main.Private.Functions.copyText
     @desc Copies text to the native clipboard and reports an unavailable clipboard or failed transfer.
     @param any sText Text.
     @vis private
@@ -288,7 +302,7 @@ function Main.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.applyClick
+    @fqxn CFS.Windows.Main.Private.Functions.applyClick
     @desc Formats clicked card coordinates and applies modifier-specific coordinate copying.
     @param any sButton Button.
     @param any nX X.
@@ -321,7 +335,7 @@ function Main.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.cardPosition
+    @fqxn CFS.Windows.Main.Private.Functions.cardPosition
     @desc Converts mouse coordinates to card coordinates while the editor page is active.
     @param any oEvent Event.
     @vis private
@@ -373,7 +387,7 @@ function Main.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.selectFace
+    @fqxn CFS.Windows.Main.Private.Functions.selectFace
     @desc Selects the card face through the caller callback or Forge and updates face controls.
     @param any sFace Face.
     @vis private
@@ -406,7 +420,7 @@ function Main.create(tOptions)
     local oWelcomeLinks = tWelcome.addLinks(dCanvas, protect);
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.addMenu
+    @fqxn CFS.Windows.Main.Private.Functions.addMenu
     @desc Builds a menu with separators and protected action callbacks.
     @param any sTitle Title.
     @param any tItems Items.
@@ -446,9 +460,9 @@ function Main.create(tOptions)
         oMenuBar:Append(oMenu, sTitle);
     end
 
-    addMenu("File", {{"Export"}, {"Exit", function() dFrame:Close(); end}});
+    addMenu("File", {{"Exit", function() dFrame:Close(); end}});
     --[[!
-    @fqxn CFS.Windows.Main.Private.selectItem
+    @fqxn CFS.Windows.Main.Private.Functions.selectItem
     @desc Shows a native item-selection dialog with independent persistent window state.
     @param any sMessage Message.
     @param any sTitle Title.
@@ -506,7 +520,7 @@ function Main.create(tOptions)
         return nSelection;
     end
     --[[!
-    @fqxn CFS.Windows.Main.Private.saveCardSet
+    @fqxn CFS.Windows.Main.Private.Functions.saveCardSet
     @desc Saves the shared data session and updates the main status text.
     @vis private
     !]]
@@ -516,7 +530,7 @@ function Main.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.allowDiscard
+    @fqxn CFS.Windows.Main.Private.Functions.allowDiscard
     @desc Offers saving, discarding, or cancellation before replacing an unsaved card set.
     @vis private
     !]]
@@ -560,7 +574,7 @@ function Main.create(tOptions)
 
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.selectGame
+    @fqxn CFS.Windows.Main.Private.Functions.selectGame
     @desc Refreshes available games and opens the styled game loader.
     @vis private
     !]]
@@ -598,7 +612,7 @@ function Main.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.loadCardSet
+    @fqxn CFS.Windows.Main.Private.Functions.loadCardSet
     @desc Protects pending edits, closes the source editor if allowed, and loads the requested card set.
     @param any oCardSet Card set.
     @param any bDiscardChecked Discard checked.
@@ -626,7 +640,7 @@ function Main.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.tDataSession_options_onMetadataChanged
+    @fqxn CFS.Windows.Main.Private.Functions.tDataSession_options_onMetadataChanged
     @desc Refreshes the active set name, grid labels, and card dimensions after metadata changes.
     @param any oCardSet Card set.
     @vis private
@@ -660,7 +674,7 @@ function Main.create(tOptions)
 
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.selectCardSet
+    @fqxn CFS.Windows.Main.Private.Functions.selectCardSet
     @desc Lists the active game's sets and opens the styled card-set loader.
     @vis private
     !]]
@@ -678,7 +692,7 @@ function Main.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.browse
+    @fqxn CFS.Windows.Main.Private.Functions.browse
     @desc Opens an existing folder through the operating system's default application.
     @param any pFolder Folder.
     @vis private
@@ -690,7 +704,7 @@ function Main.create(tOptions)
     local bAutomaticCSV = INIFile.GetValue(FS.AppCFG, "Settings", "ExternalCSVChanges") == "automatic";
 
     --[[!
-    @fqxn CFS.Windows.Main.Private.info
+    @fqxn CFS.Windows.Main.Private.Functions.info
     @desc Opens the requested metadata section in the main Options window.
     @param any sCategory Category.
     @vis private
@@ -702,7 +716,7 @@ function Main.create(tOptions)
             category = sCategory,
             game = oGame, cardSet = ProcSys.GetActiveCardSet(), state = tState,
             --[[!
-            @fqxn CFS.Windows.Main.Private.changed2
+            @fqxn CFS.Windows.Main.Private.Functions.changed2
             @desc Refreshes relevant preview or loading preferences after accepted option changes.
             @param any bAutomatic Automatic.
             @vis private
@@ -721,20 +735,158 @@ function Main.create(tOptions)
     end
 
 
-    addMenu("Game", {{"New", newGame}, {"Load", selectGame}, {"Browse", function() browse(FS.Game.Root); end}, {false}, {"Info...", function() info("Game"); end}, {"Edit Source...", function()
+    --[[!
+    @fqxn CFS.Windows.Main.Private.Functions.closeCardSet
+    @desc Honors pending-edit prompts, closes set tools and clears the set view while retaining the active game.
+    @vis private
+    !]]
+    local function closeCardSet()
+        if (tDataSession.exporting) then error("Wait for the export to finish before closing the card set."); end
+        if (not allowDiscard()) then return false; end
+        if (dSourceWindow and not dSourceWindow.close()) then return false; end
+        ProcSys.CloseCardSet();
+        bDataLoaded, sActiveCardSetName = false, "";
+        tState.face = "front";
+        if (dBaseWindow) then dBaseWindow.frame:Hide(); end
+        if (dFinalWindow) then dFinalWindow.frame:Hide(); end
+        showPage("Welcome");
+        dFrame:SetStatusText("No card set loaded.", 0);
+        return true;
+    end
+
+    --[[!
+    @fqxn CFS.Windows.Main.Private.Functions.closeGame
+    @desc Honors pending-edit prompts, closes game tools and returns to Welcome with no active project.
+    @vis private
+    !]]
+    local function closeGame()
+        if (tDataSession.exporting) then error("Wait for the export to finish before closing the game."); end
+        if (not allowDiscard()) then return; end
+        if (dSourceWindow and not dSourceWindow.close()) then return; end
+        if (dStyleWindow and not dStyleWindow.close()) then return; end
+        if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
+        if (dWikiWindow and not dWikiWindow.close()) then return; end
+        Game.Deactivate();
+        bDataLoaded, sActiveCardSetName = false, "";
+        tState.face = "front";
+        if (dBaseWindow) then dBaseWindow.frame:Hide(); end
+        if (dFinalWindow) then dFinalWindow.frame:Hide(); end
+        showPage("Welcome");
+        dFrame:SetTitle(APP_NAME);
+        dFrame:SetStatusText("No game loaded.", 0);
+    end
+
+    --[[!
+    @fqxn CFS.Windows.Main.Private.Functions.transferPackage
+    @desc Opens game/card-set package dialogs, confirms inactive replacements and reports import/export failures through the existing error handler. Import never changes activation.
+    @param string sAction Import or Export.
+    @param string sKind Game or CardSet.
+    @vis private
+    !]]
+    local function transferPackage(sAction, sKind)
+        assert(not tDataSession.exporting, "Wait for the current export to finish.");
+        if (sAction == "Export") then
+            assert(not tDataSession.dirty, "Save the current card-set data before exporting a project package.");
+        end
+        local oGame = Game.GetActive();
+        local oProject = sKind == "Game" and oGame or ProcSys.GetActiveCardSet();
+        if (sAction == "Export") then assert(oProject, "Load the project before exporting it."); end
+        if (sKind == "CardSet" and sAction == "Import") then assert(oGame, "Load the destination game first."); end
+        local sExtension = sKind == "Game" and "cfsg" or "cfscs";
+        local sName = sAction == "Export" and (oProject.GetName():gsub('[<>:"/\\|?*%c]', '_').."."..sExtension) or "";
+        local oDialog = wx.wxFileDialog(dFrame, sAction.." "..sKind.." Package", "", sName,
+            "CFS "..sKind.." packages (*."..sExtension..")|*."..sExtension,
+            sAction == "Import" and (wx.wxFD_OPEN + wx.wxFD_FILE_MUST_EXIST) or wx.wxFD_SAVE);
+        local nResult = oDialog:ShowModal(); local pFile = oDialog:GetPath(); oDialog:Destroy();
+        if (nResult ~= wx.wxID_OK) then return; end
+        if (sAction == "Export" and not pFile:lower():match("%."..sExtension.."$")) then pFile = pFile.."."..sExtension; end
+        local service = require("ImportExport");
+        local bOK, vResult, tReport = xpcall(function()
+            if (sAction == "Export") then return service.Export(sKind, oProject, pFile); end
+            return service.Import(pFile, sKind, oGame, function(sType, sProjectName)
+                return wx.wxMessageBox("A "..sType.." with this ID already exists: "..sProjectName.."\n\nReplace its files? The previous files will be retained in a backup folder.", APP_NAME, wx.wxYES_NO + wx.wxNO_DEFAULT + wx.wxICON_WARNING, dFrame) == wx.wxYES;
+            end);
+        end, debug.traceback);
+        if (not bOK) then error(vResult, 0); end
+        if (sAction == "Import" and vResult) then
+            wx.wxMessageBox("Import complete. Nothing was loaded automatically."..(#tReport > 0 and "\nRepairs, skipped items or backups are listed in the Log window." or ""), APP_NAME, wx.wxOK + wx.wxICON_INFORMATION, dFrame);
+        end
+    end
+
+    --[[!
+    @fqxn CFS.Windows.Main.Private.Functions.openDocument
+    @desc Opens an existing documentation file through its native file URL.
+    @param any pFile File.
+    @vis private
+    !]]
+    local function openDocument(pFile)
+        assert(wx.wxFileExists(pFile), "Documentation file is unavailable: "..pFile);
+        local oFile = wx.wxFileName(pFile);
+        local sURL  = wx.wxFileSystem.FileNameToURL(oFile);
+        oFile:delete();
+        assert(wx.wxLaunchDefaultBrowser(sURL), "Could not open the documentation browser.");
+    end
+
+    addMenu("Game", {
+        {"New", newGame},
+        {"Load", selectGame},
+        {"Browse", function() browse(FS.Game.Root); end},
+        {false},
+        {"Info...", function() info("Game"); end},
+        {false},
+        {"Wiki", function()
+        assert(Game.GetActive(), "Load a game first.");
+        if (dWikiWindow) then dWikiWindow.show(); return; end
+        dWikiWindow = require("Windows.Wiki").create(dFrame, FS.Game.Wiki, {
+            gameRoot = FS.Game.Root,
+            --[[!
+            @fqxn CFS.Windows.Main.Private.Functions.onClose3
+            @desc Clears the closed auxiliary-window reference so it can be created again.
+            @vis private
+            !]]
+            onClose = function() dWikiWindow = nil; end,
+        });
+    end},
+        {false},
+        {"Style Editor", function()
+        assert(Game.GetActive(), "Load a game first.");
+        if (dStyleWindow) then dStyleWindow.show(); return; end
+        dStyleWindow = require("Windows.StyleEditor").create(dFrame, FS.Game.Styles, {
+            --[[!
+            @fqxn CFS.Windows.Main.Private.Functions.onClose2
+            @desc Clears the closed auxiliary-window reference so it can be created again.
+            @vis private
+            !]]
+            onClose = function() dStyleWindow = nil; end,
+        });
+    end},
+        {"Edit Source...", function()
         assert(Game.GetActive(), "Load a game first.");
         if (dGameEditorWindow) then dGameEditorWindow.show(); return; end
         dGameEditorWindow = require("Windows.GameEditor").create(dFrame, FS.Game.Scripts, FS.Game.ENV, FS.Game.CFG, {
             navigationFile = FS.Game.Info,
             --[[!
-            @fqxn CFS.Windows.Main.Private.onClose
+            @fqxn CFS.Windows.Main.Private.Functions.onClose
             @desc Clears the closed auxiliary-window reference so it can be created again.
             @vis private
             !]]
             onClose = function() dGameEditorWindow = nil; end,
         });
-    end}});
-    addMenu("Card Set", {{"New", newCardSet}, {"Load", selectCardSet}, {"Browse", function() browse(FS.CardSet.Root); end}, {"Edit CSV"}, {false}, {"Info...", function() info("Card Set"); end}, {"Edit Source...", function()
+    end},
+        {"Mechanics Viewer"},
+        {false},
+        {"Docs", function()
+            assert(Game.GetActive(), "Load a game first.");
+            openDocument(FS.Game.Docs.."/"..DOX_EXPORT_FILENAME..".html");
+        end,},
+        {"Rebuild Docs", function() require("Globals.ProcessDox")(); end},
+        {false},
+        {"Import Game...", function() transferPackage("Import", "Game"); end},
+        {"Export Game...", function() transferPackage("Export", "Game"); end},
+        {false},
+        {"Close Game", closeGame},
+    });
+    addMenu("Card Set", {{"New", newCardSet}, {"Load", selectCardSet}, {"Browse", function() browse(FS.CardSet.Root); end}, {"Open CSV"}, {false}, {"Info...", function() info("Card Set"); end}, {"Edit Source...", function()
         assert(bDataLoaded, "Load a card set first.");
         if (dSourceWindow) then dSourceWindow.show(); return; end
         dSourceWindow = require("Windows.CardSetEditor").create(dFrame, {
@@ -743,9 +895,9 @@ function Main.create(tOptions)
             {name = FILESPEC_CARDSET_ROWPROC.Full, path = FS.CardSet.RowProc, kind = "lua"},
             {name = FILESPEC_CARDSET_CODECOLUMMS.Full, path = FS.CardSet.CodeColumns, kind = "text"},
         }, "Card Set Source Editor", {notesFile = FS.CardSet.Root.."/Notes.txt", navigationFile = FS.CardSet.Info, onClose = function() dSourceWindow = nil; end});
-    end}});
+    end}, {false}, {"Import Card Set...", function() transferPackage("Import", "CardSet"); end}, {"Export Card Set...", function() transferPackage("Export", "CardSet"); end}, {false}, {"Close Card Set", closeCardSet}});
     --[[!
-    @fqxn CFS.Windows.Main.Private.tDataSession_options_onExternalCSV
+    @fqxn CFS.Windows.Main.Private.Functions.tDataSession_options_onExternalCSV
     @desc Applies automatic reload preference or asks before replacing externally changed CSV data.
     @param any bUnsaved Unsaved.
     @vis private
@@ -757,35 +909,11 @@ function Main.create(tOptions)
         return wx.wxMessageBox(sMessage, APP_NAME, wx.wxYES_NO + wx.wxICON_QUESTION, dFrame) == wx.wxYES;
     end
 
-    addMenu("Tools", {{"Rebuild Dox"}, {"Style Editor", function()
-        assert(Game.GetActive(), "Load a game first.");
-        if (dStyleWindow) then dStyleWindow.show(); return; end
-        dStyleWindow = require("Windows.StyleEditor").create(dFrame, FS.Game.Styles, {
-            --[[!
-            @fqxn CFS.Windows.Main.Private.onClose2
-            @desc Clears the closed auxiliary-window reference so it can be created again.
-            @vis private
-            !]]
-            onClose = function() dStyleWindow = nil; end,
-        });
-    end}, {"Game Wiki", function()
-        assert(Game.GetActive(), "Load a game first.");
-        if (dWikiWindow) then dWikiWindow.show(); return; end
-        dWikiWindow = require("Windows.Wiki").create(dFrame, FS.Game.Wiki, {
-            gameRoot = FS.Game.Root,
-            --[[!
-            @fqxn CFS.Windows.Main.Private.onClose3
-            @desc Clears the closed auxiliary-window reference so it can be created again.
-            @vis private
-            !]]
-            onClose = function() dWikiWindow = nil; end,
-        });
-    end}, {"Mechanics Viewer"}});
-    tMenus["Tools"]:AppendSeparator();
+    addMenu("Tools", {});
     local nOptionsID = wx.wxNewId();
     local oOptionsItem = tMenus["Tools"]:Append(nOptionsID, "Options...");
     --[[!
-    @fqxn CFS.Windows.Main.Private.openOptions
+    @fqxn CFS.Windows.Main.Private.Functions.openOptions
     @desc Opens application options with the active game and card-set context.
     @vis private
     !]]
@@ -794,7 +922,7 @@ function Main.create(tOptions)
         require("Windows.Options").show(dFrame, {
             game = oGame, cardSet = ProcSys.GetActiveCardSet(), state = tState,
             --[[!
-            @fqxn CFS.Windows.Main.Private.changed3
+            @fqxn CFS.Windows.Main.Private.Functions.changed3
             @desc Refreshes relevant preview or loading preferences after accepted option changes.
             @param any bAutomatic Automatic.
             @param any sName Name.
@@ -817,38 +945,77 @@ function Main.create(tOptions)
         dFinalWindow = dFinalWindow or dFinalData.create(tDataSession);
         dFinalWindow.show();
     end, "check", function() return dFinalWindow ~= nil and dFinalWindow.frame:IsShown(); end}, {"Log", dLog.Show, "check", dLog.IsShown}});
-    --[[!
-    @fqxn CFS.Windows.Main.Private.openDocument
-    @desc Opens an existing documentation file through its native file URL.
-    @param any pFile File.
-    @vis private
-    !]]
-    local function openDocument(pFile)
-        assert(wx.wxFileExists(pFile), "Documentation file is unavailable: "..pFile);
-        local oFile = wx.wxFileName(pFile);
-        local sURL  = wx.wxFileSystem.FileNameToURL(oFile);
-        oFile:delete();
-        assert(wx.wxLaunchDefaultBrowser(sURL), "Could not open the documentation browser.");
-    end
-
     addMenu("Help", {
         {"API Docs", function()
             openDocument(APP_PATH.."/Docs/index.html");
         end,},
-        {"Game Docs", function()
-            assert(Game.GetActive(), "Load a game first.");
-            openDocument(FS.Game.Docs.."/"..DOX_EXPORT_FILENAME..".html");
-        end,},
         {"Tutorials", function()
-            local Tutorial = require("Tutorial");
-            Tutorial.Init();
-            openDocument(Tutorial.PATH_INDEX);
+            if (dTutorialsWindow) then dTutorialsWindow.show(); return; end
+            dTutorialsWindow = require("Windows.Tutorials").create(dFrame, {
+                onClose = function() dTutorialsWindow = nil; end,
+            });
         end,},
+        {false},
+        {"Feedback", function()
+            assert(wx.wxLaunchDefaultBrowser(APP_GITHUB.."/issues"), "Could not open the GitHub Issues page.");
+        end,},
+        {false},
+        {"Patreon", function()
+            assert(wx.wxLaunchDefaultBrowser(APP_PATREON), "Could not open Patreon.");
+        end,},
+        {"GitHub", function()
+            assert(wx.wxLaunchDefaultBrowser(APP_GITHUB), "Could not open GitHub.");
+        end,},
+        {"Website", function()
+            assert(wx.wxLaunchDefaultBrowser("https://cardforge.studio"), "Could not open the Card Forge Studio website.");
+        end,},
+        {false},
+        {"License", function() require("Windows.License").show(dFrame); end,},
         {"About", function() require("Windows.Main.About").show(dFrame); end,},
     });
 
+    if (DEV_MODE) then
+        tMenus["Help"]:AppendSeparator();
+        local nBuildDocsID = wx.wxNewId();
+        local oBuildDocsItem = tMenus["Help"]:Append(nBuildDocsID, "Build API Docs");
+        --[[!
+        @fqxn CFS.Windows.Main.Private.Functions.buildAPIDocs
+        @desc Builds and installs Studio API documentation on an explicit development-menu request.
+        @vis private
+        !]]
+        local function buildAPIDocs()
+            require("Util").BuildAPIDocs();
+        end
+        tMenuItems["Help:Build API Docs"] = {item = oBuildDocsItem, action = buildAPIDocs};
+        dFrame:Connect(nBuildDocsID, wx.wxEVT_COMMAND_MENU_SELECTED, protect(buildAPIDocs));
+        local nBuildReleaseID = wx.wxNewId();
+        local oBuildReleaseItem = tMenus["Help"]:Append(nBuildReleaseID, "Build Release...");
+        --[[!
+        @fqxn CFS.Windows.Main.Private.Functions.buildRelease
+        @desc Prompts for a release ZIP destination using the last successful build folder. Falls back to the application folder when the saved folder is missing. Saves the folder only after packaging succeeds; cancellation and failure keep the previous setting.
+        @vis private
+        !]]
+        local function buildRelease()
+            local pFolder = INIFile.GetValue(FS.AppCFG, "Settings", "ReleaseFolder");
+            if (not wx.wxDirExists(pFolder)) then pFolder = APP_PATH; end
+            local oDialog = wx.wxFileDialog(dFrame, "Build Release", pFolder, "Card Forge Studio.zip", "ZIP archives (*.zip)|*.zip", wx.wxFD_SAVE);
+            local bAccepted = oDialog:ShowModal() == wx.wxID_OK;
+            local pZIP = oDialog:GetPath();
+            oDialog:Destroy();
+            if (bAccepted) then
+                require("Util").BuildRelease(pZIP);
+                local oFile = wx.wxFileName(pZIP);
+                local pDestination = oFile:GetPath();
+                oFile:delete();
+                INIFile.SetValue(FS.AppCFG, "Settings", "ReleaseFolder", pDestination);
+            end
+        end
+        tMenuItems["Help:Build Release..."] = {item = oBuildReleaseItem, action = buildRelease};
+        dFrame:Connect(nBuildReleaseID, wx.wxEVT_COMMAND_MENU_SELECTED, protect(buildRelease));
+    end
+
     --[[!
-    @fqxn CFS.Windows.Main.Private.showPage
+    @fqxn CFS.Windows.Main.Private.Functions.showPage
     @desc Switches between Welcome and Editor views and updates their visible controls.
     @param any sName Name.
     @vis private
@@ -863,11 +1030,16 @@ function Main.create(tOptions)
         for sPath, tMenuItem in pairs(tMenuItems) do
             local bAvailable = type(tMenuItem.action) == "function";
 
-            if (sPath == "Card Set:Load" or sPath == "Help:Game Docs" or sPath == "Tools:Style Editor" or sPath == "Tools:Game Wiki") then bAvailable = not not Game.GetActive(); end
+            if (sPath == "Card Set:Load" or sPath == "Game:Docs" or sPath == "Game:Rebuild Docs" or sPath == "Game:Style Editor" or sPath == "Game:Wiki") then bAvailable = not not Game.GetActive(); end
             if (sPath == "Card Set:Info..." or sPath == "Card Set:Edit Source...") then bAvailable = bDataLoaded; end
             if (sPath == "Card Set:New") then bAvailable = not not Game.GetActive(); end
             if (sPath == "Game:Info..." or sPath == "Game:Browse" or sPath == "Game:Edit Source...") then bAvailable = not not Game.GetActive(); end
             if (sPath == "Card Set:Browse") then bAvailable = bDataLoaded; end
+            if (sPath == "Game:Export Game..." or sPath == "Card Set:Import Card Set...") then bAvailable = not not Game.GetActive() and not tDataSession.exporting; end
+            if (sPath == "Card Set:Export Card Set...") then bAvailable = bDataLoaded and not tDataSession.exporting; end
+            if (sPath == "Game:Import Game...") then bAvailable = not tDataSession.exporting; end
+            if (sPath == "Game:Close Game") then bAvailable = not not Game.GetActive() and not tDataSession.exporting; end
+            if (sPath == "Card Set:Close Card Set") then bAvailable = bDataLoaded and not tDataSession.exporting; end
 
             if (sPath == "Window:Base Data" or sPath == "Window:Final Data") then
                 bAvailable = sPage == "Editor" and #tDataSession.headers > 0;

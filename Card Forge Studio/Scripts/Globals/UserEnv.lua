@@ -1,10 +1,7 @@
--- TODO Restore Drawing, Forge, and VectorDrawing namespaces when rendering is ported.
--- TODO Port the remaining AMS Color conversion and blending functions. During
--- data loading, RGB/RGBA construct WX colours for the game's configuration.
 local wx = require("wx");
 local Color = {RGBA = wx.wxColour, RGB = wx.wxColour};
 --[[!
-@fqxn CFS.UserEnv.Private.p
+@fqxn CFS.UserEnv.Private.Functions.p
 @desc Formats supplied values into a logged user-environment message.
 @param any ... Additional drawing arguments.
 @vis private
@@ -28,80 +25,47 @@ end
 --[[!
 @fqxn CFS.UserEnv
 @desc
-<div class="mb-4">
-
-  <div class="d-flex align-items-center mb-3">
-    <div style="width:6px;height:36px;background:#4dd0e1;border-radius:3px;" class="me-3"></div>
-    <h2 class="mb-0 fw-bold">UserEnv</h2>
-  </div>
-
-  <p>
-    <strong>UserEnv</strong> defines the controlled execution environment for CardSet
-    <code>Draw</code> scripts and other user-authored code. It exposes a curated,
-    read-only API surface composed of drawing utilities, math helpers, randomness,
-    geometry functions, and engine-provided services, while preventing direct mutation
-    of engine state.
-  </p>
-
-  <hr class="border-secondary">
-
-  <h3 class="fw-semibold">Design</h3>
-  <ul>
-    <li>UserEnv is a <em>decoy environment</em> backed by internal engine tables.</li>
-    <li>All exposed tables are read-only via metatables.</li>
-    <li>Write attempts to injected namespaces raise errors.</li>
-    <li>Actual backing tables are tracked separately for introspection.</li>
-  </ul>
-
-  <h3 class="fw-semibold">Exposed Namespaces</h3>
-  <ul>
-    <li>Rendering and drawing facilities used during card and asset composition.</li>
-    <li>Color construction, conversion, and blending utilities for visual output.</li>
-    <li>Mathematical helpers extending the standard language primitives.</li>
-    <li>String and table helpers for validation, transformation, and structural work.</li>
-    <li>Geometric utilities for layout, bounds checking, and spatial reasoning.</li>
-    <li>Randomization helpers intended for deterministic or controlled variation.</li>
-    <li>Read-only configuration data scoped to the active game.</li>
-    <li>Session-scoped storage managed by the IDE for transient state.</li>
-    <li>Encoding utilities for safely representing binary data as text.</li>
-  </ul>
-
-  <h3 class="fw-semibold">Dynamic Injection</h3>
-  <ul>
-    <li>Additional namespaces may be injected or replaced at runtime by the IDE.</li>
-    <li><code>ProcSysUpdateRoot</code> updates ProcSys-provided bindings.</li>
-    <li><code>UserUpdateRoot</code> updates user/session bindings.</li>
-    <li>Injected keys are tracked and safely replaced on refresh.</li>
-  </ul>
-
-  <h3 class="fw-semibold">Introspection</h3>
-  <ul>
-    <li><code>UserEnv.Get()</code> returns the active execution environment table.</li>
-    <li>
-      <code>UserEnv.GetCommandList()</code> returns a sorted list of callable API paths
-      (e.g. <code>Forge.DrawImage</code>, <code>math.abs</code>).
-    </li>
-  </ul>
-
-  <h3 class="fw-semibold">Safety Guarantees</h3>
-  <ul>
-    <li>No direct access to engine internals or mutable state.</li>
-    <li>All exposed namespaces are read-only.</li>
-    <li>Only explicitly injected APIs are visible.</li>
-    <li>Backing tables are weakly referenced to avoid lifetime leaks.</li>
-  </ul>
-
-  <h3 class="fw-semibold">Notes</h3>
-  <ul>
-    <li>UserEnv is constructed and maintained by the IDE, not by user scripts.</li>
-    <li>User scripts should treat all exposed tables as immutable.</li>
-  </ul>
-
+<section aria-label="User Environment overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">User Environment</h2><p style="font-size:1.15rem;margin:0">UserEnv is the shared workspace where game scripts find configuration, helper values, and the APIs Studio exposes.</p></div>
+<h3>How it fits into your work</h3><p>ProcSys prepares the environment while loading Config and Environment scripts, then evaluates card-set scripts using those shared values.</p>
+<h3>Follow the handoffs</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">The workspace behind game scripts</h3><p style="margin:0">The environment brings configuration, game helpers, the selected card data, and Studio drawing commands into one place. CFG and ENV scripts establish game settings and helper definitions. Card-set processing and drawing scripts then work with that shared workspace rather than rebuilding every connection themselves.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">How it changes with your selection</h3><p style="margin:0">ProcSys prepares and resets the environment as projects and card sets are loaded. Card processing supplies the selected row values, and Forge uses the drawing callbacks loaded for that set. UserEnv connects these pieces; it does not choose the project folder, write the CSV, or export an image by itself. Treat game scripts as executable code, not as harmless data.</p></article>
 </div>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.GameEditor">GameEditor</a></h3><p style="margin:0">Game Editor organizes the shared scripts used throughout a game.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Globals.ImportSystem">ImportSystem</a></h3><p style="margin:0">Imports let a game divide reusable helpers into separate source files.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Forge">Forge</a></h3><p style="margin:0">Forge is the visual workbench that turns selected card data and drawing instructions into artwork.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Game scripts use the commands exposed here. Private implementation entries are reference material and are not available inside the script environment.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual functions, inputs, and results.</p>
+</section>
 !]]
 local tEnv = { --TODO QUESTION do i need to protect this?
     --[[!
-    @fqxn CFS.UserEnv.ipairs
+    @fqxn CFS.UserEnv.Functions.assert
+    @pulsarlua function assert
+    @desc Returns all supplied arguments when the first value is true or truthy; otherwise raises an error with the supplied message. Zero and empty strings are truthy in Lua.
+    @param any vValue Value to check.
+    @param any vMessage Optional error message.
+    @ret any ... Original arguments on success.
+    @example
+    local nCost = assert(tonumber("3"), "Cost must be a number.");
+    !]]
+    assert           = assert,
+    --[[!
+    @fqxn CFS.UserEnv.Functions.error
+    @pulsarlua function error
+    @desc Raises the supplied error value and stops the current call unless a protected caller catches it. An optional level controls which caller location is reported; zero omits the location prefix.
+    @param any vMessage Error value.
+    @param number nLevel Optional stack level; defaults to one.
+    @example
+    error("The card needs a name.");
+    !]]
+    error            = error,
+    --[[!
+    @fqxn CFS.UserEnv.Functions.ipairs
     @pulsarlua function ipairs
     @desc Returns an iterator that traverses a table by increasing integer keys, starting at index 1 and continuing until a nil value is encountered. Intended for array-like tables.
     @example
@@ -112,7 +76,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     !]]
     ipairs           = ipairs,
     --[[!
-    @fqxn CFS.UserEnv.pairs
+    @fqxn CFS.UserEnv.Functions.pairs
     @pulsarlua function pairs
     @desc Returns an iterator that visits all key–value pairs in a table. The traversal order is unspecified and should not be relied upon.
     @example
@@ -123,7 +87,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     !]]
     pairs            = pairs,
     --[[!
-    @fqxn CFS.UserEnv.tonumber
+    @fqxn CFS.UserEnv.Functions.tonumber
     @pulsarlua function tonumber
     @desc Attempts to convert its argument to a number. If the conversion is not possible, it returns nil. An optional base may be supplied for string conversion.
     @example
@@ -132,7 +96,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     !]]
     tonumber         = tonumber,
     --[[!
-    @fqxn CFS.UserEnv.tostring
+    @fqxn CFS.UserEnv.Functions.tostring
     @pulsarlua function tostring
     @desc Converts a value to its human-readable string form. This function never fails and always returns a string.
     @example
@@ -141,7 +105,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     !]]
     tostring         = tostring,
     --[[!
-    @fqxn CFS.UserEnv.type
+    @fqxn CFS.UserEnv.Functions.type
     @pulsarlua function type
     @desc Returns a string describing the type of its argument, such as "number", "string", or "table".
     @example
@@ -150,14 +114,26 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     !]]
     type             = rawtype,
     --[[!
-    @fqxn CFS.UserEnv.p
+    @fqxn CFS.UserEnv.Functions.p
     @pulsarlua function p
-    @desc An alias of <a href="#CFS.UserEnv.print">print</a>
-    @inheritdoc CFS.UserEnv.print
+    @desc An alias of <a href="#CFS.UserEnv.Functions.print">print</a>
+    @inheritdoc CFS.UserEnv.Functions.print
     !]]
     p                = p,
     --[[!
-    @fqxn CFS.UserEnv.print
+    @fqxn CFS.UserEnv.Functions.pcall
+    @pulsarlua function pcall
+    @desc Calls a function with the supplied arguments under error protection. Returns true followed by its results on success, or false followed by the error value on failure. Catching an error does not automatically log it.
+    @param function fAction Function to call.
+    @param varargs ... Arguments for the function.
+    @ret boolean bOK Whether the call succeeded.
+    @ret any ... Function results or the error value.
+    @example
+    local bOK, vResult = pcall(function() return tonumber("3"); end);
+    !]]
+    pcall            = pcall,
+    --[[!
+    @fqxn CFS.UserEnv.Functions.print
     @pulsarlua function print
     @desc Outputs a textual representation of its arguments, separated by tabs and followed by a newline.
     @example
@@ -165,7 +141,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     !]]
     print            = p,
     --[[!
-    @fqxn CFS.UserEnv.serialize
+    @fqxn CFS.UserEnv.Functions.serialize
     @pulsarlua function serialize
     @desc Serializes a Lua value into a Lua-expression string that can later be reconstructed using the deserializer. Supported primitive types are emitted directly, while registered or metatable-enabled objects are encoded in a packed form. Tables are walked recursively, preserving structure and detecting circular references.
     @param any vInput The value to serialize.
@@ -180,7 +156,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     !]]
     serialize        = serialize,
     --[[!
-    @fqxn CFS.UserEnv.deserialize
+    @fqxn CFS.UserEnv.Functions.deserialize
     @pulsarlua function deserialize
     @desc Reconstructs a Lua value from a serialized Lua-expression string produced by serialize. The input string is executed in a controlled manner to recreate the original value, including complex tables and registered object types.
     @param string sRawData Serialized Lua expression.
@@ -191,7 +167,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     !]]
     deserialize      = deserialize,
     --[[!
-    @fqxn CFS.UserEnv.select
+    @fqxn CFS.UserEnv.Functions.select
     @pulsarlua function select
     @desc Provides access to variable argument lists. Can be used to count arguments or extract values by position.
     @example
@@ -201,20 +177,28 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     select           = select,
     --Forge            = tForgeDecoy,
     --ProcSys          = tProcSysDecoy,
-    --TODO FINISH this function and add Dox Note (update it with Game load)
     --[[!
-    @fqxn CFS.UserEnv.Private.Exists
-    @desc Retained file-existence hook; currently has no implementation.
-    @param any sPath Path.
-    @vis private
+    @fqxn CFS.UserEnv.Functions.Exists
+    @pulsarlua function Exists
+    @desc Checks whether a file exists at a virtual resource-relative path, using the import system's path sanitizer and FS.GetResourceRoot. The root is the active game's folder or the bundled source resources of an imported standalone card set. Returns false for missing files and directories. Invalid paths and an absent resource root raise errors. This performs the same lexical path validation as Import; it does not read or execute the file.
+    @param string sPath Relative file path, such as "Images/Example.png". Absolute paths, dot segments, and invalid filename forms are rejected by the shared sanitizer.
+    @ret boolean bExists Whether the resolved file exists.
+    @example
+    if Exists("Images/Example.png") then
+        print("Example artwork is available.");
+    end
+    @vis public
     !]]
     Exists           = function(sPath)
-        --TextFile.DoesExist
+        local sRelative = require("Globals.ImportSystem").SanitizePath(sPath);
+        local pRoot     = FS.GetResourceRoot();
+        assert(rawtype(pRoot) == "string" and pRoot ~= "", "Exists requires an active resource root.");
+        return wx.wxFileExists(io.normalizepath(pRoot.."/"..sRelative));
     end,
     LogClear         = Log.ClearWindow, --TODO NOTE THESE
     Log              = Log.Note,
     --[[!
-    @fqxn CFS.UserEnv.Import
+    @fqxn CFS.UserEnv.Functions.Import
     @desc
     Loads and executes a Lua file from within the active game's directory, then returns the chunk results.
 
@@ -233,7 +217,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     ---
     --User             = {}, --from Init
     --[[!
-    @fqxn CFS.UserEnv.Uptime
+    @fqxn CFS.UserEnv.Functions.Uptime
     @pulsarlua function Uptime
     @desc
     <p>Returns the number of seconds elapsed since the UserEnv (sandbox) was created.
@@ -251,9 +235,23 @@ local tEnv = { --TODO QUESTION do i need to protect this?
     Uptime           = function()
         return os.time() - SANDBOX_TIME_START;
     end,
-    --TODO UPDATE THESE DOX 
     --[[!
-    @fqxn CFS.UserEnv.STYLE
+    @fqxn CFS.UserEnv.Functions.xpcall
+    @pulsarlua function xpcall
+    @desc Calls a function under error protection using a supplied error handler. Returns true followed by the function results on success, or false followed by the handler result on failure. The handler receives the error value; this does not expose the host debug library or automatically log errors.
+    @param function fAction Function to call.
+    @param function fHandler Error handler.
+    @param varargs ... Arguments for the function.
+    @ret boolean bOK Whether the call succeeded.
+    @ret any ... Function results or the handled error.
+    @example
+    local bOK, sResult = xpcall(function() error("Example failure"); end,
+        function(vError) return "Handled: "..tostring(vError); end);
+    !]]
+    xpcall           = xpcall,
+    --TODO UPDATE THESE DOX
+    --[[!
+    @fqxn CFS.UserEnv.Constants.STYLE
     @pulsarlua table STYLE
     @inheritdoc CFS.Classes.FontStyle.Methods.Get
     !]]
@@ -264,7 +262,7 @@ local tEnv = { --TODO QUESTION do i need to protect this?
 local tEnvBacking = setmetatable({}, { __mode = "k" })
 
 --[[!
-@fqxn CFS.UserEnv.Private.InjectEnv
+@fqxn CFS.UserEnv.Private.Functions.InjectEnv
 @desc Validates the environment name and publishes a protected view over the supplied table.
 @param any sName Name.
 @param any tActual Actual.
@@ -312,7 +310,7 @@ end
                                                                             ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝      ╚═╝
                                                                             ]]
 --[[!
-@fqxn CFS.UserEnv.base64
+@fqxn CFS.UserEnv.Namespaces.base64
 @pulsarlua table base64
 @desc
 <div class="mb-4">
@@ -338,7 +336,7 @@ end
 !]]
 InjectEnv("base64", {
     --[[!
-    @fqxn CFS.UserEnv.base64.enc
+    @fqxn CFS.UserEnv.Namespaces.base64.Functions.enc
     @pulsarlua function base64.enc
     @desc Encodes a string to Base64.
     @param string sInput The sting to encode.
@@ -350,7 +348,7 @@ InjectEnv("base64", {
     !]]
     dec = base64.dec,
     --[[!
-    @fqxn CFS.UserEnv.base64.dec
+    @fqxn CFS.UserEnv.Namespaces.base64.Functions.dec
     @pulsarlua function base64.dec
     @desc Encodes a string to Base64.
     @param string sInput The sting to encode.
@@ -375,354 +373,33 @@ InjectEnv("base64", {
                                                                             ╚═════╝ ╚═════╝ ╚══════╝ ╚═════╝ ╚═╝  ╚═╝
                                                                             ]]
 --[[!
-@fqxn CFS.UserEnv.Color
+@fqxn CFS.UserEnv.Namespaces.Color
 @pulsarlua table Color
-@desc
-<div class="mb-4">
-
-  <div class="d-flex align-items-center mb-3">
-    <div style="width:6px;height:36px;background:#81c784;border-radius:3px;" class="me-3"></div>
-    <h2 class="mb-0 fw-bold">Color</h2>
-  </div>
-
-  <p>
-    Provides color construction, conversion, and manipulation utilities for drawing
-    and UI workflows.
-  </p>
-
-  <p>
-    This module supports 24-bit RGB and 32-bit RGBA color values, channel extraction
-    and mutation, alpha blending and mixing, gradient calculation, and hexadecimal
-    conversions. All functions return numeric color values compatible with drawing
-    operations exposed by the environment.
-  </p>
-
-  <hr class="border-secondary">
-
-  <dl class="row mb-0">
-    <dt class="col-sm-3 text-muted">Author</dt>
-    <dd class="col-sm-9">Imagine Programming &lt;Bas Groothedde&gt;</dd>
-
-    <dt class="col-sm-3 text-muted">Web</dt>
-    <dd class="col-sm-9">
-      <a href="http://www.imagine-programming.com" class="link-info">
-        http://www.imagine-programming.com
-      </a>
-    </dd>
-
-    <dt class="col-sm-3 text-muted">Contact</dt>
-    <dd class="col-sm-9">contact\@imagine-programming.com</dd>
-
-    <dt class="col-sm-3 text-muted">Copyright</dt>
-    <dd class="col-sm-9">© Imagine Programming, 2024.</dd>
-  </dl>
-
-</div>
+@desc Constructs native colors for game configuration and Forge drawing. RGB supplies red, green, and blue channels; RGBA also supplies opacity. These constructors return native color objects, not packed color numbers.
 !]]
 InjectEnv("Color", {
     --[[!
-    @fqxn CFS.UserEnv.Color.AlphaBlend
-    @desc
-    Blends two 32-bit RGBA color values together while preserving their alpha channels. The second color is composited over the first color, producing a new combined color.
-    @param number Color1 A base color value, typically created with Color.RGBA.
-    @param number Color2 A second color value, also created with Color.RGBA, which is blended on top of Color1.
-    @ret number Returns a new 32-bit color value representing the blended result.
-    @example
-    local nBlendedColor = Color.AlphaBlend(nBaseColor, nOverlayColor)
+    @fqxn CFS.UserEnv.Namespaces.Color.Functions.RGB
+    @pulsarlua function Color.RGB
+    @desc Creates a native color from red, green, and blue channels.
+    @param number nRed Red channel, from 0 to 255.
+    @param number nGreen Green channel, from 0 to 255.
+    @param number nBlue Blue channel, from 0 to 255.
+    @return userdata oColor Native color for configuration or drawing.
     !]]
-    AlphaBlend         = Color.AlphaBlend,
+    RGB     = Color.RGB,
     --[[!
-    @fqxn CFS.UserEnv.Color.AlphaMix
-    @desc
-    Mixes two 32-bit RGBA color values together while preserving alpha information. The resulting color is blended using an explicit alpha value, allowing control over how transparency is applied in the mix.
-    @param number Color1 A base color value, typically created with Color.RGBA.
-    @param number Color2 A second color value, also created with Color.RGBA, mixed on top of Color1.
-    @param number Alpha The alpha value to apply during mixing, usually sourced from an existing color.
-    @ret number Returns a new 32-bit color value representing the mixed result.
-    @example
-    local nMixedColor = Color.AlphaMix(nPrimaryColor, nSecondaryColor, Color.GetAlpha(nReferenceColor))
+    @fqxn CFS.UserEnv.Namespaces.Color.Functions.RGBA
+    @pulsarlua function Color.RGBA
+    @desc Creates a native color with opacity. Alpha 0 is transparent and alpha 255 is opaque.
+    @param number nRed Red channel, from 0 to 255.
+    @param number nGreen Green channel, from 0 to 255.
+    @param number nBlue Blue channel, from 0 to 255.
+    @param number nAlpha Opacity, from 0 to 255.
+    @return userdata oColor Native color for configuration or drawing.
     !]]
-    AlphaMix           = Color.AlphaMix,
-    --[[!
-    @fqxn CFS.UserEnv.Color.GetAlpha
-    @desc
-    Extracts the alpha channel from a 32-bit RGBA color value, allowing inspection of the transparency component.
-    @param number Color A numeric color value created with Color.RGBA.
-    @ret number Returns the alpha channel value, ranging from 0 to 255.
-    @example
-    local nAlphaValue = Color.GetAlpha(nColor)
-    !]]
-    GetAlpha           = Color.GetAlpha,
-    --[[!
-    @fqxn CFS.UserEnv.Color.GetBlue
-    @desc
-    Extracts the blue channel from a 24-bit or 32-bit color value, allowing inspection of the original color components.
-    @param number Color A numeric color value created with Color.RGB or Color.RGBA.
-    @ret number Returns the blue channel value, ranging from 0 to 255.
-    @example
-    local nBlueValue = Color.GetBlue(nColor)
-    !]]
-    GetBlue            = Color.GetBlue,
-    --[[!
-    @fqxn CFS.UserEnv.Color.GetGreen
-    @desc
-    Extracts the green channel from a 24-bit or 32-bit color value.
-    This allows inspection of the exact green component used in a color.
-    @param number Color A numeric color value produced by Color.RGB or Color.RGBA.
-    @ret number Returns the green channel value, ranging from 0 to 255.
-    @example
-    local nGreenValue = Color.GetGreen(nSomeColor)
-    !]]
-    GetGreen           = Color.GetGreen,
-    --[[!
-    @fqxn CFS.UserEnv.Color.GetRed
-    @desc
-    Extracts the red channel from a 24-bit or 32-bit color value.
-    This is useful for inspecting or decomposing colors created with Color.RGB or Color.RGBA.
-    @param number Color A numeric color value produced by Color.RGB or Color.RGBA.
-    @ret number Returns the red component as an integer in the range 0–255.
-    @example
-    local nRedComponent = Color.GetRed(nColorValue)
-    !]]
-    GetRed             = Color.GetRed,
-    --[[!
-    @fqxn CFS.UserEnv.Color.HexToRGB
-    @desc
-    Converts a hexadecimal RGB color string into a 24-bit numeric color value usable in drawing operations. The expected format is #RRGGBB, where each pair represents red, green, and blue components.
-    @param string HexadecimalColor A hexadecimal color string, such as one produced by Color.RGBToHex or a standard HTML color code.
-    @ret number Returns a 24-bit numeric RGB color value.
-    @example
-    local nDarkerGreen = Color.HexToRGB("#00be00")
-    !]]
-    HexToRGB           = Color.HexToRGB,
-    --[[!
-    @fqxn CFS.UserEnv.Color.HexToRGBA
-    @desc
-    Converts a hexadecimal RGBA color string into a 32-bit numeric color value usable in drawing operations. The expected format is #RRGGBBAA, where each pair represents red, green, blue, and alpha components.
-    @param string HexadecimalColor A hexadecimal color string, such as one produced by Color.RGBAToHex.
-    @ret number Returns a 32-bit numeric RGBA color value.
-    @example
-    local nDarkerTransparentGreen = Color.HexToRGBA("#00be007c")
-    !]]
-    HexToRGBA          = Color.HexToRGBA,
-    --[[!
-    @fqxn CFS.UserEnv.Color.RGBA
-    @pulsarlua table Color.RGBA
-    @desc
-    Calculates a 32-bit RGBA color value composed of red, green, blue, and alpha components.
-    The alpha channel controls opacity, allowing the color to be fully opaque or fully transparent.
-    Colors created this way can be blended or mixed during drawing operations.
-    @param number Red The red component (0–255).
-    @param number Green The green component (0–255).
-    @param number Blue The blue component (0–255).
-    @param number Alpha The alpha (opacity) component (0–255).
-    @ret number Returns the computed color as a single 32-bit numeric value suitable for drawing operations that accept color inputs.
-    @example
-    local nSemiTransparentRed = Color.RGBA(200, 0, 0, 190)
-    !]]
-    RGBA               = Color.RGBA,
-    --[[!
-    @fqxn CFS.UserEnv.Color.RGBAAtOffset
-    @desc
-    Computes an interpolated RGBA color between two 32-bit colors at a given percentage offset. The offset represents the distance from the first color toward the second, expressed as a value from 0 to 100. This variant preserves and interpolates the alpha channel as part of the gradient.
-    @param number Color1 The starting 32-bit RGBA color value.
-    @param number Color2 The ending 32-bit RGBA color value.
-    @param number Distance Percentage distance from Color1 toward Color2 (0–100).
-    @ret number Returns a 32-bit RGBA color value at the specified offset.
-    @example
-    local nStepColor = Color.RGBAAtOffset(nStartColor,nEndColor,20)
-    !]]
-    RGBAAtOffset       = Color.RGBAAtOffset,
-    --[[!
-    @fqxn CFS.UserEnv.Color.RGBAGradientColors
-    @desc
-    Calculates a sequence of RGBA color values that form a smooth gradient from a starting color to an ending color. The gradient is divided into a specified number of points, representing evenly spaced positions along the transition. This variant also interpolates the alpha channel, allowing transparency to flow across the gradient.
-    @param number Color1 The starting 32-bit RGBA color value.
-    @param number Color2 The ending 32-bit RGBA color value.
-    @param number Points The number of gradient points to generate.
-    @ret table Returns a table containing RGBA color values for each gradient step, or nil on failure.
-    @example
-    -- Make a test project with one page named Page1,
-    -- the size should be: Small (with menu bar) in
-    -- project settings -> Appearance.
-    -- Put this code in the On Show event of Page1.
-    Application.SetPageProperties("Page1", {
-      UseCustomSettings = true;
-      BackgroundType = BG_SOLID;
-      BackgroundColor = Color.RGB(0,0,0);
-    });
-
-    local nPoints = 26;
-    local tColors = Color.RGBAGradientColors(
-      Color.RGBA(255,0,0,255),
-      Color.RGBA(0,255,0,80),
-      nPoints
-    );
-    -- One extra point is added internally to represent the 100% color.
-
-    local nY = 0;
-    for nPoint,nColor in pairs(tColors) do
-      Page.CreateObject(OBJECT_LABEL,"label"..nPoint,{
-        FontName = "Courier New";
-        FontSize = 10;
-        ColorNormal = nColor;
-        ColorHighlight = nColor;
-        ColorDown = nColor;
-        X = 5;
-        Y = nY;
-      });
-
-      Label.SetText("label"..nPoint,"The color at point "..nPoint.." in the list.");
-      nY = nY + 10;
-    end
-    !]]
-    RGBAGradientColors = Color.RGBAGradientColors,
-    --[[!
-    @fqxn CFS.UserEnv.Color.RGB
-    @pulsarlua table Color.RGB
-    @desc
-    Calculates a 24-bit RGB color value composed of red, green, and blue components with no alpha channel.
-    Use this when opacity is not required; for colors with transparency, use Color.RGBA instead.
-    @param number Red The red component (0–255).
-    @param number Green The green component (0–255).
-    @param number Blue The blue component (0–255).
-    @ret number Returns the computed color as a single 24-bit numeric value suitable for drawing operations that accept color inputs.
-    @example
-    local nGreenColor = Color.RGB(0, 255, 0)
-    local nPurpleColor = Color.RGB(255, 0, 255)
-    !]]
-    RGB                = Color.RGB,
-    --[[!
-    @fqxn CFS.UserEnv.Color.RGBAtOffset
-    @desc
-    Computes an interpolated RGB color between two 24-bit colors at a given percentage offset. The offset represents the distance from the first color toward the second, expressed as a value from 0 to 100.
-    @param number Color1 The starting 24-bit RGB color value.
-    @param number Color2 The ending 24-bit RGB color value.
-    @param number Distance Percentage distance from Color1 toward Color2 (0–100).
-    @ret number Returns a 24-bit RGB color value at the specified offset.
-    @example
-    local nStepColor = Color.RGBAtOffset(nStartColor,nEndColor,20)
-    !]]
-    RGBAtOffset        = Color.RGBAtOffset,
-    --[[!
-    @fqxn CFS.UserEnv.Color.RGBGradientColors
-    @desc
-    Calculates a sequence of RGB color values that form a smooth gradient from a starting color to an ending color. The number of generated colors is determined by the points argument, representing evenly spaced positions along the gradient.
-    @param number Color1 The starting 24-bit RGB color value.
-    @param number Color2 The ending 24-bit RGB color value.
-    @param number Points The number of gradient points to generate.
-    @ret table Returns a table containing RGB color values for each gradient step, or nil on failure.
-    @example
-    -- Make a test project with one page named Page1,
-    -- the size should be: Small (with menu bar) in
-    -- project settings -> Appearance.
-    -- Put this code in the On Show event of Page1.
-    Application.SetPageProperties("Page1", {
-      UseCustomSettings = true;
-      BackgroundType = BG_SOLID;
-      BackgroundColor = Color.RGB(0,0,0);
-    });
-
-    local nPoints = 26;
-    local tColors = Color.RGBGradientColors(Color.RGB(255,0,0),Color.RGB(0,255,0),nPoints);
-    -- One extra point is added internally to represent the 100% color.
-
-    local nY = 0;
-    for nPoint,nColor in pairs(tColors) do
-      Page.CreateObject(OBJECT_LABEL,"label"..nPoint,{
-        FontName = "Courier New";
-        FontSize = 10;
-        ColorNormal = nColor;
-        ColorHighlight = nColor;
-        ColorDown = nColor;
-        X = 5;
-        Y = nY;
-      });
-
-      Label.SetText("label"..nPoint,"The color at point "..nPoint.." in the list.");
-      nY = nY + 10;
-    end
-    !]]
-    RGBGradientColors  = Color.RGBGradientColors,
-    --[[!
-    @fqxn CFS.UserEnv.Color.RGBAToHex
-    @desc
-    Converts a 32-bit RGBA color value into a hexadecimal color string. This format is useful for configuration, serialization, or user-defined color input where alpha transparency must be preserved.
-    @param number Color A 32-bit color value, typically created with Color.RGBA.
-    @ret string Returns a hexadecimal color code representing the RGBA color.
-    @example
-    local sHexRedTransparent = Color.RGBAToHex(Color.RGBA(255,0,0,180))
-    !]]
-    RGBAToHex          = Color.RGBAToHex,
-    --[[!
-    @fqxn CFS.UserEnv.Color.RGBToHex
-    @desc
-    Converts a 24-bit RGB color value into a hexadecimal color string. The resulting value is suitable for use in formats such as HTML or CSS, or for storage and user-facing configuration.
-    @param number Color A 24-bit color value, typically created with Color.RGB.
-    @ret string Returns a hexadecimal color code representing the input color.
-    @example
-    local sHexRed = Color.RGBToHex(Color.RGB(255,0,0))
-    !]]
-    RGBToHex           = Color.RGBToHex,
-    --[[!
-    @fqxn CFS.UserEnv.Color.SetAlpha
-    @desc
-    Replaces the alpha channel of a 32-bit RGBA color with a new value, producing a modified color with updated transparency.
-    @param number Color A numeric color value created with Color.RGBA.
-    @param number NewValue The new alpha value, ranging from 0 to 255.
-    @ret number Returns a new 32-bit color value with the alpha channel overwritten.
-    @example
-    local nNewColor = Color.SetAlpha(nOldColor, 80)
-    !]]
-    SetAlpha           = Color.SetAlpha,
-    --[[!
-    @fqxn CFS.UserEnv.Color.SetBlue
-    @desc
-    Replaces the blue channel of a 24-bit or 32-bit color and returns a new color value with the updated component.
-    @param number Color A numeric color value created with Color.RGB or Color.RGBA.
-    @param number NewValue The new blue channel value, in the range 0 to 255.
-    @ret number Returns the recalculated color value with the blue component overwritten.
-    @example
-    local nUpdatedColor = Color.SetBlue(nOriginalColor,255)
-    !]]
-    SetBlue            = Color.SetBlue,
-    --[[!
-    @fqxn CFS.UserEnv.Color.SetGreen
-    @desc
-    Replaces the green channel of a 24-bit or 32-bit color and returns a new color value with the updated component.
-    @param number Color A numeric color value created with Color.RGB or Color.RGBA.
-    @param number NewValue The new green channel value, in the range 0 to 255.
-    @ret number Returns the recalculated color value with the green component overwritten.
-    @example
-    local nUpdatedColor = Color.SetGreen(nOriginalColor, 120)
-    !]]
-    SetGreen           = Color.SetGreen,
-    --[[!
-    @fqxn CFS.UserEnv.Color.SetRed
-    @desc
-    Updates the red channel of an existing 24-bit or 32-bit color value and returns a new color with the modified component.
-    All other color channels remain unchanged.
-    @param number Color A numeric color value produced by Color.RGB or Color.RGBA.
-    @param number NewValue The new red channel value, in the range 0–255.
-    @ret number Returns a newly calculated color value with the red component replaced.
-    @example
-    local nNewColor = Color.SetRed(nOldColor, 0) -- removes the red component
-    !]]
-    SetRed             = Color.SetRed,
+    RGBA    = Color.RGBA,
 });
-
-
---[[
- ██████╗ █████╗ ██████╗ ██████╗
-██╔════╝██╔══██╗██╔══██╗██╔══██╗
-██║     ███████║██████╔╝██║  ██║
-██║     ██╔══██║██╔══██╗██║  ██║
-╚██████╗██║  ██║██║  ██║██████╔╝
- ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝
-]]
-local tCard = {};
-InjectEnv("Card", tCard); ---QUESTION DID PROCSYS REPLACE THIS?
-
 
                                                                                 --[[
                                                                                 ██████╗███████╗ ██████╗
@@ -737,209 +414,7 @@ local _tCFG = {};
 local _tCFGDecoy, _tCFGMeta = InjectEnv("CFG", _tCFG);
 
 
-                                                                                --[[
-                                                                                ██████╗ ██████╗  █████╗ ██╗    ██╗██╗███╗   ██╗ ██████╗
-                                                                                ██╔══██╗██╔══██╗██╔══██╗██║    ██║██║████╗  ██║██╔════╝
-                                                                                ██║  ██║██████╔╝███████║██║ █╗ ██║██║██╔██╗ ██║██║  ███╗
-                                                                                ██║  ██║██╔══██╗██╔══██║██║███╗██║██║██║╚██╗██║██║   ██║
-                                                                                ██████╔╝██║  ██║██║  ██║╚███╔███╔╝██║██║ ╚████║╚██████╔╝
-                                                                                ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝
-                                                                                ]]
---[[!
-@fqxn CFS.UserEnv.Drawing
-@desc <section class="mb-5">
-<h1>Imagine Draw</h1>
-<p>A plugin which will allow you to decode, encode and draw onto images. Draw has many supported formats, such as (Decoders): PNG, JPEG, JPEG2000, BMP, ICO, TIFF, TGA and (Encoders): PNG, JPEG, JPEG2000, BMP.
-Using Draw, you can generate any image you want. Included are tons of functions for rotation, mirroring, flipping, drawing lines, boxes, circles, ellipses, gradients, images onto images, arcs, polygons, bold lines, pies.
-All this can be done using blending modes, currently there are over 50 blending modes available in Draw. Aside from blending modes, a few filters have been added as well. These filters allow you to draw diagonal, horizontal and vertical lines in specific areas, to negate the colors in a specific area, darken and lighten colors and more!
-Draw also comes with functions to Load fonts, these allow you to preload an installed font and use them in your drawing code. You can draw text, angled text and determine the width and height calculated for a string of text you wish to draw.
-Draw supports many pixel formats, from 8 bits RGB to 32 bits RGBA. If you create a new image, you have to choose between 24 bits RGB, 32 bits RGB, and 32 bits RGBA.
-The submodule Color inside Draw allows you to work with colors, color calculation, conversion to hexadecimal strings, conversion from hexadecimal strings, gradient calculation, alpha blending or mixing two colors.
-The, previously developed by RizlaUK, Canvas plugin will also be a part of Draw. The completely redesigned Canvas object is ported with this version. The Canvas allows you to draw directly onto an Object in AMS. The Canvas object also allows events, grabbing mouse and keyboard input and more!</p>
 
-<hr class="border-secondary my-4">
-
-<dl class="row mb-0">
-  <dt class="col-sm-3">Version</dt>
-  <dd class="col-sm-9">2.0.0.0</dd>
-
-  <dt class="col-sm-3">Author</dt>
-  <dd class="col-sm-9">Imagine Programming &lt;Bas Groothedde&gt;</dd>
-
-  <dt class="col-sm-3">Web</dt>
-  <dd class="col-sm-9"><a href="http://www.imagine-programming.com" class="link-info">http://www.imagine-programming.com</a></dd>
-
-  <dt class="col-sm-3">Email</dt>
-  <dd class="col-sm-9">contact\@imagine-programming.com</dd>
-
-  <dt class="col-sm-3">Copyright</dt>
-  <dd class="col-sm-9">© Imagine Programming, 2024.</dd>
-</dl>
-
-<hr class="border-secondary my-4">
-
-<p class="mb-0"><strong>Note:</strong> While the official manual occasionally lists the <strong>Drawing.DrawSquare</strong> method in some examples, that method has been deprecated. Use <strong>Drawing.DrawRectangle</strong> instead.</p>
-</section>!]]
-if (Drawing ~= nil) then
-InjectEnv("Drawing",{--TODO add real description to these
-    --[[!@fqxn CFS.UserEnv.Drawing.ClearGradientColors
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    ClearGradientColors          = Drawing.ClearGradientColors,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawAlphaImage
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawAlphaImage               = Drawing.DrawAlphaImage,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawAngledText
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawAngledText               = Drawing.DrawAngledText,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawArc
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawArc                      = Drawing.DrawArc,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawBoldLine
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawBoldLine                 = Drawing.DrawBoldLine,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawCircle
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawCircle                   = Drawing.DrawCircle,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawEllipse
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawEllipse                  = Drawing.DrawEllipse,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawImage
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawImage                    = Drawing.DrawImage,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawLine
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawLine                     = Drawing.DrawLine,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawLineEx
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawLineEx                   = Drawing.DrawLineEx,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawPie
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawPie                      = Drawing.DrawPie,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawPixel
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawPixel                    = Drawing.DrawPixel,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawPolygon
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawPolygon                  = Drawing.DrawPolygon,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawRectangle
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawRectangle                = Drawing.DrawRectangle,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawRoundedRectangle
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawRoundedRectangle         = Drawing.DrawRoundedRectangle,
-    --[[!@fqxn CFS.UserEnv.Drawing.DrawText
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DrawText                     = Drawing.DrawText,
-    --[[!@fqxn CFS.UserEnv.Drawing.FillOutlinedRegion
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    FillOutlinedRegion           = Drawing.FillOutlinedRegion,
-    --[[!@fqxn CFS.UserEnv.Drawing.GetAvailableCollibFilters
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    GetAvailableCollibFilters    = Drawing.GetAvailableCollibFilters,
-    --[[!@fqxn CFS.UserEnv.Drawing.GetPixel
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    GetPixel                     = Drawing.GetPixel,
-    --[[!@fqxn CFS.UserEnv.Drawing.GetTextHeight
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    GetTextHeight                = Drawing.GetTextHeight,
-    --[[!@fqxn CFS.UserEnv.Drawing.GetTextWidth
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    GetTextWidth                 = Drawing.GetTextWidth,
-    --[[!@fqxn CFS.UserEnv.Drawing.PrepareCircularGradient
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    PrepareCircularGradient      = Drawing.PrepareCircularGradient,
-    --[[!@fqxn CFS.UserEnv.Drawing.PrepareConicalGradient
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    PrepareConicalGradient       = Drawing.PrepareConicalGradient,
-    --[[!@fqxn CFS.UserEnv.Drawing.PrepareEllipticalGradient
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    PrepareEllipticalGradient    = Drawing.PrepareEllipticalGradient,
-    --[[!@fqxn CFS.UserEnv.Drawing.PrepareLinearGradient
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    PrepareLinearGradient        = Drawing.PrepareLinearGradient,
-    --[[!@fqxn CFS.UserEnv.Drawing.PrepareRectangularGradient
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    PrepareRectangularGradient   = Drawing.PrepareRectangularGradient,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetBackColor
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    SetBackColor                 = Drawing.SetBackColor,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetCollibFilter
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    SetCollibFilter              = Drawing.SetCollibFilter,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetDrawingFont
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    SetDrawingFont               = Drawing.SetDrawingFont,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetFilteringMode
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    SetFilteringMode             = Drawing.SetFilteringMode,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetFrontColor
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    SetFrontColor                = Drawing.SetFrontColor,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetGradientColors
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    SetGradientColors            = Drawing.SetGradientColors,
-    --[[!@fqxn CFS.UserEnv.Drawing.SetSingleGradientColor
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    SetSingleGradientColor       = Drawing.SetSingleGradientColor,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_JPEG
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_FORMAT_JPEG             = DRAW_FORMAT_JPEG,
-    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_JPEG2000
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_FORMAT_JPEG2000         = DRAW_FORMAT_JPEG2000,
-    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_BMP
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_FORMAT_BMP              = DRAW_FORMAT_BMP,
-    --[[!@fqxn CFS.UserEnv.Drawing.DRAW_FORMAT_ICON
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_FORMAT_ICON             = DRAW_FORMAT_ICON,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_PNG
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_FORMAT_PNG              = DRAW_FORMAT_PNG,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_TGA
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_FORMAT_TGA              = DRAW_FORMAT_TGA,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FORMAT_TIFF
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_FORMAT_TIFF             = DRAW_FORMAT_TIFF,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_MIRROR_HORIZONTAL
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_MIRROR_HORIZONTAL       = DRAW_MIRROR_HORIZONTAL,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_MIRROR_VERTICAL
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_MIRROR_VERTICAL         = DRAW_MIRROR_VERTICAL,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_DEFAULT
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_BLEND_DEFAULT           = DRAW_BLEND_DEFAULT,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_TEXT_TRANSPARENT
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_BLEND_TEXT_TRANSPARENT  = DRAW_BLEND_TEXT_TRANSPARENT,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_XOR
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_BLEND_XOR               = DRAW_BLEND_XOR,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_OUTLINE
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_BLEND_OUTLINE           = DRAW_BLEND_OUTLINE,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHABLEND
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_BLEND_ALPHABLEND        = DRAW_BLEND_ALPHABLEND,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHACLIP
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_BLEND_ALPHACLIP         = DRAW_BLEND_ALPHACLIP,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALPHACHANNEL
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_BLEND_ALPHACHANNEL      = DRAW_BLEND_ALPHACHANNEL,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_BLEND_ALLCHANNELS
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_BLEND_ALLCHANNELS       = DRAW_BLEND_ALLCHANNELS,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FILTER_GRADIENT
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_FILTER_GRADIENT         = DRAW_FILTER_GRADIENT,
-    --[[!@fqxn CFS.UserEnv.Drawing.Constants.DRAW_FILTER_COLLIB
-    @see <strong>Help->Drawing</strong> in the application's main menu. !]]
-    DRAW_FILTER_COLLIB           = DRAW_FILTER_COLLIB,
-});
-end
 
 
                                                                                 --[[
@@ -950,29 +425,29 @@ end
                                                                                 ██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
                                                                                 ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
                                                                                 ]]
---[[!@fqxn CFS.UserEnv.Forge
+--[[!@fqxn CFS.UserEnv.Namespaces.Forge
     @inheritdoc CFS.Modules.Forge!]]
 local tForge        = {};
 local tForgeKeys    = {};
 if (Forge ~= nil) then
 InjectEnv("Forge", {
-    --[[!@fqxn CFS.UserEnv.Forge.DrawImage
-        @inheritdoc CFS.Modules.Forge.DrawImage!]]
+    --[[!@fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawImage
+        @inheritdoc CFS.Modules.Forge.Functions.DrawImage!]]
     DrawRectangle   = Forge.DrawRectangle,
     GetOutputInfo   = Forge.GetOutputInfo,
     DrawImage       = Forge.DrawImage,
-    --[[!@fqxn CFS.UserEnv.Forge.DrawText
-        @inheritdoc CFS.Modules.Forge.DrawText!]]
+    --[[!@fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawText
+        @inheritdoc CFS.Modules.Forge.Functions.DrawText!]]
     DrawText        = Forge.DrawText,
-    --[[!@fqxn CFS.UserEnv.Forge.DrawStyledText
-        @inheritdoc CFS.Modules.Forge.DrawStyledText!]]
+    --[[!@fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawStyledText
+        @inheritdoc CFS.Modules.Forge.Functions.DrawStyledText!]]
     DrawStyledText  = Forge.DrawStyledText,
 });
 end
 
 
 --[[!
-@fqxn CFS.UserEnv.geometry
+@fqxn CFS.UserEnv.Namespaces.geometry
 @pulsarlua table geometry
 @desc
 <div class="card border-0 shadow-sm bg-dark text-light mb-3">
@@ -998,7 +473,7 @@ end
 !]]
 InjectEnv("geometry", {
     --[[!
-    @fqxn CFS.UserEnv.geometry.fitrect
+    @fqxn CFS.UserEnv.Namespaces.geometry.Functions.fitrect
     @pulsarlua function geometry.fitrect
     @desc Calculates the largest rectangle that fits inside an outer rectangle
     while preserving the aspect ratio of an inner rectangle.
@@ -1012,7 +487,7 @@ InjectEnv("geometry", {
     !]]
     fitrect             = math.geometry.fitrect,
     --[[!
-    @fqxn CFS.UserEnv.geometry.rectcontains
+    @fqxn CFS.UserEnv.Namespaces.geometry.Functions.rectcontains
     @pulsarlua function geometry.rectcontains
     @desc Tests whether two rectangles overlap with a positive intersection area.
     Returns true only when the rectangles share a non-zero overlapping region.
@@ -1024,7 +499,7 @@ InjectEnv("geometry", {
     !]]
     rectcontains        = math.geometry.rectcontains,
     --[[!
-    @fqxn CFS.UserEnv.geometry.rectcontainsfully
+    @fqxn CFS.UserEnv.Namespaces.geometry.Functions.rectcontainsfully
     @pulsarlua function geometry.rectcontainsfully
     @desc Tests whether one rectangle intersects or encloses another.
     Unlike rectcontains, edge contact is considered a valid intersection.
@@ -1047,7 +522,7 @@ InjectEnv("geometry", {
                                                                                 ╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
                                                                                 ]]
 --[[!
-@fqxn CFS.UserEnv.math
+@fqxn CFS.UserEnv.Namespaces.math
 @pulsarlua table math
 @desc <pre class="fw-bold lh-1 mb-2">
 <span style="color:#4d70f1">
@@ -1064,7 +539,7 @@ classification.
 !]]
 InjectEnv("math", {
     --[[!
-    @fqxn CFS.UserEnv.math.abs
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.abs
     @pulsarlua function math.abs
     @desc
         Returns the absolute (non-negative) value of a number.
@@ -1073,7 +548,7 @@ InjectEnv("math", {
     !]]
     abs                 = math.abs,
     --[[!
-    @fqxn CFS.UserEnv.math.acos
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.acos
     @pulsarlua function math.acos
     @desc
         Computes the arc cosine of a value, expressed in radians.
@@ -1083,7 +558,7 @@ InjectEnv("math", {
     !]]
     acos                = math.acos,
     --[[!
-    @fqxn CFS.UserEnv.math.asin
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.asin
     @pulsarlua function math.asin
     @desc
         Computes the arc sine of a value, in radians.
@@ -1093,7 +568,7 @@ InjectEnv("math", {
     !]]
     asin                = math.asin,
     --[[!
-    @fqxn CFS.UserEnv.math.atan
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.atan
     @pulsarlua function math.atan
     @desc
         Returns the arc tangent of a value, measured in radians.
@@ -1102,7 +577,7 @@ InjectEnv("math", {
     !]]
     atan                = math.atan,
     --[[!
-    @fqxn CFS.UserEnv.math.atan2
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.atan2
     @pulsarlua function math.atan2
     @desc
         Computes the arc tangent using two coordinates,
@@ -1112,7 +587,7 @@ InjectEnv("math", {
     !]]
     atan2               = math.atan2,
     --[[!
-    @fqxn CFS.UserEnv.math.ceil
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.ceil
     @pulsarlua function math.ceil
     @desc
         Rounds a number upward to the nearest integer
@@ -1122,7 +597,7 @@ InjectEnv("math", {
     !]]
     ceil                = math.ceil,
     --[[!
-    @fqxn CFS.UserEnv.math.clamp
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.clamp
     @pulsarlua function math.clamp
     @desc Constrains a numeric value to lie within a minimum and maximum bound.
     If the value is smaller than the minimum, the minimum is returned.
@@ -1136,7 +611,7 @@ InjectEnv("math", {
     !]]
     clamp               = math.clamp,
     --[[!
-    @fqxn CFS.UserEnv.math.convertbase
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.convertbase
     @pulsarlua function math.convertbase
     @desc Converts a numeric string from one base to another.
     The input is first interpreted using the source base, then re-encoded
@@ -1146,7 +621,7 @@ InjectEnv("math", {
     !]]
     convertbase         = math.convertbase,
     --[[!
-    @fqxn CFS.UserEnv.math.cos
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.cos
     @pulsarlua function math.cos
     @desc Calculates the cosine of an angle given in radians.
     @example
@@ -1154,7 +629,7 @@ InjectEnv("math", {
     !]]
     cos                 = math.cos,
     --[[!
-    @fqxn CFS.UserEnv.math.counting
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.counting
     @pulsarlua function math.counting
     @desc Converts a number into a positive counting value.
     The result is always greater than zero and rounded using floor or ceiling.
@@ -1166,7 +641,7 @@ InjectEnv("math", {
     !]]
     counting            = math.counting,
     --[[!
-    @fqxn CFS.UserEnv.math.deg
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.deg
     @pulsarlua function math.deg
     @desc Converts an angle from radians into degrees.
     @example
@@ -1174,7 +649,7 @@ InjectEnv("math", {
     !]]
     deg                 = math.deg,
     --[[!
-    @fqxn CFS.UserEnv.math.drift
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.drift
     @pulsarlua function math.drift
     @desc Applies a random additive offset within a symmetric range.
     The result varies by up to the drift amount in either direction.
@@ -1183,7 +658,7 @@ InjectEnv("math", {
     !]]
     drift               = math.drift,
     --[[!
-    @fqxn CFS.UserEnv.math.driftf
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.driftf
     @pulsarlua function math.driftf
     @desc Applies a proportional random variation to a value.
     The drift is applied as a ratio of the original value.
@@ -1192,7 +667,7 @@ InjectEnv("math", {
     !]]
     driftf              = math.driftf,
     --[[!
-    @fqxn CFS.UserEnv.math.e
+    @fqxn CFS.UserEnv.Namespaces.math.Constants.e
     @pulsarlua number math.e
     @desc Mathematical constant representing Euler’s number.
     Used as the base of natural logarithms.
@@ -1201,7 +676,7 @@ InjectEnv("math", {
     !]]
     e                   = math.e,
     --[[!
-    @fqxn CFS.UserEnv.math.exp
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.exp
     @pulsarlua function math.exp
     @desc
         Computes the exponential value e raised to the given power.
@@ -1210,7 +685,7 @@ InjectEnv("math", {
     !]]
     exp                 = math.exp,
     --[[!
-    @fqxn CFS.UserEnv.math.factorial
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.factorial
     @pulsarlua function math.factorial
     @desc Computes the factorial of a positive integer using iterative multiplication.
     The factorial is the product of all integers from 1 to the given value.
@@ -1221,7 +696,7 @@ InjectEnv("math", {
     !]]
     factorial           = math.factorial,
     --[[!
-    @fqxn CFS.UserEnv.math.floor
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.floor
     @pulsarlua function math.floor
     @desc
         Rounds a number downward to the nearest integer
@@ -1231,7 +706,7 @@ InjectEnv("math", {
     !]]
     floor               = math.floor,
     --[[!
-    @fqxn CFS.UserEnv.math.fmod
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.fmod
     @pulsarlua function math.fmod
     @desc
         Returns the remainder of dividing two numbers,
@@ -1241,7 +716,7 @@ InjectEnv("math", {
     !]]
     fmod                = math.fmod,
     --[[!
-    @fqxn CFS.UserEnv.math.gcf
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.gcf
     @pulsarlua function math.gcf
     @desc Calculates the greatest common factor of two numbers using the Euclidean algorithm.
     The result is always non-negative.
@@ -1252,9 +727,8 @@ InjectEnv("math", {
     math.gcf(24, 18)    -- 6
     !]]
     gcf                 = math.gcf,
-    geometry            = tGeometry,
     --[[!
-    @fqxn CFS.UserEnv.math.huge
+    @fqxn CFS.UserEnv.Namespaces.math.Constants.huge
     @pulsarlua number math.huge
     @desc Represents a value larger than any other numeric value, typically used as positive infinity.
     @example
@@ -1262,7 +736,7 @@ InjectEnv("math", {
     !]]
     huge                = math.huge,
     --[[!
-    @fqxn CFS.UserEnv.math.inttorgb
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.inttorgb
     @pulsarlua function math.inttorgb
     @desc Converts a packed integer color value into red, green, and blue components.
     @example
@@ -1270,7 +744,7 @@ InjectEnv("math", {
     !]]
     inttorgb            = math.inttorgb,
     --[[!
-    @fqxn CFS.UserEnv.math.iseven
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.iseven
     @pulsarlua function math.iseven
     @desc Tests whether a numeric value is evenly divisible by two.
     @param number nValue Input value.
@@ -1280,7 +754,7 @@ InjectEnv("math", {
     !]]
     iseven              = math.iseven,
     --[[!
-    @fqxn CFS.UserEnv.math.isinteger
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.isinteger
     @pulsarlua function math.isinteger
     @desc Determines whether a numeric value represents an exact integer.
     @example
@@ -1288,7 +762,7 @@ InjectEnv("math", {
     !]]
     isinteger           = math.isinteger,
     --[[!
-    @fqxn CFS.UserEnv.math.isodd
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.isodd
     @pulsarlua function math.isodd
     @desc Tests whether a numeric value is not evenly divisible by two.
     @param number nValue Input value.
@@ -1298,7 +772,7 @@ InjectEnv("math", {
     !]]
     isodd               = math.isodd,
     --[[!
-    @fqxn CFS.UserEnv.math.log
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.log
     @pulsarlua function math.log
     @desc Computes the natural logarithm of a number, or a logarithm with an optional base.
     @example
@@ -1306,7 +780,7 @@ InjectEnv("math", {
     !]]
     log                 = math.log,
     --[[!
-    @fqxn CFS.UserEnv.math.max
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.max
     @pulsarlua function math.max
     @desc Returns the largest value among its arguments.
     @example
@@ -1314,7 +788,7 @@ InjectEnv("math", {
     !]]
     max                 = math.max,
     --[[!
-    @fqxn CFS.UserEnv.math.min
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.min
     @pulsarlua function math.min
     @desc Returns the smallest value among its arguments.
     @example
@@ -1322,7 +796,7 @@ InjectEnv("math", {
     !]]
     min                 = math.min,
     --[[!
-    @fqxn CFS.UserEnv.math.modf
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.modf
     @pulsarlua function math.modf
     @desc Splits a number into its integer and fractional components.
     @example
@@ -1330,7 +804,7 @@ InjectEnv("math", {
     !]]
     modf                = math.modf,
     --[[!
-    @fqxn CFS.UserEnv.math.pi
+    @fqxn CFS.UserEnv.Namespaces.math.Constants.pi
     @pulsarlua number math.pi
     @desc A constant representing the mathematical value π.
     @example
@@ -1338,7 +812,7 @@ InjectEnv("math", {
     !]]
     pi                  = math.pi,
     --[[!
-    @fqxn CFS.UserEnv.math.rad
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.rad
     @pulsarlua function math.rad
     @desc Converts an angle from degrees to radians.
     @example
@@ -1346,7 +820,7 @@ InjectEnv("math", {
     !]]
     rad                 = math.rad,
     --[[!
-    @fqxn CFS.UserEnv.math.random
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.random
     @pulsarlua function math.random
     @desc Produces pseudo-random numbers.
         May return a float in [0,1) or an integer within a range.
@@ -1356,7 +830,7 @@ InjectEnv("math", {
     !]]
     random              = math.random,
     --[[!
-    @fqxn CFS.UserEnv.math.randomf
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.randomf
     @pulsarlua function math.randomf
     @desc Generates a random floating-point number within a given range.
     The result has fixed decimal precision.
@@ -1365,7 +839,7 @@ InjectEnv("math", {
     !]]
     randomf             = math.randomf,
     --[[!
-    @fqxn CFS.UserEnv.math.randomseed
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.randomseed
     @pulsarlua function math.randomseed
     @desc Sets the initial seed for the random number generator.
     @example
@@ -1373,7 +847,7 @@ InjectEnv("math", {
     !]]
     randomseed          = math.randomseed,
     --[[!
-    @fqxn CFS.UserEnv.math.ratio
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.ratio
     @pulsarlua function math.ratio
     @desc Reduces two numbers into their simplest integer ratio form.
     The result is returned as a table with left and right components.
@@ -1385,7 +859,7 @@ InjectEnv("math", {
     !]]
     ratio               = math.ratio,
     --[[!
-    @fqxn CFS.UserEnv.math.rgbtohex
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.rgbtohex
     @pulsarlua function math.rgbtohex
     @desc Converts red, green, and blue components into a hexadecimal color value.
     @example
@@ -1393,7 +867,7 @@ InjectEnv("math", {
     !]]
     rgbtohex            = math.rgbtohex,
     --[[!
-    @fqxn CFS.UserEnv.math.rgbtoint
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.rgbtoint
     @pulsarlua function math.rgbtoint
     @desc Packs red, green, and blue components into a single integer value.
     @example
@@ -1401,7 +875,7 @@ InjectEnv("math", {
     !]]
     rgbtoint            = math.rgbtoint,
     --[[!
-    @fqxn CFS.UserEnv.math.sin
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.sin
     @pulsarlua function math.sin
     @desc Calculates the sine of an angle given in radians.
     @example
@@ -1409,7 +883,7 @@ InjectEnv("math", {
     !]]
     sin                 = math.sin,
     --[[!
-    @fqxn CFS.UserEnv.math.sqrt
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.sqrt
     @pulsarlua function math.sqrt
     @desc Returns the square root of a non-negative number.
     @example
@@ -1417,7 +891,7 @@ InjectEnv("math", {
     !]]
     sqrt                = math.sqrt,
     --[[!
-    @fqxn CFS.UserEnv.math.sum
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.sum
     @pulsarlua function math.sum
     @desc Returns the total of all numeric arguments provided.
     @example
@@ -1425,7 +899,7 @@ InjectEnv("math", {
     !]]
     sum                 = math.sum,
     --[[!
-    @fqxn CFS.UserEnv.math.tan
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.tan
     @pulsarlua function math.tan
     @desc Calculates the tangent of an angle expressed in radians.
     @example
@@ -1433,7 +907,7 @@ InjectEnv("math", {
     !]]
     tan                 = math.tan,
     --[[!
-    @fqxn CFS.UserEnv.math.tointeger
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.tointeger
     @pulsarlua function math.tointeger
     @desc Converts a value to an integer if it represents an exact integer numeric value.
     @example
@@ -1441,7 +915,7 @@ InjectEnv("math", {
     !]]
     tointeger           = math.tointeger,
     --[[!
-    @fqxn CFS.UserEnv.math.type
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.type
     @pulsarlua function math.type
     @desc Returns whether a number is classified as an integer or a floating-point value.
     @example
@@ -1450,7 +924,7 @@ InjectEnv("math", {
     !]]
     type                = math.type,
     --[[!
-    @fqxn CFS.UserEnv.math.ult
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.ult
     @pulsarlua function math.ult
     @desc Compares two integers as unsigned values.
     Returns true if the first value is smaller.
@@ -1459,7 +933,7 @@ InjectEnv("math", {
     !]]
     ult                 = math.ult,
     --[[!
-    @fqxn CFS.UserEnv.math.whole
+    @fqxn CFS.UserEnv.Namespaces.math.Functions.whole
     @pulsarlua function math.whole
     @desc Converts a number into a whole (non-negative) value.
     Unlike counting numbers, zero is allowed.
@@ -1471,21 +945,6 @@ InjectEnv("math", {
     !]]
     whole               = math.whole,
 });
-
-
-                                                                                --[[
-                                                                                ██████╗ ██████╗  ██████╗  ██████╗███████╗██╗   ██╗███████╗
-                                                                                ██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔════╝╚██╗ ██╔╝██╔════╝
-                                                                                ██████╔╝██████╔╝██║   ██║██║     ███████╗ ╚████╔╝ ███████╗
-                                                                                ██╔═══╝ ██╔══██╗██║   ██║██║     ╚════██║  ╚██╔╝  ╚════██║
-                                                                                ██║     ██║  ██║╚██████╔╝╚██████╗███████║   ██║   ███████║
-                                                                                ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝   ╚═╝   ╚══════╝
-                                                                                ]]
-local tProcSys      = {};
-local tProcSysKeys  = {};
-InjectEnv("ProcSys", tProcSys); --TODO QUESTION, why is this being injected still?
-
-
                                                                                 --[[
                                                                                 ██████╗ ███╗   ██╗ ██████╗
                                                                                 ██╔══██╗████╗  ██║██╔════╝
@@ -1569,10 +1028,10 @@ InjectEnv("table", { --TODO DOX
     insert  = table.insert,
     move    = table.move,
     --[[!
-    @fqxn CFS.UserEnv.Private.new
+    @fqxn CFS.UserEnv.Namespaces.table.Functions.new
     @desc Creates a read-only shadow exposing only keys allowed by the supplied specification.
     @param any tSpec Spec.
-    @vis private
+    @vis public
     !]]
     new     = function(tSpec)
         local tNew      = {};
@@ -1609,28 +1068,18 @@ InjectEnv("table", { --TODO DOX
                                                                                     ╚██████╔╝███████║███████╗██║  ██║
                                                                                      ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝
                                                                                     ]]
-local tUser     = {};
-local tUserKeys = {}; --tracks keys since user can inject into the base table.
-InjectEnv("Session", tUser);
+local tProcSysKeys = {}; --tracks processing-owned entries in the base table.
+local tUserKeys    = {}; --tracks user-owned entries in the base table.
 
-                                                        --[[
-                                                        ██╗   ██╗███████╗ ██████╗████████╗ ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗    ██╗██╗███╗   ██╗ ██████╗
-                                                        ██║   ██║██╔════╝██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗██║    ██║██║████╗  ██║██╔════╝
-                                                        ██║   ██║█████╗  ██║        ██║   ██║   ██║██████╔╝██║  ██║██████╔╝███████║██║ █╗ ██║██║██╔██╗ ██║██║  ███╗
-                                                        ╚██╗ ██╔╝██╔══╝  ██║        ██║   ██║   ██║██╔══██╗██║  ██║██╔══██╗██╔══██║██║███╗██║██║██║╚██╗██║██║   ██║
-                                                         ╚████╔╝ ███████╗╚██████╗   ██║   ╚██████╔╝██║  ██║██████╔╝██║  ██║██║  ██║╚███╔███╔╝██║██║ ╚████║╚██████╔╝
-                                                          ╚═══╝  ╚══════╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝
-                                                        ]]
-if (VectorDrawing ~= nil) then
-InjectEnv("VectorDrawing", {
-    Arc         = VectorDrawing.Arc,
-    FillPath   = VectorDrawing.FillPath,
-    LineTo     = VectorDrawing.LineTo,
-    MoveTo     = VectorDrawing.MoveTo,
-    SetColor   = VectorDrawing.SetColor,
-    StrokePath = VectorDrawing.StrokePath,
-});
+
+-- Preserve the built-in root entries before any game adds or replaces names.
+local tBuiltIns = {};
+
+for sKey, vValue in pairs(tEnv) do
+    tBuiltIns[sKey] = vValue;
 end
+
+
 
 
                                                                         --[[
@@ -1643,7 +1092,7 @@ end
                                                                         ]]
 local tUserEnv = {
     --[[!
-    @fqxn CFS.Modules.UserEnv.Get
+    @fqxn CFS.Modules.UserEnv.Functions.Get
     @pulsarlua function UserEnv.Get
     @desc Returns the current script execution environment.
     @vis public
@@ -1656,11 +1105,11 @@ local tUserEnv = {
     --
     -- Example output entries:
     --   "math.abs"
-    --   "Drawing.DrawLine"
+    --   "Forge.DrawImage"
     --   "Color.RGBA"
     --
     --[[!
-    @fqxn CFS.Modules.UserEnv.Get
+    @fqxn CFS.Modules.UserEnv.Functions.GetCommandList
     @pulsarlua function UserEnv.GetCommandList
     @desc Collects callable paths from the user environment while avoiding repeated table traversal.
     @vis public
@@ -1673,7 +1122,7 @@ local tUserEnv = {
         local tOut     = {}
 
         --[[!
-        @fqxn CFS.UserEnv.Private.AddCommand
+        @fqxn CFS.UserEnv.Private.Functions.AddCommand
         @desc Adds a nonempty callable command path once.
         @param any sPath Path.
         @vis private
@@ -1686,7 +1135,7 @@ local tUserEnv = {
         end
 
         --[[!
-        @fqxn CFS.UserEnv.Private.EnumKeys
+        @fqxn CFS.UserEnv.Private.Functions.EnumKeys
         @desc Collects string table keys for environment command traversal.
         @param any t T.
         @vis private
@@ -1713,7 +1162,7 @@ local tUserEnv = {
         end
 
         --[[!
-        @fqxn CFS.UserEnv.Private.Walk
+        @fqxn CFS.UserEnv.Private.Functions.Walk
         @desc Traverses environment tables to discover callable command paths without revisiting tables.
         @param any t T.
         @param any sPrefix Prefix.
@@ -1742,16 +1191,57 @@ local tUserEnv = {
         return tOut;
     end,
     --[[!
-    @fqxn CFS.Modules.UserEnv.Refresh
+    @fqxn CFS.Modules.UserEnv.Functions.GetCompletionEntries
+    @desc Collects current environment names and types without executing user functions or reading card values.
+    !]]
+    GetCompletionEntries = function()
+        local tOut, tStack = {}, {};
+        local function Walk(tInput, sPrefix, nDepth)
+            if (tStack[tInput] or nDepth > 12) then return; end
+            tStack[tInput] = true;
+            local tActual = tInput == _tCFGDecoy and _tCFG or tEnvBacking[tInput] or tInput;
+            for sKey, vValue in next, tActual do
+                if (rawtype(sKey) == "string") then
+                    local sName = require("Autocomplete").Path(sPrefix, sKey);
+                    if (sName) then
+                        local sKind = rawtype(vValue);
+                        tOut[#tOut + 1] = {name = sName, kind = sKind};
+                        if (sKind == "table" and sName ~= "_tRow") then Walk(vValue, sName, nDepth + 1); end
+                    end
+                end
+            end
+            tStack[tInput] = nil;
+        end
+        Walk(tEnv, "", 0);
+        return tOut;
+    end,
+    --[[!
+    @fqxn CFS.Modules.UserEnv.Functions.Refresh
     @pulsarlua function UserEnv.Refresh
-    @desc Retained environment-reset hook; currently performs no operation.
+    @desc Clears game-added root entries, restores the original built-ins, resets configuration, and clears tracked user and processing keys. Keeps the execution environment table and built-in namespace identities intact. Called when a game loads; ordinary ENV updates do not restore built-ins and may still replace them.
     @vis public
     !]]
     Refresh = function()
-        --TODO FINISH CLEAN THIS OUT!!! On game  load, it should be clean
+        require("Autocomplete").MarkDirty();
+
+        for sKey in pairs(tEnv) do
+            tEnv[sKey] = nil;
+        end
+
+        for sKey, vValue in pairs(tBuiltIns) do
+            tEnv[sKey] = vValue;
+        end
+
+        _tCFG = {};
+        _tCFGMeta.__index = _tCFG;
+        tEnvBacking[_tCFGDecoy] = _tCFG;
+
+        tUserKeys    = {};
+        tProcSysKeys = {};
+
     end,
     --[[!
-    @fqxn CFS.Modules.UserEnv.ProcSysUpdateRoot
+    @fqxn CFS.Modules.UserEnv.Functions.ProcSysUpdateRoot
     @pulsarlua function UserEnv.ProcSysUpdateRoot
     @desc Updates processing-owned environment root keys, optionally purging existing root content first.
     @param any tInput Input.
@@ -1759,6 +1249,7 @@ local tUserEnv = {
     @vis public
     !]]
     ProcSysUpdateRoot = function(tInput, bPurge) --permits additions/replacement to/of existing keys or a full purge, then new items added
+        require("Autocomplete").MarkDirty();
 
         if (rawtype(tInput) == "table") then
 
@@ -1785,13 +1276,14 @@ local tUserEnv = {
     end,
     --expects new CFG to have brought in through the user env
     --[[!
-    @fqxn CFS.Modules.UserEnv.UserUpdateCFG
+    @fqxn CFS.Modules.UserEnv.Functions.UserUpdateCFG
     @pulsarlua function UserEnv.UserUpdateCFG
     @desc Replaces the exposed configuration table with supplied game configuration.
     @param any tInput Input.
     @vis public
     !]]
     UserUpdateCFG = function(tInput)
+        require("Autocomplete").MarkDirty();
         _tCFG = {};
 
         if (rawtype(tInput) == "table") then
@@ -1803,13 +1295,14 @@ local tUserEnv = {
 
     end,
     --[[!
-    @fqxn CFS.Modules.UserEnv.UserUpdateENV
+    @fqxn CFS.Modules.UserEnv.Functions.UserUpdateENV
     @pulsarlua function UserEnv.UserUpdateENV
     @desc Replaces user-defined environment entries with the supplied game environment table.
     @param any tInput Input.
     @vis public
     !]]
     UserUpdateENV = function(tInput) --TODO BUG update this to use protected env when able : the user table will get input thourgh forge constructor, then run through the safe env filter, then iterated over and dumped into main env table (error on overwriteing ofc.)
+        require("Autocomplete").MarkDirty();
         --local tInput = --GetUserEnv();
         --TODO ALSO DO NOT LEt user indices overwrite exiting onces...keep track of list afte rinjhection and allow new injectio to overwrite only user indices
 

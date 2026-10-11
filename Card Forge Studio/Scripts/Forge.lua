@@ -666,48 +666,22 @@ end
 
 --[[!
     @fqxn CFS.Modules.Forge
-    @desc <h2>Forge</h2>
-
-    <p>
-      The <strong>Forge</strong> is the card rendering and preview subsystem for Card Forge Studio.
-      It draws the currently selected card from ProcSys onto a dedicated canvas, maintains internal
-      render targets for composition, and provides editor-facing visual utilities (rulers, centerlines, etc.).
-    </p>
-
-    <h3>Responsibilities</h3>
-    <ul>
-      <li><strong>Card preview rendering</strong> – Draws the active card by executing the active CardSet’s live <code>Draw</code> script against the current row data.</li>
-      <li><strong>Offscreen composition</strong> – Renders card artwork and utility overlays into separate images, then composites them onto the canvas.</li>
-      <li><strong>Live scripting integration</strong> – Loads and executes the CardSet <code>Draw</code> chunk via the UserEnv, supporting a live-update workflow.</li>
-      <li><strong>Utility overlays</strong> – Draws editor aids such as horizontal/vertical rulers and centerlines as a separate overlay layer.</li>
-      <li><strong>Mouse feedback & status</strong> – Tracks mouse position over the canvas and updates dedicated status paragraph objects with scaled coordinates.</li>
-      <li><strong>Clipboard convenience</strong> – Supports copying mouse coordinate readouts via mouse click actions.</li>
-      <li><strong>Resize-aware redraw</strong> – Handles window/canvas resizing by deferring redraw until resizing stabilizes, then re-rendering the last active row.</li>
-      <li><strong>Style system</strong> – Loads FontStyle definitions from an INI source, exposes style lookup behavior, and supports optional auto-refresh of style state.</li>
-      <li><strong>Image caching</strong> – Caches user image handles/IDs to avoid redundant loads during repeated draws.</li>
-    </ul>
-
-    <h3>Render model</h3>
-    <ul>
-      <li>The Forge maintains multiple internal image targets: a primary card image, a utility overlay image, and an export image target.</li>
-      <li>Each draw clears to transparent, executes the CardSet draw routine, renders utility overlays, and composites the results onto the canvas.</li>
-      <li>Canvas mouse coordinates are scaled back into card-space using internally maintained conversion factors.</li>
-    </ul>
-
-    <h3>Lifecycle</h3>
-    <ol>
-      <li><strong>OnShow</strong> creates the canvas (one-time), restores window placement, installs mouse callbacks, and starts the redraw timer.</li>
-      <li><strong>SetActiveCardSet</strong> updates card dimensions and recreates internal render targets for the new set.</li>
-      <li><strong>DrawCard</strong> renders the active card row and overlay layers, then composites them to the canvas.</li>
-      <li><strong>OnSize</strong> recomputes layout for canvas + status objects and queues a deferred redraw when appropriate.</li>
-      <li><strong>OnTimer</strong> fulfills deferred redraw requests once resizing has settled.</li>
-    </ol>
-
-    <h3>Notes</h3>
-    <ul>
-      <li>Utility overlays are editor aids and are rendered separately from card artwork, allowing them to be enabled/disabled without modifying the CardSet draw script or affecting the exports.</li>
-      <li>CardSet draw logic is executed in the configured UserEnv, keeping drawing behavior set-specific while the Forge remains a generic renderer/compositor.</li>
-    </ul>
+    @desc
+<section aria-label="Forge overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Forge</h2><p style="font-size:1.15rem;margin:0">Forge is the visual workbench that turns selected card data and drawing instructions into artwork.</p></div>
+<h3>How it fits into your work</h3><p>Select a card and inspect its front or back. Adjust drawing scripts while guides and rulers help with placement. Canvas colors make the workspace comfortable.</p>
+<figure style="margin:1.5rem 0"><figcaption style="font-weight:700;margin-bottom:.8rem">The big picture</figcaption><div role="img" aria-label="Selected card then Draw or DrawBack then Rendered bitmap then Preview or PNG" style="display:flex;flex-wrap:wrap;align-items:center;gap:.7rem"><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Selected card</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Draw or DrawBack</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Rendered bitmap</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Preview or PNG</span></div></figure>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys supplies the active set, selected row, and front/back drawing callbacks.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.UserEnv">User Environment</a></h3><p style="margin:0">User drawing scripts run with the game’s shared values and the exposed drawing functions.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.FontStyle">Font Style</a></h3><p style="margin:0">Styled text drawing looks up reusable game text styles.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Exporter.Exporters.ExporterPNG">PNG Export</a></h3><p style="margin:0">PNG export requests card images from Forge; preview guides are kept out of those images.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.Options">Options</a></h3><p style="margin:0">Forge’s linked Options section controls surrounding Background, Card Canvas, Guides, and Preview preferences.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Guides and Card Canvas colors are preview aids, not exported artwork. Missing-image fallback runs only when a drawing call requests a missing image.</p></aside>
+<h3>Artwork versus working aids</h3><p>The card’s drawing script decides what becomes artwork: images, shapes, and text. Guides, rulers, and preview canvas colors help you place and inspect that artwork. Keeping those jobs separate lets you make the workbench comfortable without accidentally changing the exported card.</p>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 return class("Forge",
     {--METAMETHODS
@@ -730,13 +704,13 @@ return class("Forge",
 
         end,
         --[[!
-            @fqxn CFS.Modules.Forge.DrawImage
+            @fqxn CFS.Modules.Forge.Functions.DrawImage
             @pulsarlua function Forge.DrawImage
             @desc Draws an image onto the active card render target.
 
             <p>
               Loads (or retrieves from cache) an image from the active game directory and draws it
-              into the current card draw context. This method is primarily intended for use by
+              into the current card draw context. This function is primarily intended for use by
               CardSet <code>Draw</code> scripts, but may also be used internally by the Forge.
             </p>
 
@@ -750,7 +724,7 @@ return class("Forge",
 
             <h3>Notes</h3>
             <ul>
-              <li>This method must be called from within an active card draw pass.</li>
+              <li>This function must be called from within an active card draw pass.</li>
               <li>Images are drawn into the card image layer, not the utility overlay layer.</li>
               <li>Repeated calls with the same image path reuse cached image handles.</li>
             </ul>
@@ -773,13 +747,13 @@ return class("Forge",
             _D.DrawImage(nImage, nX, nY, nWidth, nHeight);
         end,
         --[[!
-            @fqxn CFS.Modules.Forge.DrawText
+            @fqxn CFS.Modules.Forge.Functions.DrawText
             @pulsarlua function Forge.DrawText
             @desc Draws plain text onto the active card render target using a single style.
 
             <p>
               Renders text using the specified FontStyle during the active card draw pass.
-              This method is intended for use by CardSet <code>Draw</code> scripts and supports
+              This function is intended for use by CardSet <code>Draw</code> scripts and supports
               optional centering, rotation, and custom wrapping behavior.
             </p>
 
@@ -872,14 +846,14 @@ return class("Forge",
             return nLastX, nLastY, nLastWidth, nLastHeight;
         end,
         --[[!
-            @fqxn CFS.Modules.Forge.DrawStyledText
+            @fqxn CFS.Modules.Forge.Functions.DrawStyledText
             @pulsarlua function Forge.DrawStyledText
             @desc Draws text containing inline style markup onto the active card render target.
 
             <p>
               Renders text that includes inline style tags (e.g. <code>&lt;BOLD&gt;</code>,
               <code>&lt;ITALIC&gt;</code>) using multiple FontStyles in a single draw call.
-              This method is intended for CardSet <code>Draw</code> scripts that require
+              This function is intended for CardSet <code>Draw</code> scripts that require
               rich text composition.
             </p>
 
@@ -930,7 +904,7 @@ return class("Forge",
             -- PARSE HELPERS
             --------------------------------------------------------------------
             --[[!
-            @fqxn CFS.Modules.Forge.Private.BuildRuns
+            @fqxn CFS.Modules.Forge.Private.Functions.BuildRuns
             @desc Splits styled text into drawing runs and accumulated plain text.
             @param any sIn Value supplied as sIn.
             @vis private
@@ -1399,7 +1373,7 @@ local _nRevision    = 0;
 local _oAssetClock  = wx.wxStopWatch();
 
 --[[!
-@fqxn CFS.Modules.Forge.Private.nativeColour
+@fqxn CFS.Modules.Forge.Private.Functions.nativeColour
 @desc Converts a packed RGBA number to a native color or passes through an existing native color value.
 @param any vColour Value supplied as vColour.
 @vis private
@@ -1412,7 +1386,7 @@ local function nativeColour(vColour)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.Private.drawingContext
+@fqxn CFS.Modules.Forge.Private.Functions.drawingContext
 @desc Adapts graphics and device contexts to the drawing callbacks used by card scripts.
 @param any oGC Value supplied as oGC.
 @param any oDC Value supplied as oDC.
@@ -1424,7 +1398,7 @@ local function drawingContext(oGC, oDC)
     local oColour  = wx.wxBLACK;
 
     --[[!
-    @fqxn CFS.Modules.Forge.Private.tContext_SetDrawingFont
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_SetDrawingFont
     @desc Installs the drawing font in both native contexts.
     @param any oNewFont Value supplied as oNewFont.
     @vis private
@@ -1436,7 +1410,7 @@ local function drawingContext(oGC, oDC)
     end
 
     --[[!
-    @fqxn CFS.Modules.Forge.Private.tContext_SetFilteringMode
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_SetFilteringMode
     @desc Compatibility hook; native alpha composition is already configured.
     @vis private
     !]]
@@ -1445,7 +1419,7 @@ local function drawingContext(oGC, oDC)
     end
 
     --[[!
-    @fqxn CFS.Modules.Forge.Private.tContext_GetTextWidth
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_GetTextWidth
     @desc Returns the native measured width of text converted to a string.
     @param any sText Value supplied as sText.
     @vis private
@@ -1456,7 +1430,7 @@ local function drawingContext(oGC, oDC)
     end
 
     --[[!
-    @fqxn CFS.Modules.Forge.Private.tContext_GetTextHeight
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_GetTextHeight
     @desc Returns the native measured height of text converted to a string.
     @param any sText Value supplied as sText.
     @vis private
@@ -1467,7 +1441,7 @@ local function drawingContext(oGC, oDC)
     end
 
     --[[!
-    @fqxn CFS.Modules.Forge.Private.tContext_DrawText
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_DrawText
     @desc Sets the supplied text color and draws an unrotated text string.
     @param any nX Value supplied as nX.
     @param any nY Value supplied as nY.
@@ -1482,7 +1456,7 @@ local function drawingContext(oGC, oDC)
     end
 
     --[[!
-    @fqxn CFS.Modules.Forge.Private.tContext_DrawAngledText
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_DrawAngledText
     @desc Sets the supplied text color and draws text rotated by the supplied angle in degrees.
     @param any nX Value supplied as nX.
     @param any nY Value supplied as nY.
@@ -1498,7 +1472,7 @@ local function drawingContext(oGC, oDC)
     end
 
     --[[!
-    @fqxn CFS.Modules.Forge.Private.tContext_DrawRectangle
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_DrawRectangle
     @desc Draws a filled rectangle without an outline.
     @param any nX Value supplied as nX.
     @param any nY Value supplied as nY.
@@ -1514,7 +1488,7 @@ local function drawingContext(oGC, oDC)
     end
 
     --[[!
-    @fqxn CFS.Modules.Forge.Private.tContext_DrawTextBackground
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_DrawTextBackground
     @desc Draws a padded text background in a temporarily translated and rotated graphics state.
     @param any nX Value supplied as nX.
     @param any nY Value supplied as nY.
@@ -1533,7 +1507,7 @@ local function drawingContext(oGC, oDC)
         oGC:PopState();
     end
     --[[!
-    @fqxn CFS.Modules.Forge.Private.tContext_GetOutputInfo
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_GetOutputInfo
     @desc Returns native card width and height to drawing scripts.
     @vis private
     !]]
@@ -1542,7 +1516,7 @@ local function drawingContext(oGC, oDC)
     end
 
     --[[!
-    @fqxn CFS.Modules.Forge.Private.tContext_DrawImage
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_DrawImage
     @desc Draws a bitmap using supplied dimensions or its native dimensions.
     @param any oImage Value supplied as oImage.
     @param any nX Value supplied as nX.
@@ -1559,7 +1533,7 @@ local function drawingContext(oGC, oDC)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.Private.resolveImage
+@fqxn CFS.Modules.Forge.Private.Functions.resolveImage
 @desc Validates a game-relative image path and selects the bundled missing-image fallback when needed.
 @param any sRelative Value supplied as sRelative.
 @vis private
@@ -1579,11 +1553,11 @@ local function resolveImage(sRelative)
         end
     end
 
-    return io.normalizepath(FS.Game.Root.."/"..table.concat(tParts, "/"));
+    return io.normalizepath(FS.GetResourceRoot().."/"..table.concat(tParts, "/"));
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.Private.imageStamp
+@fqxn CFS.Modules.Forge.Private.Functions.imageStamp
 @desc Builds an image modification signature or returns the missing-file marker.
 @param any pFile Value supplied as pFile.
 @vis private
@@ -1596,7 +1570,7 @@ local function imageStamp(pFile)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.Private.checkImages
+@fqxn CFS.Modules.Forge.Private.Functions.checkImages
 @desc Checks cached image signatures at the monitoring interval and requests redraw when artwork changes.
 @vis private
 !]]
@@ -1612,13 +1586,13 @@ local function checkImages()
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.DrawImage
+@fqxn CFS.Modules.Forge.Functions.DrawImage
 @pulsarlua function Forge.DrawImage
 @desc Draws an image onto the active card render target.
 
 <p>
   Loads (or retrieves from cache) an image from the active game directory and draws it
-  into the current card draw context. This method is primarily intended for use by
+  into the current card draw context. This function is primarily intended for use by
   CardSet <code>Draw</code> scripts, but may also be used internally by the Forge.
 </p>
 
@@ -1632,7 +1606,7 @@ end
 
 <h3>Notes</h3>
 <ul>
-  <li>This method must be called from within an active card draw pass.</li>
+  <li>This function must be called from within an active card draw pass.</li>
   <li>Images are drawn into the card image layer, not the utility overlay layer.</li>
   <li>Repeated calls with the same image path reuse cached image handles.</li>
 </ul>
@@ -1673,7 +1647,7 @@ function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.DrawRectangle
+@fqxn CFS.Modules.Forge.Functions.DrawRectangle
 @pulsarlua function Forge.DrawRectangle
 @desc Draws a rectangle through the current native drawing context; requires an active render pass.
 @param any ... Additional arguments.
@@ -1684,7 +1658,7 @@ function Forge.DrawRectangle(...)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.GetOutputInfo
+@fqxn CFS.Modules.Forge.Functions.GetOutputInfo
 @pulsarlua function Forge.GetOutputInfo
 @desc Returns native card width and height.
 !]]
@@ -1693,7 +1667,7 @@ function Forge.GetOutputInfo()
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.SetDrawFunction
+@fqxn CFS.Modules.Forge.Functions.SetDrawFunction
 @pulsarlua function Forge.SetDrawFunction
 @desc Installs the front drawing callback and marks the card for redraw.
 @param any fDraw Draw.
@@ -1705,7 +1679,7 @@ function Forge.SetDrawFunction(fDraw)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.SetDrawBackFunction
+@fqxn CFS.Modules.Forge.Functions.SetDrawBackFunction
 @pulsarlua function Forge.SetDrawBackFunction
 @desc Installs the back drawing callback and marks the card for redraw.
 @param any fDraw Draw.
@@ -1717,7 +1691,7 @@ function Forge.SetDrawBackFunction(fDraw)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.SetActiveRow
+@fqxn CFS.Modules.Forge.Functions.SetActiveRow
 @pulsarlua function Forge.SetActiveRow
 @desc Sets the active render row and requests a card redraw.
 @param any tRow Row.
@@ -1728,7 +1702,7 @@ function Forge.SetActiveRow(tRow)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.SetActiveCardSet
+@fqxn CFS.Modules.Forge.Functions.SetActiveCardSet
 @pulsarlua function Forge.SetActiveCardSet
 @desc Loads card dimensions, clears image and bitmap caches, selects the front, and requests redraw.
 @param any oCardSet Card set.
@@ -1743,7 +1717,7 @@ function Forge.SetActiveCardSet(oCardSet)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.SetFace
+@fqxn CFS.Modules.Forge.Functions.SetFace
 @pulsarlua function Forge.SetFace
 @desc Selects front or back and requests redraw when the face changes.
 @param any sFace Card face: front or back.
@@ -1758,7 +1732,7 @@ function Forge.SetFace(sFace)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.SetDrawEnabled
+@fqxn CFS.Modules.Forge.Functions.SetDrawEnabled
 @pulsarlua function Forge.SetDrawEnabled
 @desc Blocks or permits timer-driven preview drawing.
 @param any bEnabled Enabled.
@@ -1768,7 +1742,7 @@ function Forge.SetDrawEnabled(bEnabled)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.RequestCardRedraw
+@fqxn CFS.Modules.Forge.Functions.RequestCardRedraw
 @pulsarlua function Forge.RequestCardRedraw
 @desc Marks card pixels and the surrounding canvas dirty.
 !]]
@@ -1777,7 +1751,7 @@ function Forge.RequestCardRedraw()
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.RequestUtilRedraw
+@fqxn CFS.Modules.Forge.Functions.RequestUtilRedraw
 @pulsarlua function Forge.RequestUtilRedraw
 @desc Marks utility guides and the surrounding canvas dirty.
 !]]
@@ -1786,7 +1760,7 @@ function Forge.RequestUtilRedraw()
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.GetBitmap
+@fqxn CFS.Modules.Forge.Functions.GetBitmap
 @pulsarlua function Forge.GetBitmap
 @desc Returns the current preview bitmap and its revision number.
 !]]
@@ -1795,7 +1769,7 @@ function Forge.GetBitmap()
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.OnTimer
+@fqxn CFS.Modules.Forge.Functions.OnTimer
 @pulsarlua function Forge.OnTimer
 @desc Checks image changes and renders dirty preview pixels when ready. Releases drawing resources and propagates rendering failures.
 !]]
@@ -1840,7 +1814,7 @@ end
 
 -- Export uses the same draw callbacks without replacing the preview bitmap or face.
 --[[!
-@fqxn CFS.Modules.Forge.ExportPNG
+@fqxn CFS.Modules.Forge.Functions.ExportPNG
 @pulsarlua function Forge.ExportPNG
 @desc Renders a selected face at the requested percentage and writes PNG without replacing preview state; restores drawing context after success or failure.
 @param any sFace Card face: front or back.
@@ -1876,7 +1850,7 @@ function Forge.ExportPNG(sFace, pFile, nPercent)
 end
 
 --[[!
-@fqxn CFS.Modules.Forge.Release
+@fqxn CFS.Modules.Forge.Functions.Release
 @pulsarlua function Forge.Release
 @desc Clears image, row, and bitmap state and resets pending redraw flags.
 !]]
@@ -1885,13 +1859,13 @@ function Forge.Release()
     _bRedrawCard, _bRedrawUtil, _bRedrawCanvas = false, false, false;
 end
 --[[!
-@fqxn CFS.Modules.Forge.DrawText
+@fqxn CFS.Modules.Forge.Functions.DrawText
 @pulsarlua function Forge.DrawText
 @desc Draws plain text onto the active card render target using a single style.
 
 <p>
   Renders text using the specified FontStyle during the active card draw pass.
-  This method is intended for use by CardSet <code>Draw</code> scripts and supports
+  This function is intended for use by CardSet <code>Draw</code> scripts and supports
   optional centering, rotation, and custom wrapping behavior.
 </p>
 
@@ -1984,14 +1958,14 @@ Forge.DrawText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngl
     return nLastX, nLastY, nLastWidth, nLastHeight;
 end
 --[[!
-@fqxn CFS.Modules.Forge.DrawStyledText
+@fqxn CFS.Modules.Forge.Functions.DrawStyledText
 @pulsarlua function Forge.DrawStyledText
 @desc Draws text containing inline style markup onto the active card render target.
 
 <p>
   Renders text that includes inline style tags (e.g. <code>&lt;BOLD&gt;</code>,
   <code>&lt;ITALIC&gt;</code>) using multiple FontStyles in a single draw call.
-  This method is intended for CardSet <code>Draw</code> scripts that require
+  This function is intended for CardSet <code>Draw</code> scripts that require
   rich text composition.
 </p>
 
@@ -2042,7 +2016,7 @@ Forge.DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY,
     -- PARSE HELPERS
     --------------------------------------------------------------------
     --[[!
-    @fqxn CFS.Modules.Forge.Private.BuildRuns2
+    @fqxn CFS.Modules.Forge.Private.Functions.BuildRuns2
     @desc Splits styled text into drawing runs and accumulated plain text.
     @param any sIn Value supplied as sIn.
     @vis private

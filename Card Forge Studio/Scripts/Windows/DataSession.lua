@@ -1,6 +1,22 @@
 --[[!
 @fqxn CFS.Windows.DataSession
-@desc Shared grid data, source-row identity, selection, filtering, sorting, and save state.
+@desc
+<section aria-label="Shared Data Session overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Shared Data Session</h2><p style="font-size:1.15rem;margin:0">The shared session keeps both grids looking at the same underlying cards.</p></div>
+<h3>How it fits into your work</h3><p>Sorting and filtering change visible positions while source-row identity preserves matching selections and synchronized views.</p>
+<h3>Follow the handoffs</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">Two grids, one set of cards</h3><p style="margin:0">Base Data presents entered values and Final Data presents processed results. Both windows use this shared session to identify the same underlying card. Selection is therefore attached to the source row rather than merely to its current position on screen.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">Why that distinction matters</h3><p style="margin:0">Sorting can move a card to the top of a view, and filtering can hide neighboring cards. The shared row identity lets the other grid highlight the corresponding card instead of a different row at the same screen position. Edits mark the session as changed and processing supplies the resulting values; saving remains a separate handoff.</p></article>
+</div>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.BaseData">BaseData</a></h3><p style="margin:0">Base Data is the table of values you actually edit.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.FinalData">FinalData</a></h3><p style="margin:0">Final Data shows the results after card values and scripts have been processed.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Windows.DataGrid">Data Grid</a></h3><p style="margin:0">The common grid supplies table controls for both data windows.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Visible row position and source row identity are different. Keeping that distinction avoids selecting the wrong card after sorting.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
 !]]
 
 -- Shared data and view state for Base Data and Final Data.
@@ -8,7 +24,7 @@
 local DataSession = {};
 
 --[[!
-@fqxn CFS.Windows.DataSession.create
+@fqxn CFS.Windows.DataSession.Functions.create
 @pulsarlua function DataSession.create
 @desc Creates shared base/final data, filtering, sorting, selection, scrolling, and dirty-state callbacks for both grids.
 @param any tOptions Options table.
@@ -63,7 +79,7 @@ function DataSession.create(tOptions)
     end
 
     --[[!
-    @fqxn CFS.Windows.DataSession.Private.notify
+    @fqxn CFS.Windows.DataSession.Private.Functions.notify
     @desc Notifies listeners of shared session changes.
     @vis private
     !]]
