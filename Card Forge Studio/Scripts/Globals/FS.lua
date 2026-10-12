@@ -67,6 +67,7 @@ local _sOriginalPackagePath = package.path;
 local tGame     = {
     Root        = "",
     Wiki        = "",
+    Manual      = "",
     Docs        = "",
     CardSets    = "",
     --Set         = "",
@@ -444,6 +445,7 @@ tGame.Prep = function(oGame)
         CFG         = pScripts.."\\CFG",
         CSVBackup   = pRoot.."\\CSV Backup",
         Docs        = pRoot.."\\Docs",
+        Manual      = pRoot.."\\Manual",
         ENV         = pScripts.."\\ENV",
         Exports     = pRoot.."\\Exports",
         Info        = pRoot.."\\Info.ini",
@@ -457,7 +459,7 @@ tGame.Prep = function(oGame)
     for sKey, pPath in pairs(tPaths) do
         if (sKey == "Info" or sKey == "Styles") then
             CheckFile(pPath);
-        elseif (sKey ~= "Wiki") then
+        elseif (sKey ~= "Wiki" and sKey ~= "Manual") then
             CheckFolder(pPath);
         end
     end

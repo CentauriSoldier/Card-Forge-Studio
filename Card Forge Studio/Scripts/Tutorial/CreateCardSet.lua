@@ -42,7 +42,10 @@ return {
         [40] = {
             title = "Find the card scripts",
             html = [[
-                <p>Choose <b>Card Set &gt; Edit Source...</b> to inspect the drawing and row-processing scripts. These control how card values become artwork and finalized data.</p><p>Creating a set provides starter files; it does not design your finished cards. Use <b>Card Set &gt; Browse</b> to inspect the set folder, or <b>Close Card Set</b> to leave the set while keeping its game active.</p>
+                <p>Choose <b>Card Set &gt; Edit Source...</b> to inspect the drawing and row-processing scripts. These control how card values become artwork and finalized data.</p><p>Creating a set provides starter files; it does not design your finished cards. Use <b>Card Set &gt; Browse</b> to inspect the set folder, or <b>Close Card Set</b> to leave the set while keeping its game active.
+                <br>
+                <strong>Card names must match the filename of the primary image file.</strong>
+                </p>
             ]],
             images = {
                 {file = "CreateCardSet-Step40-A.png", caption = "Figure A: Card Set source editor with the starter scripts."},

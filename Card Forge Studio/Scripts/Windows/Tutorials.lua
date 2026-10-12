@@ -1,4 +1,5 @@
 local wx          = require("wx");
+local WebView     = assert(wxwebview, "Tutorials requires the wxLua WebView binding.");
 local WindowState = require("Windows.WindowState");
 local Tutorials   = {};
 
@@ -11,7 +12,7 @@ WindowState.register("Tutorials", {savePosition = true, saveSize = true, saveVis
 
 --[[!
 @fqxn CFS.Windows.Tutorials.Private.Functions.escapeHTML
-@desc Escapes topic and step titles for the native HTML instruction viewer.
+@desc Escapes topic and step titles for the browser instruction viewer.
 @param string sText Title text.
 @return string sHTML Escaped title.
 @vis private
@@ -66,8 +67,7 @@ function Tutorials.create(dParent, tOptions)
     dSteps:SetScrollRate(12, 0);
     local oSteps = wx.wxBoxSizer(wx.wxHORIZONTAL); dSteps:SetSizer(oSteps);
     oReader:Add(dSteps, 0, wx.wxEXPAND + wx.wxBOTTOM, 10);
-    local oContent = wx.wxHtmlWindow(dReader, wx.wxID_ANY);
-    oContent:SetFonts("Segoe UI", "Consolas", {12, 14, 16, 18, 20, 24, 28});
+    local oContent = assert(WebView.wxWebView.New(dReader, wx.wxID_ANY), "Cannot create the tutorial browser.");
     oReader:Add(oContent, 1, wx.wxEXPAND);
     local oNavigation = wx.wxBoxSizer(wx.wxHORIZONTAL);
     local oPrevious = wx.wxButton(dReader, wx.wxID_ANY, "Previous");
@@ -79,6 +79,38 @@ function Tutorials.create(dParent, tOptions)
     dPanel:SetSizer(oLayout);
     local nTopic, nStep, bClosed = nil, nil, false;
     local tButtons = {};
+    local oTemporary = wx.wxFile();
+    local pTemporary = wx.wxFileName.CreateTempFileName("cfs-tutorial-", oTemporary);
+    oTemporary:Close(); oTemporary:delete();
+    local pPage = pTemporary..".html";
+    assert(wx.wxRenameFile(pTemporary, pPage), "Cannot create the tutorial HTML file.");
+    local oPage = wx.wxFileName(pPage);
+    local sPageURL = wx.wxFileSystem.FileNameToURL(oPage); oPage:delete();
+    local nPage = 0;
+    --[[!
+    @fqxn CFS.Windows.Tutorials.Private.Functions.showPage
+    @desc Displays a styled local HTML page so existing tutorial image URLs remain available to the browser.
+    @param string sTitle Step or topic title.
+    @param string sHTML Instruction body.
+    @vis private
+    !]]
+    local function showPage(sTitle, sHTML)
+        local sDocument = [[<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>
+            * {box-sizing:border-box} body {margin:0;background:#f5f7fb;color:#20252b;font:18px/1.65 "Segoe UI",Arial,sans-serif}
+            main {max-width:960px;margin:0 auto;padding:28px 32px} h1,h2,h3 {line-height:1.25;color:#29385a}
+            h2 {font-size:28px;margin:0 0 24px} p,ul,ol {margin:0 0 18px} li {margin-bottom:8px}
+            pre {overflow:auto;padding:18px;background:#edf0f6;border:1px solid #d8dfec;border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere}
+            code,pre {font-family:Consolas,monospace;font-size:16px} code {background:#edf0f6;padding:2px 5px;border-radius:4px} pre code {padding:0}
+            img {max-width:100%;height:auto;object-fit:contain;border-radius:8px} table {border-collapse:collapse;max-width:100%}
+            th,td {padding:10px;border:1px solid #d8dfec;text-align:left} blockquote {margin:18px 0;padding:12px 18px;border-left:4px solid #647ab6;background:#edf0f6}
+            a {color:#3659a3} @media(max-width:600px) {main {padding:20px} h2 {font-size:24px}}
+        </style></head><body><main>]];
+        if (sTitle ~= "") then sDocument = sDocument.."<h2>"..escapeHTML(sTitle).."</h2>"; end
+        sDocument = sDocument..sHTML.."</main></body></html>";
+        local hPage = assert(io.open(pPage, "wb"), "Cannot open the tutorial HTML file.");
+        assert(hPage:write(sDocument)); assert(hPage:close());
+        nPage = nPage + 1; oContent:LoadURL(sPageURL.."?step="..nPage);
+    end
     --[[!
     @fqxn CFS.Windows.Tutorials.Private.Functions.selectStep
     @desc Displays any selected step and updates numbered navigation without enforcing completion order.
@@ -90,8 +122,7 @@ function Tutorials.create(dParent, tOptions)
         local tStep = assert(tTopic.steps[nIndex], "Unknown tutorial step.");
         nStep = nIndex;
         for nButton, oButton in ipairs(tButtons) do oButton:SetValue(nButton == nStep); end
-        oContent:SetPage('<html><body bgcolor="#ffffff"><font face="Segoe UI,Arial" color="#20252b"><h2>'..escapeHTML(tStep.title)..'</h2>'..tStep.html..'</font></body></html>');
-        oContent:Scroll(0, 0);
+        showPage(tStep.title, tStep.html);
         oPosition:SetLabel("Step "..nStep.." of "..#tTopic.steps);
         oPrevious:Enable(nStep > 1); oNext:Enable(nStep < #tTopic.steps);
     end
@@ -118,7 +149,7 @@ function Tutorials.create(dParent, tOptions)
         dSteps:FitInside(); dSteps:Layout(); dSteps:Scroll(0, 0);
         if (#tTopic.steps > 0) then selectStep(1);
         else
-            oContent:SetPage('<html><body bgcolor="#ffffff"><h2>'..escapeHTML(tTopic.title)..'</h2><p>No steps are available for this topic yet.</p></body></html>');
+            showPage(tTopic.title, "<p>No steps are available for this topic yet.</p>");
             oPosition:SetLabel(""); oPrevious:Disable(); oNext:Disable();
         end
     end
@@ -128,7 +159,7 @@ function Tutorials.create(dParent, tOptions)
     oNext:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function() if (nStep and nStep < #tTopics[nTopic].steps) then selectStep(nStep + 1); end end);
     if (#tTopics > 0) then selectTopic(1);
     else
-        oContent:SetPage('<html><body bgcolor="#ffffff"></body></html>');
+        showPage("", "");
         dSteps:Hide();
         oPrevious:Disable(); oNext:Disable();
     end
@@ -140,6 +171,7 @@ function Tutorials.create(dParent, tOptions)
     !]]
     dFrame:Connect(wx.wxEVT_CLOSE_WINDOW, function(oEvent)
         bClosed = true; oState.close();
+        oContent:Stop(); wx.wxRemoveFile(pPage);
         if (tOptions.onClose) then tOptions.onClose(); end
         oEvent:Skip();
     end);

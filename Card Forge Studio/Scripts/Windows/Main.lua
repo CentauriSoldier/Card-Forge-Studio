@@ -60,7 +60,6 @@ local dFinalData = require("Windows.FinalData");
 !]]
 function Main.create(tOptions)
     tOptions = tOptions or {};
-    wx.wxInitAllImageHandlers();
     local oImage;
     local nCardWidth, nCardHeight = 1, 1;
     local sTitle = "Card Forge Studio";
@@ -105,7 +104,7 @@ function Main.create(tOptions)
     local tWelcome = Welcome.create(_pRuntime);
     local sPage = "Welcome";
     local tDataSession = tOptions.dataSession or DataSession.create();
-    local dBaseWindow, dFinalWindow, dStyleWindow, dSourceWindow, dGameEditorWindow, dWikiWindow, dTutorialsWindow;
+    local dBaseWindow, dFinalWindow, dStyleWindow, dSourceWindow, dGameEditorWindow, dWikiWindow, dTutorialsWindow, dManualWindow;
     local showPage;
     local bDataLoaded = false;
     local sActiveCardSetName = "";
@@ -559,6 +558,7 @@ function Main.create(tOptions)
         if (dStyleWindow and not dStyleWindow.close()) then return; end
         if (dSourceWindow and not dSourceWindow.close()) then return; end
         if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
+        if (dManualWindow and not dManualWindow.close()) then return; end
         if (dWikiWindow and not dWikiWindow.close()) then return; end
 
         local oGame = require("Windows.NewGame").Show(dFrame, Game.New);
@@ -601,6 +601,7 @@ function Main.create(tOptions)
             if (dSourceWindow and not dSourceWindow.close()) then return; end
             if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
             local oGame = tGames[nSelection + 1];
+            if (dManualWindow and not dManualWindow.close()) then return; end
             if (dWikiWindow and not dWikiWindow.close()) then return; end
             Game.Activate(oGame);
             bDataLoaded = false;
@@ -765,6 +766,7 @@ function Main.create(tOptions)
         if (dSourceWindow and not dSourceWindow.close()) then return; end
         if (dStyleWindow and not dStyleWindow.close()) then return; end
         if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
+        if (dManualWindow and not dManualWindow.close()) then return; end
         if (dWikiWindow and not dWikiWindow.close()) then return; end
         Game.Deactivate();
         bDataLoaded, sActiveCardSetName = false, "";
@@ -848,6 +850,14 @@ function Main.create(tOptions)
         });
     end},
         {false},
+        {"Manual", function()
+        assert(Game.GetActive(), "Load a game first.");
+        if (dManualWindow) then dManualWindow.show(); return; end
+        dManualWindow = require("Windows.Manual").create(dFrame, FS.Game.Manual, {
+            styles = FS.Game.Styles,
+            onClose = function() dManualWindow = nil; end,
+        });
+    end},
         {"Style Editor", function()
         assert(Game.GetActive(), "Load a game first.");
         if (dStyleWindow) then dStyleWindow.show(); return; end
@@ -1048,6 +1058,14 @@ function Main.create(tOptions)
             tMenuItem.item:Enable(bAvailable);
         end
 
+        local tManualItem = tMenuItems["Game:Manual"];
+        local bManualVisible = tMenus.Game:FindItem(tManualItem.item:GetId()) ~= nil;
+        if (Game.GetActive() and not bManualVisible) then
+            tMenus.Game:Insert(9, tManualItem.item);
+        elseif (not Game.GetActive() and bManualVisible) then
+            tMenus.Game:Remove(tManualItem.item:GetId());
+        end
+
         oCoordinates:SetLabel("-, -");
         dFrame:SetStatusText(sPage, 0);
         dFrame:SetStatusText("", 1);
@@ -1101,6 +1119,10 @@ function Main.create(tOptions)
             return;
         end
         if (dWikiWindow and not dWikiWindow.close()) then
+            if (oEvent:CanVeto()) then oEvent:Veto(); end
+            return;
+        end
+        if (dManualWindow and not dManualWindow.close()) then
             if (oEvent:CanVeto()) then oEvent:Veto(); end
             return;
         end

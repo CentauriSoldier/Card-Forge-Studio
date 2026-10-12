@@ -40,3 +40,5 @@ node_modules/
 *.generated
 
 Card Forge Studio/Autosave/
+Card Forge Studio/Bin Backup/
+Card Forge Studio/NOTES.txt

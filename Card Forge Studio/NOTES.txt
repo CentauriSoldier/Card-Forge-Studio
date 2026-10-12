@@ -1,7 +1,18 @@
 Deferred work
 
+- MUST DO - 2026-10-12 (tomorrow): Fix the native Manual editor redraw pipeline and sluggish interaction. The user sees repeated blinking, refreshing, and full redraws when adding, moving, changing, or selecting objects, even with only two pages visible. Profile page loading, repaint scheduling, repeated layout/render work, and caching; avoid unnecessary redraws while preserving appearance. The imported manual has many separate text objects, but do not assume object count is the sole cause. Deferred for now; this one gets done tomorrow.
+
+- Manual editor (required in either the current implementation or a native Lua rebuild): ordered and unordered lists must be paragraph formatting inside text objects, not separate object types. While editing text, show a contextual top bar with basic font controls, bullets/numbering, paragraph formatting, and alignment/justification. Hide those controls when a non-text object is selected. Deferred at the user's request; do not implement yet.
+
+
+
+
+
 - Make Build Release platform-aware: package the appropriate Windows, Linux, or macOS launcher/runtime and dependencies instead of always building the Windows release.
 
+- Code editors search function and highlight all selected. Keyboard shortctus (copy, poste, save, etc.)
+- Image manipulation such as opacity, tint, overlay, etc.
+- Font opacity (if possible).
 - Add cancellation for long-running exports.
 - Add a recent-games list for quick reopening.
 - Add a "Show export folder" action after a successful export.
@@ -32,3 +43,14 @@ Deferred exporters: inventory every legacy script; audit and implement before ex
 - Scripts/Exporters/ExporterTabletopPlayground.lua
 - Scripts/Exporters/ExporterUnityPackage.lua
 - Scripts/Exporters/ExporterZip.lua
+
+Current Work
+- Ensure we're updating the version number on every single load and if in DEV_MODE only!
+- Ensure DEV_MODE is set to off during the Build Release process then turned back on. You may need to make DEV_MODE a var, not a constant.
+
+Completed manual work
+- Added optional facing pages: cover alone, then pairs, with one editable image spanning a pair and independent physical pages in exported HTML.
+- Added editable ordered and unordered list objects with markers, numbering, indentation, and item spacing.
+- Added inherited manual styles with font-size, bold, italic, and underline overrides; inline game styles inherit surrounding text size. Game style definitions remain read-only.
+- Repaired all 28 imported text objects containing replacement characters using source glyph metadata and PDF rendering; retained other manual data and saved a backup.
+- Selected nested-layer scale slider was completed earlier, centered on the selected child and preserving proportions.
