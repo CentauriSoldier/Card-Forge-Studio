@@ -26,6 +26,8 @@ local function font(tContext, tStyle)
 end
 
 function Renderer.measure(tContext, tStyle, sText)
+    local cache=tContext.fonts._measure;if not cache then cache={count=0,values={}};tContext.fonts._measure=cache;end;
+    local key=signature(tStyle)..'|'..tostring(tStyle.scale)..'|'..sText;local measured=cache.values[key];if measured then return table.unpack(measured);end;
     local oStyle = font(tContext, tStyle);
     local nWidth, nHeight, nMinX, nMinY = oStyle.Prep(tContext.drawing, sText);
     local nAdvance, nCount, nSpacing = 0, 0, tStyle.parsed.LetterSpacing or 0;
@@ -35,8 +37,9 @@ function Renderer.measure(tContext, tStyle, sText)
         nAdvance = nAdvance + math.max(0, nCount - 1) * nSpacing;
     end
     local _,normalHeight,descent=tContext.gc:GetTextExtent(sText);
-    return nAdvance * tStyle.scale, normalHeight * tStyle.scale,
-        nWidth * tStyle.scale, nHeight * tStyle.scale, nMinX * tStyle.scale, nMinY * tStyle.scale,(normalHeight-descent)*tStyle.scale,descent*tStyle.scale;
+    measured={nAdvance * tStyle.scale, normalHeight * tStyle.scale,
+        nWidth * tStyle.scale, nHeight * tStyle.scale, nMinX * tStyle.scale, nMinY * tStyle.scale,(normalHeight-descent)*tStyle.scale,descent*tStyle.scale};
+    if cache.count>=8192 then cache.values={};cache.count=0;end;cache.values[key]=measured;cache.count=cache.count+1;return table.unpack(measured);
 end
 
 -- Imported fractional strokes need an alpha ring; offset glyphs alone would fill transparent lettering.
@@ -70,6 +73,8 @@ end
 
 -- Layout uses native font measurements. Adjacent equal-style runs stay together for shaping.
 function Renderer.layout(tContext, tRuns, nWidth, nLineSpacing)
+    local cache=tContext.fonts._layouts;if not cache then cache={count=0,values={}};tContext.fonts._layouts=cache;end;
+    local keys={tostring(nWidth),tostring(nLineSpacing)};for _,run in ipairs(tRuns)do keys[#keys+1]=signature(run.style)..'|'..tostring(run.style.scale)..'|'..tostring(run.list)..'|'..tostring(run.align)..'|'..#run.text..':'..run.text;end;local layoutKey=table.concat(keys,'\n');if cache.values[layoutKey] then return cache.values[layoutKey];end;
     local currentList,currentAlign,listIndex=nil,nil,0;local paragraphStart=true;
     local tLines, tLine, tLastStyle = {}, {runs = {}, width = 0, height = 0}, tRuns[1] and tRuns[1].style;
     local function line(paragraphEnd)
@@ -104,7 +109,7 @@ function Renderer.layout(tContext, tRuns, nWidth, nLineSpacing)
         end
     end
     if (#tLine.runs > 0 or #tLines == 0) then line(); end
-    return tLines;
+    if cache.count>=512 then cache.values={};cache.count=0;end;cache.values[layoutKey]=tLines;cache.count=cache.count+1;return tLines;
 end
 
 function Renderer.textBox(tContext, tRuns, nX, nY, nWidth, nHeight, tOptions)
@@ -212,7 +217,11 @@ function Renderer.page(context,editor,page,index,clean,phase)
         if phase=='background' then return;end
     end
     local function draw(o,owner)
-        if o.parentId then return;end;gc:PushState();if not o.acrossSpread or phase~='spread-content' then gc:Clip(-edge,-edge,w+2*edge,h+2*edge);end;Renderer.object(context,editor,owner,o,clean);gc:PopState();
+        if o.parentId then return;end;
+        if context.damage and not o.acrossSpread and o.type~='curve' and #Layers.children(owner,o.id)==0 then
+            local left,top,right,bottom=math.huge,math.huge,-math.huge,-math.huge;for _,point in ipairs({{0,0},{o.w,0},{o.w,o.h},{0,o.h}})do local x,y=Layers.worldPoint(editor.document,o,point[1],point[2]);left=math.min(left,x*P);top=math.min(top,y*P);right=math.max(right,x*P);bottom=math.max(bottom,y*P);end;local pad=math.max(4,(o.strokeWidth or 0)*P*2);local area=context.damage;
+            if right+pad<area.x or bottom+pad<area.y or left-pad>area.x+area.w or top-pad>area.y+area.h then return;end;
+        end;gc:PushState();if not o.acrossSpread or phase~='spread-content' then gc:Clip(-edge,-edge,w+2*edge,h+2*edge);end;Renderer.object(context,editor,owner,o,clean);gc:PopState();
     end
     if index and s.facingPages and phase~='spread-content' then
         local pair=require('Manual.Spreads').indices(editor.document,index);

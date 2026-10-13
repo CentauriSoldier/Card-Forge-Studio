@@ -10,7 +10,7 @@ function Canvas.create(parent,editor,clean)
         return {z=z,width=width,height=height,x=math.max(24,(size:GetWidth()-width)/2),y=math.max(24,(size:GetHeight()-height)/2),indices=list};
     end
     function canvas.refresh()
-        local m=canvas.metrics();view:SetVirtualSize(wx.wxSize(math.ceil(m.width+48),math.ceil(m.height+48)));view:Refresh(false);
+        local m=canvas.metrics();local w,h=math.ceil(m.width+48),math.ceil(m.height+48);local size=view:GetVirtualSize();if size:GetWidth()~=w or size:GetHeight()~=h then view:SetVirtualSize(wx.wxSize(w,h));end;view:Refresh(false);
         if scaleSlider then
             local o=editor.selected();if o and o.parentId and not Layers.locked(editor.document,o) and not editor.textObject and not (editor.editingObject and o and o.id==editor.editingObject) then
                 local x,y=Layers.worldPoint(editor.document,o,o.w/2,o.h/2);local offset=editor.master and 0 or Spreads.offset(editor.document,editor.pageIndex,editor.ownerIndex(o));
@@ -98,13 +98,37 @@ function Canvas.create(parent,editor,clean)
             if o.type=='text' or o.type=='artistic' or o.type=='toc' then gc:DrawRectangle(o.w*P-10/canvas.metrics().z,o.h*P/2,10/canvas.metrics().z,10/canvas.metrics().z);end
         end;gc:PopState();
     end
+    local scene,sceneKey,sceneBase,sceneLayouts,background,backgroundKey;local damage;
+    function canvas.damage(o)
+        if not scene or not o or rawtype(o.x)~='number' or rawtype(o.y)~='number' or rawtype(o.w)~='number' or rawtype(o.h)~='number' or o.parentId or o.acrossSpread or o.type=='text' or o.type=='artistic' or o.type=='toc' or o.type=='table' or o.type=='curve' or #Layers.children(editor.page(),o.id)>0 then damage=nil;return;end;
+        local offset=pageOffset(o) or 0;local left,top,right,bottom=math.huge,math.huge,-math.huge,-math.huge;
+        for _,point in ipairs({{0,0},{o.w,0},{o.w,o.h},{0,o.h}})do local x,y=Layers.worldPoint(editor.document,o,point[1],point[2]);left=math.min(left,(x+offset)*P);top=math.min(top,y*P);right=math.max(right,(x+offset)*P);bottom=math.max(bottom,y*P);end;local pad=math.max(4,(o.strokeWidth or 0)*P*2);left,top,right,bottom=left-pad,top-pad,right+pad,bottom+pad;
+        if damage then left=math.min(left,damage.x);top=math.min(top,damage.y);right=math.max(right,damage.x+damage.w);bottom=math.max(bottom,damage.y+damage.h);end;damage={x=left,y=top,w=right-left,h=bottom-top};
+    end
+    canvas.renderCount=0;
+    function canvas.releaseBackground()if background then background:delete();background=nil;backgroundKey=nil;end;end
+    function canvas.release()if scene then scene:delete();scene=nil;sceneKey=nil;end;end
     view:Connect(wx.wxEVT_PAINT,function()
-        local dc=wx.wxPaintDC(view);dc:SetBackground(wx.wxBrush(Themes.colour(Themes.palettes[editor.theme].canvas)));dc:Clear();view:PrepareDC(dc);local gc=wx.wxGraphicsContext.Create(dc);local context=Renderer.context(gc,dc);context.fonts=editor.fonts;
+        local paint=wx.wxPaintDC(view);local dc=wx.wxBufferedDC(paint,view:GetClientSize());dc:SetBackground(wx.wxBrush(Themes.colour(Themes.palettes[editor.theme].canvas)));dc:Clear();view:PrepareDC(dc);local gc=wx.wxGraphicsContext.Create(dc);local context=Renderer.context(gc,dc);context.fonts=editor.fonts;
         local ok,err=xpcall(function()
-            if editor.closed then return;end;local m=canvas.metrics();gc:Translate(m.x,m.y);gc:Scale(m.z,m.z);
-            for _,phase in ipairs({'background','spread-content'}) do for i,n in ipairs(m.indices) do local page=rawtype(n)=='table' and n or editor.document.pages[n];gc:PushState();gc:Translate((i-1)*editor.document.settings.width*P,0);Renderer.page(context,editor,page,rawtype(n)=='number' and n or nil,clean,phase);gc:PopState();end;end
-            local o=not clean and editor.selected();if o then selection(context,o);end
-        end,debug.traceback);gc:delete();dc:delete();if not ok then editor.report(err);end
+            if editor.closed then return;end;local m=canvas.metrics();local keys={tostring(editor.document),tostring(editor.renderRevision or 0),tostring(m.z),editor.theme};for _,n in ipairs(m.indices)do keys[#keys+1]=tostring(n);end;local key=table.concat(keys,'|');table.remove(keys,2);local base=table.concat(keys,'|');local patch=scene and sceneBase==base and damage;
+            if sceneKey~=key then
+                if patch then local right,bottom=math.ceil((patch.x+patch.w)*m.z),math.ceil((patch.y+patch.h)*m.z);patch.x=math.floor(patch.x*m.z)/m.z;patch.y=math.floor(patch.y*m.z)/m.z;patch.w=right/m.z-patch.x;patch.h=bottom/m.z-patch.y;end;
+                local bitmap=wx.wxBitmap(math.ceil(m.width+48),math.ceil(m.height+48),32);local memory=wx.wxMemoryDC();memory:SelectObject(bitmap);memory:SetBackground(wx.wxBrush(Themes.colour(Themes.palettes[editor.theme].canvas)));memory:Clear();if patch then local source=wx.wxMemoryDC();source:SelectObject(scene);memory:Blit(0,0,bitmap:GetWidth(),bitmap:GetHeight(),source,0,0,wx.wxCOPY);source:SelectObject(wx.wxNullBitmap);source:delete();end;local graphics=wx.wxGraphicsContext.Create(memory);local cached=Renderer.context(graphics,memory);cached.fonts=editor.fonts;
+                local rendered,errorMessage=xpcall(function()
+                    if patch then editor.textLayouts=sceneLayouts or editor.textLayouts;end;graphics:Translate(24,24);graphics:Scale(m.z,m.z);if patch then graphics:Clip(patch.x,patch.y,patch.w,patch.h);end;
+                    local backgroundKeys={tostring(editor.document),tostring(m.z),editor.theme,Document.encode(editor.document.settings)};
+                    for _,n in ipairs(m.indices)do local page=rawtype(n)=='table' and n or editor.document.pages[n];local master=require('Manual.MasterPages').get(editor.document,page);local source=master and page.useMasterBackground~=false and master or page;backgroundKeys[#backgroundKeys+1]=Document.encode({page.id,source.background or '',source.backgroundImage or '',source.backgroundMode or ''});end;local nextBackgroundKey=table.concat(backgroundKeys,'|');
+                    if backgroundKey~=nextBackgroundKey then
+                        canvas.releaseBackground();local b=wx.wxBitmap(bitmap:GetWidth(),bitmap:GetHeight(),32);local dc=wx.wxMemoryDC();dc:SelectObject(b);dc:SetBackground(wx.wxBrush(Themes.colour(Themes.palettes[editor.theme].canvas)));dc:Clear();local gc=wx.wxGraphicsContext.Create(dc);local context=Renderer.context(gc,dc);context.fonts=editor.fonts;
+                        local ok,err=xpcall(function()gc:Translate(24,24);gc:Scale(m.z,m.z);for i,n in ipairs(m.indices)do local page=rawtype(n)=='table' and n or editor.document.pages[n];gc:PushState();gc:Translate((i-1)*editor.document.settings.width*P,0);Renderer.page(context,editor,page,rawtype(n)=='number' and n or nil,clean,'background');gc:PopState();end;end,debug.traceback);gc:delete();dc:SelectObject(wx.wxNullBitmap);dc:delete();if not ok then b:delete();error(err);end;background=b;backgroundKey=nextBackgroundKey;
+                    end;
+                    graphics:PushState();graphics:Scale(1/m.z,1/m.z);graphics:DrawBitmap(background,-24,-24,background:GetWidth(),background:GetHeight());graphics:PopState();
+                    for i,n in ipairs(m.indices)do local page=rawtype(n)=='table' and n or editor.document.pages[n];graphics:PushState();graphics:Translate((i-1)*editor.document.settings.width*P,0);cached.damage=patch and {x=patch.x-(i-1)*editor.document.settings.width*P,y=patch.y,w=patch.w,h=patch.h} or nil;Renderer.page(cached,editor,page,rawtype(n)=='number' and n or nil,clean,'spread-content');graphics:PopState();end;
+                end,debug.traceback);graphics:delete();memory:SelectObject(wx.wxNullBitmap);memory:delete();if not rendered then bitmap:delete();error(errorMessage);end;canvas.release();scene=bitmap;sceneKey=key;sceneBase=base;sceneLayouts=editor.textLayouts;damage=nil;canvas.renderCount=canvas.renderCount+1;
+            end
+            gc:DrawBitmap(scene,m.x-24,m.y-24,scene:GetWidth(),scene:GetHeight());gc:Translate(m.x,m.y);gc:Scale(m.z,m.z);local o=not clean and editor.selected();if o then selection(context,o);end
+        end,debug.traceback);gc:delete();dc:delete();paint:delete();if not ok then editor.report(err);end
     end);
     view:Connect(wx.wxEVT_SIZE,function(event)canvas.refresh();event:Skip();end);
     view:Connect(wx.wxEVT_MOUSEWHEEL,function(event)
@@ -136,7 +160,7 @@ function Canvas.create(parent,editor,clean)
             local x,y=point(event);
             if drag and event:LeftIsDown() then
                 if drag.kind=='text' then editor.caret=canvas.textPoint(drag.o,x,y);canvas.refresh();return;end
-                local o,b=drag.o,drag.base;local dx,dy=x-drag.startX,y-drag.startY;
+                local o,b=drag.o,drag.base;canvas.damage(o);if editor.preview then editor.preview.damage(o);end;local dx,dy=x-drag.startX,y-drag.startY;
                 if o.parentId then local parent=Document.find(editor.document,o.parentId);local a,bx=Layers.localPoint(editor.document,parent,x-(pageOffset(o) or 0),y);local c,d=Layers.localPoint(editor.document,parent,drag.startX-(pageOffset(o) or 0),drag.startY);dx,dy=a-c,bx-d;end
                 if drag.kind=='move' then o.x,o.y=require('Manual.Snapping').move(editor.document,editor.page(),o,b.x+dx,b.y+dy,event:AltDown());
                 elseif drag.kind=='create' then o.x=b.x+math.min(0,dx);o.y=b.y+math.min(0,dy);o.w=math.max(1,math.abs(dx));o.h=math.max(1,math.abs(dy));if event:ShiftDown() then o.h=o.w;end
@@ -146,7 +170,7 @@ function Canvas.create(parent,editor,clean)
                     o.w,o.h=w,h;o.x=event:ControlDown() and b.x+(b.w-w)/2 or signX==-1 and b.x+b.w-w or b.x;o.y=event:ControlDown() and b.y+(b.h-h)/2 or signY==-1 and b.y+b.h-h or b.y;
                 elseif drag.kind=='rotate' then local cx,cy=Layers.worldPoint(editor.document,o,o.w/2,o.h/2);local parent=o.parentId and Document.find(editor.document,o.parentId);o.rotation=math.deg(math.atan(y-cy,x-(pageOffset(o) or 0)-cx))+90-(parent and Layers.angle(editor.document,parent) or 0);if event:ShiftDown() then o.rotation=math.floor(o.rotation/15+.5)*15;end
                 elseif drag.kind=='node' then local lx,ly=Layers.localPoint(editor.document,o,x-(pageOffset(o) or 0),y);o.nodes[drag.handle]={lx/o.w*100,ly/o.h*100};end
-                editor.invalidate();canvas.refresh();if editor.preview then editor.preview.refresh();end
+                canvas.damage(o);if editor.preview then editor.preview.damage(o);end;editor.invalidate();canvas.refresh();if editor.preview then editor.preview.refresh();end
             else view:SetCursor(wx.wxCursor(editor.textObject and wx.wxCURSOR_IBEAM or editor.tool=='move' and wx.wxCURSOR_ARROW or wx.wxCURSOR_CROSS));end
         end);
         view:Connect(wx.wxEVT_LEFT_UP,function()

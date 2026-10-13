@@ -104,7 +104,8 @@ function Main.create(tOptions)
     local tWelcome = Welcome.create(_pRuntime);
     local sPage = "Welcome";
     local tDataSession = tOptions.dataSession or DataSession.create();
-    local dBaseWindow, dFinalWindow, dStyleWindow, dSourceWindow, dGameEditorWindow, dWikiWindow, dTutorialsWindow, dManualWindow;
+    local dBaseWindow, dFinalWindow, dStyleWindow, dSourceWindow, dGameEditorWindow, dWikiWindow, dTutorialsWindow;
+    -- local dManualWindow;
     local showPage;
     local bDataLoaded = false;
     local sActiveCardSetName = "";
@@ -558,7 +559,7 @@ function Main.create(tOptions)
         if (dStyleWindow and not dStyleWindow.close()) then return; end
         if (dSourceWindow and not dSourceWindow.close()) then return; end
         if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
-        if (dManualWindow and not dManualWindow.close()) then return; end
+        -- if (dManualWindow and not dManualWindow.close()) then return; end
         if (dWikiWindow and not dWikiWindow.close()) then return; end
 
         local oGame = require("Windows.NewGame").Show(dFrame, Game.New);
@@ -601,7 +602,7 @@ function Main.create(tOptions)
             if (dSourceWindow and not dSourceWindow.close()) then return; end
             if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
             local oGame = tGames[nSelection + 1];
-            if (dManualWindow and not dManualWindow.close()) then return; end
+            -- if (dManualWindow and not dManualWindow.close()) then return; end
             if (dWikiWindow and not dWikiWindow.close()) then return; end
             Game.Activate(oGame);
             bDataLoaded = false;
@@ -766,7 +767,7 @@ function Main.create(tOptions)
         if (dSourceWindow and not dSourceWindow.close()) then return; end
         if (dStyleWindow and not dStyleWindow.close()) then return; end
         if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
-        if (dManualWindow and not dManualWindow.close()) then return; end
+        -- if (dManualWindow and not dManualWindow.close()) then return; end
         if (dWikiWindow and not dWikiWindow.close()) then return; end
         Game.Deactivate();
         bDataLoaded, sActiveCardSetName = false, "";
@@ -850,6 +851,7 @@ function Main.create(tOptions)
         });
     end},
         {false},
+        --[[ Manual editor detached; retain its menu wiring.
         {"Manual", function()
         assert(Game.GetActive(), "Load a game first.");
         if (dManualWindow) then dManualWindow.show(); return; end
@@ -858,6 +860,7 @@ function Main.create(tOptions)
             onClose = function() dManualWindow = nil; end,
         });
     end},
+        --]]
         {"Style Editor", function()
         assert(Game.GetActive(), "Load a game first.");
         if (dStyleWindow) then dStyleWindow.show(); return; end
@@ -1058,6 +1061,7 @@ function Main.create(tOptions)
             tMenuItem.item:Enable(bAvailable);
         end
 
+        --[[ Manual editor detached; retain its menu visibility wiring.
         local tManualItem = tMenuItems["Game:Manual"];
         local bManualVisible = tMenus.Game:FindItem(tManualItem.item:GetId()) ~= nil;
         if (Game.GetActive() and not bManualVisible) then
@@ -1065,6 +1069,7 @@ function Main.create(tOptions)
         elseif (not Game.GetActive() and bManualVisible) then
             tMenus.Game:Remove(tManualItem.item:GetId());
         end
+        --]]
 
         oCoordinates:SetLabel("-, -");
         dFrame:SetStatusText(sPage, 0);
@@ -1122,10 +1127,12 @@ function Main.create(tOptions)
             if (oEvent:CanVeto()) then oEvent:Veto(); end
             return;
         end
+        --[[ Manual editor detached; retain its close guard.
         if (dManualWindow and not dManualWindow.close()) then
             if (oEvent:CanVeto()) then oEvent:Veto(); end
             return;
         end
+        --]]
         oWindowState.close();
         oRenderTimer:Stop();
         ProcSys.Shutdown();

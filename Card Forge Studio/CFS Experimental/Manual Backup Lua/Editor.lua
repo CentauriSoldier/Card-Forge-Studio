@@ -11,7 +11,7 @@ function Editor.create(parent,model,stylePath,statePath)
     function e.selected() return e.selection and Document.find(e.document,e.selection);end
     function e.ownerIndex(o) local _,p=Document.find(e.document,o.id);for i,page in ipairs(e.document.pages) do if page==p then return i;end end;return e.pageIndex;end
     function e.styleNames() local a=Document.copy(e.styles.names);for _,s in ipairs(e.document.manualStyles) do a[#a+1]='manual:'..s.name;end;table.sort(a);return a;end
-    function e.invalidate() e.document._byId=nil;e.document._flowPrevious=nil;e.flowCache={};e.contentsCache={};e.textLayouts={};end
+    function e.invalidate() e.renderRevision=(e.renderRevision or 0)+1;e.document._byId=nil;e.document._flowPrevious=nil;e.flowCache={};e.contentsCache={};e.textLayouts={};end
     function e.report(err) if e.onError then e.onError(err);else wx.wxMessageBox(tostring(err),'Game Manual',wx.wxOK+wx.wxICON_ERROR,e.view);end;end
     function e.status(s) if e.onStatus then e.onStatus(s);end;end
     function e.changed()
@@ -20,7 +20,7 @@ function Editor.create(parent,model,stylePath,statePath)
         e.revision=e.revision+1;e.invalidate();e.model.document=e.document;e.model.draftChanged=true;
         e.refresh();if e.onChange then e.onChange();end;
     end
-    function e.change(fn,target) e.document._byId=nil;e.document._flowPrevious=nil;local before=e.history.begin(target);local ok,err=xpcall(fn,debug.traceback);if not ok then if before.id=="@document" then e.document=Document.decode(before.before);elseif target then local value=Document.decode(before.before);for k in pairs(target) do target[k]=nil;end;for k,v in pairs(value) do target[k]=v;end;end;e.model.document=e.document;e.historyRestored=true;e.invalidate();e.refresh();e.report(err);return false;end;return e.history.commit(before);end
+    function e.change(fn,target) e.document._byId=nil;e.document._flowPrevious=nil;local before=e.history.begin(target);if e.canvas then e.canvas.damage(target);if e.preview then e.preview.damage(target);end;end;local ok,err=xpcall(fn,debug.traceback);if not ok then if before.id=="@document" then e.document=Document.decode(before.before);elseif target then local value=Document.decode(before.before);for k in pairs(target) do target[k]=nil;end;for k,v in pairs(value) do target[k]=v;end;end;e.model.document=e.document;e.historyRestored=true;e.canvas.damage(nil);if e.preview then e.preview.damage(nil);end;e.invalidate();e.refresh();e.report(err);return false;end;if e.canvas then e.canvas.damage(target);if e.preview then e.preview.damage(target);end;end;return e.history.commit(before);end
     function e.select(o)
         e.selection=o and o.id or nil;if o then local _,owner=Document.find(e.document,o.id);for i,p in ipairs(e.document.pages) do if p==owner then e.master=nil;e.pageIndex=i;break;end;end;end;e.textObject=nil;e.story=nil;e.linking=nil;e.typing={};e.refresh();
     end
@@ -186,6 +186,8 @@ function Editor.create(parent,model,stylePath,statePath)
     end
     function e.refresh()
         if not e.canvas then return;end
+        local refreshKey=table.concat({tostring(e.document),tostring(e.renderRevision or 0),tostring(e.pageIndex),tostring(e.master),e.selection or '',e.tool,tostring(e.textObject),tostring(e.caret),tostring(e.anchor),tostring(e.linking),e.theme,tostring(e.uiSize),e.styleSearch:GetValue()},'|');
+        if e.refreshKey==refreshKey then e.canvas.refresh();if e.preview then e.preview.refresh();end;return;end;e.refreshKey=refreshKey;
         e.context.panel:Show(e.textObject~=nil);e.pageList:Clear();for i,p in ipairs(e.document.pages) do e.pageList:Append(i..'. '..p.name);end;e.pageList:SetSelection(not e.master and e.pageIndex-1 or -1);e.pageList:Flush();
         e.masterList:Clear();for _,p in ipairs(e.document.masters) do e.masterList:Append(p.name);end;e.masterList:SetSelection(-1);for i,p in ipairs(e.document.masters)do if p==e.master then e.masterList:SetSelection(i-1);end;end;e.masterList:Flush();
         e.layerRows={};e.layerList:Clear();local function append(id,depth)local children=Layers.children(e.page(),id);for i=#children,1,-1 do local o=children[i];e.layerRows[#e.layerRows+1]=o;e.layerList:Append((o.name or o.type),({text='Frame Text',artistic='Artistic Text',image='Image',picture='Picture Frame',['picture-ellipse']='Ellipse Picture Frame',rounded='Rounded Rectangle',toc='Table of Contents',table='Table'})[o.type] or o.type,depth,o.id);if o.id==e.selection then e.layerList:SetSelection(#e.layerRows-1);end;append(o.id,depth+1);end;end;append(nil,0);if not e.selection then e.layerList:SetSelection(-1);end;e.layerList:Flush();
