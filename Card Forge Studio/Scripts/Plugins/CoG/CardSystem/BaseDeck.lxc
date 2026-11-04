@@ -1,0 +1,442 @@
+--[[!
+    @fqxn CoG.BaseDeck
+    @desc Ordered card collection. Index one is the top. Drawing removes the actual
+    instance; discarding, hands, ownership and game rules are caller responsibilities.
+    Different instances with identical metadata are permitted. Methods use
+    dot calls. List snapshots retain actual card references; cloning duplicates
+    cards. Draw-many and shuffle preserve the live list when their operation fails.
+    @ex
+    local deck = CoG.BaseDeck({ CoG.BaseCard(), CoG.BaseCard() });
+    local card = deck.draw();
+    local remaining = deck.getCardCount();
+!]]
+namespace CoG {
+    class BaseDeck : CoG.CoGBase requires(CoG.BaseCard) {
+        private cards = {};
+        private busy = false;
+
+        --[[!
+        @fqxn CoG.BaseDeck.Helpers.validateCard
+        @desc Requires a BaseCard instance or descendant. Invalid input raises an assertion before deck
+        mutation.
+        @param BaseCard oCard Candidate card instance.
+        @vis private static
+        !]]
+        private static validateCard(oCard) {
+            -- Check class identity and ancestry before accepting a reference.
+            assert(class.isinstance(oCard) and class.isa(oCard, CoG.BaseCard), "Deck entries must be BaseCard instances.");
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Helpers.validateIndex
+        @desc Requires a finite positive integer card position. This checks index shape, not whether the
+        position exists in a deck.
+        @param number nIndex Candidate one-based position.
+        @vis private static
+        !]]
+        private static validateIndex(nIndex) {
+            -- Exclude fractions, nonpositive values, NaN and infinite positions.
+            assert(rawtype(nIndex) == "number" and nIndex >= 1 and nIndex < math.huge and nIndex % 1 == 0,
+                   "Card index must be a positive integer.");
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Helpers.copyCards
+        @desc Validates and copies a dense card array. Rejects invalid keys, holes, non-card values and
+        repeated instances. The list is independent; card identities are retained.
+        @param table tCards Dense source array of BaseCard instances.
+        @ret table tCopy Validated shallow list copy.
+        @vis private static
+        !]]
+        private static copyCards(tCards) {
+            -- Step 1: require a list container rather than a class instance.
+            assert(rawtype(tCards) == "table" and not class.isinstance(tCards), "Cards must be a dense array.");
+            local tCopy, tSeen, nCount = {}, {}, 0;
+
+            -- Step 2: count valid numeric keys without relying on # for sparse input.
+            for k in pairs(tCards) do
+                BaseDeck.validateIndex(k);
+                nCount = nCount + 1;
+            end
+
+            -- Step 3: require every position and reject repeated card identities.
+            for nIndex = 1, nCount do
+                local oCard = tCards[nIndex];
+                BaseDeck.validateCard(oCard);
+                assert(not tSeen[oCard], "The same card instance cannot appear twice in a deck.");
+                tSeen[oCard] = true;
+                -- Keep each card reference; only the surrounding list is copied.
+                tCopy[nIndex] = oCard;
+            end
+
+            return tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Metamethods.__len
+        @desc Returns the current card count for the length operator.
+        @ret number nCount Number of cards.
+        @vis public
+        !]]
+        public operator __len() {
+            -- Read the current list size without allocating a snapshot.
+            return #this.cards;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Metamethods.__pairs
+        @desc Provides the same snapshot iteration as eachCard for pairs(deck). Cards remain the
+        actual instances.
+        @ret function fIterator ipairs iterator.
+        @ret table tSnapshot Independent ordered list of existing card references.
+        @ret number nInitial Initial iterator position.
+        @vis public
+        !]]
+        public operator __pairs() {
+            -- Delegate to the public snapshot iterator so both iteration paths agree.
+            return this.eachCard();
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Metamethods.__clone
+        @desc Creates a new BaseDeck with each card cloned in order. Subclasses must implement their
+        own clone operation; card cloning failures propagate.
+        @ret BaseDeck oCopy Independent deck containing cloned cards.
+        @vis public
+        !]]
+        public operator clone() {
+            -- Step 1: prevent a subclass clone from silently discarding subclass state.
+            assert(class.getname(this) == class.getname(BaseDeck), "BaseDeck subclasses must implement __clone for their own state.");
+            local tCards = {};
+
+            -- Step 2: clone each card into an independent ordered list.
+            for nIndex, oCard in ipairs(this.cards) do
+                tCards[nIndex] = clone(oCard);
+            end
+
+            -- Step 3: construct a new deck after all card clones succeed.
+            return BaseDeck(tCards);
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.validateSnapshot
+        @desc Validates restored snapshot cards and replaces their list with a copy. Clears the
+        transient shuffle lock. Invalid snapshots raise an assertion.
+        @param table tState Snapshot state with pri.cards and pri.busy.
+        @vis private
+        !]]
+        private validateSnapshot(tState) {
+            -- Validate restored identities/list shape before accepting snapshot state.
+            tState.pri.cards = BaseDeck.copyCards(tState.pri.cards);
+            -- A restored deck must not inherit an in-progress callback lock.
+            tState.pri.busy = false;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.prepareSnapshot
+        @desc Clears the transient shuffle lock in prepared snapshot state so it is not persisted as
+        runtime activity.
+        @param table tState Snapshot state being prepared by the class system.
+        @vis private
+        !]]
+        private prepareSnapshot(tState) {
+            -- Persist data, not the temporary shuffle lock.
+            tState.pri.busy = false;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.BaseDeck
+        @desc Initializes an ordered deck and the CoG base. Omitted cards create an empty deck.
+        Supplied lists are validated/copied before committing storage; card objects are retained by
+        reference.
+        @param table|nil tCards Dense, duplicate-free list of BaseCard instances.
+        @vis public
+        !]]
+        public BaseDeck(tCards) {
+            base();
+            -- The native base constructor is empty; commit only a validated list copy.
+            this.cards = tCards == nil and {} or BaseDeck.copyCards(tCards);
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.getCardCount
+        @desc Returns the number of cards currently held, equivalent to the length operator.
+        @ret number nCount Current card count.
+        @vis public
+        !]]
+        public getCardCount() {
+            -- Report the current list size directly.
+            return #this.cards;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.isEmpty
+        @desc Checks whether the deck contains no cards.
+        @ret boolean bEmpty True when the current card count is zero.
+        @vis public
+        !]]
+        public isEmpty() {
+            -- No card lookup or copy is needed to determine emptiness.
+            return #this.cards == 0;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.eachCard
+        @desc Iterates a shallow snapshot in top-to-bottom order. Later deck mutations do not change
+        the iterator list; yielded cards are the actual objects, not clones.
+        @ret function fIterator ipairs iterator.
+        @ret table tSnapshot Independent ordered list of card references.
+        @ret number nInitial Initial iterator position.
+        @vis public
+        !]]
+        public eachCard() {
+            -- Step 1: capture order and membership without cloning card objects.
+            local tSnapshot = {};
+
+            for nIndex, oCard in ipairs(this.cards) do
+                tSnapshot[nIndex] = oCard;
+            end
+
+            -- Step 2: iterate this fixed list, independent of later deck mutations.
+            return ipairs(tSnapshot);
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.getCards
+        @desc Returns a new ordered list containing the existing card instances. Editing the list
+        does not reorder the deck; editing a card affects that shared object.
+        @ret table tCards Independent shallow copy of the current list.
+        @vis public
+        !]]
+        public getCards() {
+            -- Copy list storage while retaining each existing card identity.
+            return BaseDeck.copyCards(this.cards);
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.containsCard
+        @desc Finds a card using raw identity, ignoring overloaded equality. Requires a valid
+        BaseCard instance even when the deck is empty.
+        @param BaseCard oCard Exact instance to locate.
+        @ret boolean bFound Whether this instance is present.
+        @ret number nIndex One-based position, or -1 when absent.
+        @vis public
+        !]]
+        public containsCard(oCard) {
+            -- Step 1: reject invalid card arguments before searching.
+            BaseDeck.validateCard(oCard);
+
+            -- Step 2: inspect current order and compare exact object identities.
+            for nIndex, oExisting in ipairs(this.cards) do
+
+                if (rawequal(oExisting, oCard)) then
+                    return true, nIndex;
+                end
+
+            end
+
+            -- Step 3: use -1 as the explicit not-found position.
+            return false, -1;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.addCard
+        @desc Adds a valid instance at the top or bottom. Existing identical instances are not added
+        again. Invalid arguments or mutation during a shuffle callback raise assertions.
+        @param BaseCard oCard Card instance to insert.
+        @param boolean|nil bTop True inserts at index one; false/nil appends at the bottom.
+        @ret BaseDeck this Deck for chaining.
+        @ret boolean bAdded False when the same instance was already present.
+        @vis public
+        !]]
+        public addCard(oCard, bTop) {
+            -- Step 1: reject callback-time mutation and validate card/position policy.
+            assert(not this.busy, "Cannot mutate the deck inside a shuffle callback.");
+            BaseDeck.validateCard(oCard);
+            assert(bTop == nil or rawtype(bTop) == "boolean", "Top flag must be a boolean.");
+
+            -- Step 2: leave the deck unchanged when this identity is already present.
+            if (this.containsCard(oCard)) then
+                return this, false;
+            end
+
+            -- Step 3: insert at the chosen end and report that membership changed.
+            table.insert(this.cards, bTop and 1 or #this.cards + 1, oCard);
+            return this, true;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.removeCard
+        @desc Removes the exact instance if present while preserving the remaining order. Invalid
+        cards and mutation inside a shuffle callback raise assertions.
+        @param BaseCard oCard Exact card instance to remove.
+        @ret BaseDeck this Deck for chaining.
+        @ret boolean bRemoved Whether the instance was found and removed.
+        @vis public
+        !]]
+        public removeCard(oCard) {
+            -- Step 1: guard callback-time mutation and locate the exact card.
+            assert(not this.busy, "Cannot mutate the deck inside a shuffle callback.");
+            local bFound, nIndex = this.containsCard(oCard);
+
+            -- Step 2: remove only an existing identity; absent cards are a normal no-op.
+            if (bFound) then
+                table.remove(this.cards, nIndex);
+            end
+
+            return this, bFound;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.peek
+        @desc Returns the actual card at a position without removing it. Defaults to the top; a
+        valid position beyond the deck returns nil. Invalid index shapes raise an assertion.
+        @param number|nil nIndex One-based position; defaults to one.
+        @ret BaseCard|nil oCard Existing card instance or nil.
+        @vis public
+        !]]
+        public peek(nIndex) {
+            -- Step 1: apply the top-card default, then validate index shape.
+            nIndex = nIndex == nil and 1 or nIndex;
+            BaseDeck.validateIndex(nIndex);
+            -- Step 2: return the reference without changing deck membership.
+            return this.cards[nIndex];
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.draw
+        @desc Removes and returns the actual card at a position, defaulting to the top. A valid
+        position beyond the deck returns nil without mutation. Invalid index shapes and shuffle-time
+        mutation raise assertions.
+        @param number|nil nIndex One-based position; defaults to one.
+        @ret BaseCard|nil oCard Removed instance, or nil when no card occupies the position.
+        @vis public
+        !]]
+        public draw(nIndex) {
+            -- Step 1: guard mutation, apply the top default and validate index shape.
+            assert(not this.busy, "Cannot mutate the deck inside a shuffle callback.");
+            nIndex = nIndex == nil and 1 or nIndex;
+            BaseDeck.validateIndex(nIndex);
+
+            -- Step 2: check existence before calling table.remove on an out-of-range position.
+            if (not this.cards[nIndex]) then
+                return nil;
+            end
+
+            -- Step 3: remove the actual instance and close the gap in the remaining order.
+            return table.remove(this.cards, nIndex);
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.drawMany
+        @desc Draws exactly the requested number from the top in order. Insufficient cards return an
+        empty list and false with no mutation; zero is a successful empty draw. Invalid counts or
+        shuffle-time mutation raise assertions.
+        @param number nCount Finite nonnegative integer number of cards to draw.
+        @ret table tDrawn Removed card instances in draw order.
+        @ret boolean bSuccess Whether the entire requested count was available.
+        @vis public
+        !]]
+        public drawMany(nCount) {
+            -- Step 1: enforce mutation guard and a finite nonnegative integer count.
+            assert(not this.busy, "Cannot mutate the deck inside a shuffle callback.");
+            assert(rawtype(nCount) == "number" and nCount >= 0 and nCount < math.huge and nCount % 1 == 0,
+                   "Draw count must be a nonnegative integer.");
+
+            -- Step 2: reject insufficient capacity before removing any cards.
+            if (nCount > #this.cards) then
+                -- Step 4: report the complete draw, including the successful zero-card case.
+            return {}, false;
+            end
+
+            -- Step 3: remove one top card at a time, preserving draw order.
+            local tDrawn = {};
+
+            for nIndex = 1, nCount do
+                tDrawn[nIndex] = table.remove(this.cards, 1);
+            end
+
+            return tDrawn, true;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.shuffle
+        @desc Uses Fisher-Yates on a temporary list. The random source receives (1, currentIndex)
+        and must return an integer in that inclusive range. Callback errors/bad indexes propagate
+        after unlocking; the original order is retained on failure. Deck-mutating methods are
+        blocked during the callback.
+        @param function|nil fRandom Random integer source; defaults to math.random.
+        @ret BaseDeck this Deck for chaining after the new order is committed.
+        @vis public
+        !]]
+        public shuffle(fRandom) {
+            -- Step 1: validate the random source and prohibit nested shuffle mutations.
+            assert(not this.busy, "Cannot mutate the deck inside a shuffle callback.");
+            assert(fRandom == nil or rawtype(fRandom) == "function", "Random source must be a function.");
+            fRandom = fRandom or math.random;
+            -- Step 2: work on a copy so partial swaps never alter the live order.
+            local tCards = BaseDeck.copyCards(this.cards);
+            -- Step 3: lock mutating methods while invoking the caller-supplied random source.
+            this.busy = true;
+            local bOK, sReason = pcall(function()
+
+                -- Fisher-Yates chooses one position in the remaining prefix for each swap.
+                for nIndex = #tCards, 2, -1 do
+                    local nOther = fRandom(1, nIndex);
+                    -- Validate every result before indexing/swapping the temporary list.
+                    BaseDeck.validateIndex(nOther);
+                    assert(nOther <= nIndex, "Random source returned an out-of-range index.");
+                    tCards[nIndex], tCards[nOther] = tCards[nOther], tCards[nIndex];
+                end
+
+            end);
+            -- Step 4: unlock even after callback failure, then propagate the failure.
+            this.busy = false;
+            assert(bOK, sReason);
+            -- Step 5: publish the new order only when all swaps succeeded.
+            this.cards = tCards;
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.reverse
+        @desc Reverses the current list in place, retaining all card identities. Empty and one-card
+        decks are unchanged. Mutation inside a shuffle callback raises an assertion.
+        @ret BaseDeck this Deck for chaining.
+        @vis public
+        !]]
+        public reverse() {
+            -- Step 1: block callback-time mutation before accessing live storage.
+            assert(not this.busy, "Cannot mutate the deck inside a shuffle callback.");
+            local tCards = this.cards;
+
+            -- Step 2: swap mirrored positions once each, leaving a middle card untouched.
+            for nIndex = 1, math.floor(#tCards / 2) do
+                local nOther = #tCards - nIndex + 1;
+                tCards[nIndex], tCards[nOther] = tCards[nOther], tCards[nIndex];
+            end
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.BaseDeck.Methods.clear
+        @desc Replaces the current list with an empty list and returns the removed list in its
+        former order. Cards are retained, not destroyed. Mutation inside a shuffle callback raises
+        an assertion.
+        @ret BaseDeck this Deck for chaining.
+        @ret table tRemoved Former list containing removed card instances.
+        @vis public
+        !]]
+        public clear() {
+            -- Step 1: reject mutation during a shuffle callback.
+            assert(not this.busy, "Cannot mutate the deck inside a shuffle callback.");
+            -- Step 2: detach the old list and install fresh empty storage.
+            local tRemoved = this.cards;
+            this.cards = {};
+            -- Step 3: return the old references so the caller decides their next destination.
+            return this, tRemoved;
+        }
+
+    }
+}

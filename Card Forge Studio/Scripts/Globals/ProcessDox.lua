@@ -20,10 +20,10 @@
 !]]
 return function()
     local wx = require("wx");
-    assert(Game.GetActive(), "Load a game first.");
-    Log.Note("Building game docs");
+    assert(CFS.Game.GetActive(), "Load a game first.");
+    CFS.Log.Note("Building game docs");
     local bOK, sResult = xpcall(function()
-        local oDox = DoxLua(INIFile.GetValue(FS.Game.Info, "SETTINGS", "Name"));
+        local oDox = Dox.DoxLua(INIFile.GetValue(FS.Game.Info, "SETTINGS", "Name"));
         local sTheme = INIFile.GetValue(FS.Game.Info, "SETTINGS", "DocsTheme");
         local sPrism = INIFile.GetValue(FS.Game.Info, "SETTINGS", "DocsPrismTheme");
         if (sTheme == "") then sTheme = "MIDNIGHT_BLUE"; end
@@ -47,7 +47,7 @@ return function()
                 if (wx.wxDirExists(pFile)) then
                     local sLower = sFile:lower();
                     if ((bPlugins or sLower ~= "plugins") and sLower ~= "exports" and sLower ~= "csvbackup" and sLower ~= ".git" and sLower ~= ".codex" and sLower ~= ".agents") then Collect(pFile); end
-                elseif (sFile:lower():match("%.lua$")) then
+                elseif (sFile:lower():match("%.lua$") or sFile:lower():match("%.lxc$") or sFile:lower():match("%.lxe$")) then
                     tFiles[#tFiles + 1] = pFile;
                 end
                 bFound, sFile = oFolder:GetNext();
@@ -67,7 +67,7 @@ return function()
         oDox.refresh(); oDox.setOutputPath(FS.Game.Docs);
         return oDox.export(DOX_EXPORT_FILENAME);
     end, debug.traceback);
-    if (not bOK) then Log.Error("Game docs build failed: "..tostring(sResult)); return false, sResult; end
-    Log.Note("Game docs build complete");
+    if (not bOK) then CFS.Log.Error("Game docs build failed: "..tostring(sResult)); return false, sResult; end
+    CFS.Log.Note("Game docs build complete");
     return true, sResult;
 end

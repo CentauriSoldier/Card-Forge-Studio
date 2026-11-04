@@ -15,7 +15,7 @@
 
 -- Native message-card window; the Log service owns messages and disk operations.
 local wx = require("wx");
-local Log = require("Log");
+local Log = CFS.Log;
 local Window = {};
 local WindowState = require("Windows.WindowState");
 local _tWindowState = {

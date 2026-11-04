@@ -159,7 +159,7 @@ function Save.write(pFile, pBackup, tHeaders, tRows, sExpected, tCodeFile)
     tBackups = backupFiles(pBackup);
     for nIndex = 1, #tBackups - BACKUP_MAX_FILE_COUNT do
         if (not wx.wxRemoveFile(pBackup.."/"..tBackups[nIndex])) then
-            pcall(Log.Warning, "Could not remove an old CSV backup: "..tBackups[nIndex]);
+            pcall(CFS.Log.Warning, "Could not remove an old CSV backup: "..tBackups[nIndex]);
         end
     end
     return sCSV;

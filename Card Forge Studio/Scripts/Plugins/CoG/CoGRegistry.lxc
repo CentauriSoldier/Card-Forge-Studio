@@ -1,0 +1,398 @@
+--[[!
+@fqxn CoG.CoGRegistry
+@pulsarlua class CoGRegistry
+@desc Mutable registry of allowed CoGBase classes and specific instances. Class
+    entries match through inheritance; instance entries use exact identity.
+    Empty registries deny all objects. Register CoGBase to permit every CoGBase subtype.
+    Prerequisites run once after a match, receive (oObject, ...), and must return
+    a boolean plus an optional string reason. Callback errors propagate.
+    The registry itself is not a CoGBase subclass, matching its existing behavior.
+!]]
+namespace CoG {
+    class CoGRegistry {
+        --[[!
+        @fqxn CoG.CoGRegistry.prerequisiteTrue
+        @desc Plain callback for the allowing default; contains no captured instance state.
+        !]]
+        private static prerequisiteTrue = function()
+            return true;
+        end;
+
+        --[[!
+        @fqxn CoG.CoGRegistry.prerequisiteFalse
+        @desc Plain callback for the denying default; contains no captured instance state.
+        !]]
+        private static prerequisiteFalse = function()
+            return false;
+        end;
+
+        --[[!
+        @fqxn CoG.CoGRegistry.validateEntry
+        @desc Requires a CoGBase class, a descendant class, or an instance in that ancestry.
+        @param class|CoGBase vEntry Candidate registry entry.
+        @throws The candidate is outside the CoGBase hierarchy.
+        !]]
+        private static validateEntry(vEntry) {
+            assert((class.is(vEntry) and
+                (rawequal(vEntry, CoGBase) or class.ischild(vEntry, CoGBase))) or
+                class.isa(vEntry, CoGBase),
+                "CoGRegistry entries must be CoGBase classes or instances.");
+        }
+
+        --[[!
+        @fqxn CoG.CoGRegistry.validateEntries
+        @desc Validates the dense, positive-indexed entry list without changing it.
+            Constructors and snapshot validation share the same CoGBase entry rules.
+        @param table tEntries Ordered CoGBase class/instance entries.
+        @ret number nCount Number of entries, including duplicates.
+        @throws The input is not a dense list of valid CoGBase entries.
+        !]]
+        private static validateEntries(tEntries) {
+            assert(rawtype(tEntries) == "table", "Registry entries must be a table.");
+            local nCount = 0;
+
+            for nIndex, vEntry in pairs(tEntries) do
+                assert(rawtype(nIndex) == "number" and nIndex >= 1 and nIndex % 1 == 0,
+                    "Registry entries must use positive integer indices.");
+                CoGRegistry.validateEntry(vEntry);
+                nCount = nCount + 1;
+            end
+
+            for nIndex = 1, nCount do
+                assert(tEntries[nIndex] ~= nil, "Registry entry lists cannot contain holes.");
+            end
+
+            return nCount;
+        }
+
+        --OPERATORS
+            -- Own the entry list independently; class/instance identities and the callback
+            -- reference are shared intentionally. The callback's captured state is not cloned.
+            --[[!
+                @fqxn CoG.CoGRegistry.Methods.__clone
+                @desc Copies the entry array while retaining class/instance identities and the callback reference. Captured callback state is shared.
+                @ret CoGRegistry oCopy Independent registry.
+            !]]
+        public operator clone() {
+            local tEntries = {};
+
+            for nIndex, vEntry in ipairs(this.entries) do
+                tEntries[nIndex] = vEntry;
+            end
+
+            return CoGRegistry(tEntries, this.prerequisite[1], this.defaultPrerequisite);
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.__len
+            @desc Returns the number of stored entries.
+            @ret number nCount Entry count.
+        !]]
+        public operator #() {
+            return #this.entries;
+        }
+
+        private entries = {};
+
+        -- A table stores the callback as a value, without binding it as a method.
+        private prerequisite = {CoGRegistry.prerequisiteTrue};
+
+        private defaultPrerequisite = true;
+
+        --[[!
+        @fqxn CoG.CoGRegistry.prepareSnapshot
+        @desc Replaces the outgoing default callback box with an empty box.
+            The default boolean reconstructs that callback on load; custom callbacks
+            use the host serializer's normal function support. Replacing the box
+            avoids editing the live table referenced by LXC's shallow projection.
+        @param table state Outgoing private/protected/public field projection.
+        !]]
+        private prepareSnapshot(state) {
+            local fCallback = this.prerequisite[1];
+
+            if (rawequal(fCallback, CoGRegistry.prerequisiteTrue) or
+                rawequal(fCallback, CoGRegistry.prerequisiteFalse)) then
+                state.pri.prerequisite = {};
+            end
+        }
+
+        --[[!
+        @fqxn CoG.CoGRegistry.validateSnapshot
+        @desc Validates restored entries and callback storage without running the
+            constructor. Reinstalls the selected default when its callback box is
+            empty. Class identities and shared instances follow the restored graph.
+        @param table state Restored private/protected/public field projection.
+        @throws Invalid entries, duplicate identities, or invalid prerequisite state.
+        !]]
+        private validateSnapshot(state) {
+            local tPrivate = state.pri;
+            local nCount = CoGRegistry.validateEntries(tPrivate.entries);
+            local tSeen = {};
+
+            for nIndex = 1, nCount do
+                local vEntry = tPrivate.entries[nIndex];
+                assert(not tSeen[vEntry], "Registry snapshots cannot contain duplicate entries.");
+                tSeen[vEntry] = true;
+            end
+
+            assert(rawtype(tPrivate.defaultPrerequisite) == "boolean",
+                "Default prerequisite must be a boolean.");
+            assert(rawtype(tPrivate.prerequisite) == "table",
+                "Registry prerequisite storage must be a table.");
+
+            -- The box holds one ordinary callback, not a bound class method.
+            for nIndex, fCallback in pairs(tPrivate.prerequisite) do
+                assert(nIndex == 1 and rawtype(fCallback) == "function",
+                    "Registry prerequisite storage must contain only one function.");
+            end
+
+            if (tPrivate.prerequisite[1] == nil) then
+                tPrivate.prerequisite = {tPrivate.defaultPrerequisite and
+                    CoGRegistry.prerequisiteTrue or CoGRegistry.prerequisiteFalse};
+            end
+        }
+
+        --PUBLIC
+            --[[!
+                @fqxn CoG.CoGRegistry.Methods.CoGRegistry
+                @param table|nil tEntries An optional dense list of CoGBase classes or instances.
+                @param function|nil fPrerequisite An optional additional eligibility check.
+                @param boolean|nil bDefaultPrerequisite Dummy result; defaults to true.
+                @desc A supplied callback takes precedence over the default dummy.
+                @pulsarlua function CoGRegistry
+            !]]
+        public CoGRegistry(tEntries, fPrerequisite, bDefaultPrerequisite) {
+            assert(bDefaultPrerequisite == nil or rawtype(bDefaultPrerequisite) == "boolean",
+                   "Default prerequisite must be a boolean or nil.");
+            this.defaultPrerequisite = bDefaultPrerequisite ~= false;
+            this.setPrerequisite(fPrerequisite);
+
+            if (tEntries ~= nil) then
+                local nCount = CoGRegistry.validateEntries(tEntries);
+
+                for nIndex = 1, nCount do
+                    this.add(tEntries[nIndex]);
+                end
+
+            end
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.add
+            @pulsarlua function CoGRegistry.add
+            @desc Adds a CoGBase class or instance unless the exact entry already exists.
+            @param class|instance vEntry Entry to register.
+            @ret CoGRegistry this This registry.
+            @ret boolean bAdded Whether a new entry was inserted.
+        !]]
+        public add(vEntry) {
+            CoGRegistry.validateEntry(vEntry);
+            local tEntries = this.entries;
+
+            for _, vExisting in ipairs(tEntries) do
+
+                if (rawequal(vExisting, vEntry)) then
+                    return this, false;
+                end
+
+            end
+
+            tEntries[#tEntries + 1] = vEntry;
+            return this, true;
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.remove
+            @pulsarlua function CoGRegistry.remove
+            @desc Removes only the exact class/instance entry, not its descendants.
+            @param class|instance vEntry Entry to remove.
+            @ret CoGRegistry this This registry.
+            @ret boolean bRemoved Whether an entry was removed.
+        !]]
+        public remove(vEntry) {
+            CoGRegistry.validateEntry(vEntry);
+            local tEntries = this.entries;
+
+            for nIndex, vExisting in ipairs(tEntries) do
+
+                if (rawequal(vExisting, vEntry)) then
+                    table.remove(tEntries, nIndex);
+                    return this, true;
+                end
+
+            end
+
+            return this, false;
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.clear
+            @pulsarlua function CoGRegistry.clear
+            @desc Clears entries, retaining prerequisite settings. An empty registry denies all objects.
+            @ret CoGRegistry this This registry.
+        !]]
+        public clear() {
+            this.entries = {};
+            return this;
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.contains
+            @pulsarlua function CoGRegistry.contains
+            @desc Checks exact entry identity, without inheritance matching or invoking prerequisites.
+            @param class|instance vEntry Valid CoGBase class or instance.
+            @ret boolean bFound Whether that exact entry is stored.
+        !]]
+        public contains(vEntry) {
+            CoGRegistry.validateEntry(vEntry);
+
+            for _, vExisting in ipairs(this.entries) do
+
+                if (rawequal(vExisting, vEntry)) then
+                    return true;
+                end
+
+            end
+
+            return false;
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.getCount
+            @pulsarlua function CoGRegistry.getCount
+            @desc Returns stored entry count.
+            @ret number nCount Entry count.
+        !]]
+        public getCount() {
+            return #this.entries;
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.eachEntry
+            @pulsarlua function CoGRegistry.eachEntry
+            @desc Returns an iterator over a copied entry array. Later registry edits do not alter its order.
+            @ret function fIterator Yields one-based index and class/instance entry.
+        !]]
+        public eachEntry() {
+            local tEntries = {};
+
+            for nIndex, vEntry in ipairs(this.entries) do
+                tEntries[nIndex] = vEntry;
+            end
+
+            local nIndex = 0;
+            return function()
+                nIndex = nIndex + 1;
+
+                if (tEntries[nIndex]) then
+                    return nIndex, tEntries[nIndex];
+                end
+
+            end;
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.eachClass
+            @pulsarlua function CoGRegistry.eachClass
+            @desc Alias of eachEntry; includes instance entries as well as classes.
+            @ret function fIterator Yields one-based index and stored entry.
+        !]]
+        public eachClass() {
+            return this.eachEntry();
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.setPrerequisite
+            @pulsarlua function CoGRegistry.setPrerequisite
+            @desc Replaces the eligibility callback. Nil selects the current default dummy. Callback receives (oObject, ...) after entry matching and must return boolean plus optional string reason.
+            @param function|nil fPrerequisite Callback or nil to restore the dummy.
+            @ret CoGRegistry this This registry.
+        !]]
+        public setPrerequisite(fPrerequisite) {
+            assert(fPrerequisite == nil or rawtype(fPrerequisite) == "function",
+                   "Prerequisite must be a function or nil.");
+            this.prerequisite[1] = fPrerequisite or (this.defaultPrerequisite and
+                CoGRegistry.prerequisiteTrue or CoGRegistry.prerequisiteFalse);
+            return this;
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.getPrerequisite
+            @pulsarlua function CoGRegistry.getPrerequisite
+            @desc Returns the current callback, including the selected default dummy.
+            @ret function fPrerequisite Current eligibility function.
+        !]]
+        public getPrerequisite() {
+            return this.prerequisite[1];
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.setDefaultPrerequisite
+            @pulsarlua function CoGRegistry.setDefaultPrerequisite
+            @desc Changes the dummy result and updates an active dummy immediately; a custom callback remains unchanged.
+            @param boolean bDefault Dummy eligibility result.
+            @ret CoGRegistry this This registry.
+        !]]
+        public setDefaultPrerequisite(bDefault) {
+            assert(rawtype(bDefault) == "boolean", "Default prerequisite must be a boolean.");
+            local fCallback = this.prerequisite[1];
+            local bDummy = rawequal(fCallback, CoGRegistry.prerequisiteTrue) or
+                rawequal(fCallback, CoGRegistry.prerequisiteFalse);
+            this.defaultPrerequisite = bDefault;
+
+            if (bDummy) then
+                this.setPrerequisite();
+            end
+
+            return this;
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.isDefaultPrerequisiteAllowed
+            @pulsarlua function CoGRegistry.isDefaultPrerequisiteAllowed
+            @desc Returns the selected default dummy result.
+            @ret boolean bDefault Default eligibility result.
+        !]]
+        public isDefaultPrerequisiteAllowed() {
+            return this.defaultPrerequisite;
+        }
+
+        --[[!
+            @fqxn CoG.CoGRegistry.Methods.allows
+            @desc Class entries use child-or-self checks (isa semantics); instance
+            entries use exact identity, ignoring overloaded equality operators.
+            A match invokes the prerequisite once, not once per matching entry.
+            @pulsarlua function CoGRegistry.allows
+            @param CoGBase oObject Candidate CoGBase instance; other inputs return false and a reason.
+            @param varargs ... Extra prerequisite context.
+            @ret boolean bAllowed Eligibility result.
+            @ret string|nil sReason Optional explanation for denial.
+        !]]
+        public allows(oObject, ...) {
+            if (not class.isa(oObject, CoGBase)) then
+                return false, "Object must be a CoGBase instance.";
+            end
+
+            local bMatch = false;
+
+            for _, vAllowed in ipairs(this.entries) do
+
+                if ((class.is(vAllowed) and class.isa(oObject, vAllowed)) or rawequal(oObject, vAllowed)) then
+                    bMatch = true;
+                    break;
+                end
+
+            end
+
+            if (not bMatch) then
+                return false, "Object does not match a registered entry.";
+            end
+
+            local bAllowed, sReason = this.prerequisite[1](oObject, ...);
+            assert(rawtype(bAllowed) == "boolean", "Prerequisite must return a boolean.");
+            assert(sReason == nil or rawtype(sReason) == "string", "Prerequisite reason must be a string or nil.");
+            return bAllowed, not bAllowed and (sReason or "Prerequisite not met.") or nil;
+        }
+
+    }
+}

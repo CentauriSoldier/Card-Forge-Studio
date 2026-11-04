@@ -25,7 +25,7 @@
 local ProcSys = {};
 
 -- Dependencies.
-local LiveFileRepo  = require("LiveFileRepo");
+local LiveFileRepo  = CFS.LiveFileRepo;
 local wx            = require("wx");
 
 -- Active game and card-set objects.
@@ -275,7 +275,7 @@ function ProcSys.BindSession(tSession)
         end
 
         exportStatus("Export complete: "..nCount.." "..tSettings.type.." output files.");
-        Log.Note(tSettings.type.." export completed: "..nCount.." output files.");
+        CFS.Log.Note(tSettings.type.." export completed: "..nCount.." output files.");
 
         return nCount;
     end
@@ -314,7 +314,7 @@ function ProcSys.BindSession(tSession)
         assert(_oActiveCardSet and _pActiveCSV, "No card set is loaded.");
         _sCSVOriginal = require("ProcSys.Save").write(_pActiveCSV, _pActiveBackup, tSession.headers, tRows, _sCSVOriginal, {path = FS.CardSet.CodeColumns, original = _sCodeColumnsOriginal, columns = tSession.codeColumns});
         _sCodeColumnsOriginal = readFile(FS.CardSet.CodeColumns);
-        pcall(Log.Note, "Card set saved: ".._oActiveCardSet.GetName().." ("..#tRows.." rows).");
+        pcall(CFS.Log.Note, "Card set saved: ".._oActiveCardSet.GetName().." ("..#tRows.." rows).");
 
         return true;
     end
@@ -540,8 +540,7 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
 
     Import = ImportSystem.Import;
 
-    FontStyle = FontStyle or require("FontStyle");
-    FontStyle.UpdateINI((FS.GetResourceRoot().."/Styles.ini"));
+    CFS.FontStyle.UpdateINI((FS.GetResourceRoot().."/Styles.ini"));
 
     Forge = Forge or require("Forge");
 
@@ -626,7 +625,7 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
     _pActiveBackup           = FS.Game.CSVBackup.."/"..oCardSet.GetUUID();
 
     captureWatchFiles();
-    Log.Note("Card set loaded: "..oCardSet.GetName().." ("..#tBase.." rows).");
+    CFS.Log.Note("Card set loaded: "..oCardSet.GetName().." ("..#tBase.." rows).");
 
     _nSelectedRow = #tBase > 0 and 1 or nil;
 
@@ -693,11 +692,11 @@ function ProcSys.OnTimer()
 
                 end
 
-                Log.Note("External CSV changes loaded.");
+                CFS.Log.Note("External CSV changes loaded.");
 
                 return;
             end
-            Log.Warning("External CSV changed; current edits were retained.");
+            CFS.Log.Warning("External CSV changed; current edits were retained.");
         end
 
         -- Refresh metadata and logical card dimensions before reprocessing rows.
@@ -715,12 +714,12 @@ function ProcSys.OnTimer()
                 _tSession.options.onMetadataChanged(_oActiveCardSet);
             end
 
-            Log.Note("Card-set metadata updated: ".._oActiveCardSet.GetName());
+            CFS.Log.Note("Card-set metadata updated: ".._oActiveCardSet.GetName());
         end
 
-        if (tChanged.Styles and FontStyle) then
+        if (tChanged.Styles and CFS.FontStyle) then
 
-            FontStyle.UpdateINI((FS.GetResourceRoot().."/Styles.ini"));
+            CFS.FontStyle.UpdateINI((FS.GetResourceRoot().."/Styles.ini"));
 
         end
 
@@ -814,7 +813,7 @@ function ProcSys.OnTimer()
         end
 
         Forge.RequestCardRedraw();
-        Log.Note("Live card scripts or styles updated.");
+        CFS.Log.Note("Live card scripts or styles updated.");
 
     end, debug.traceback);
     _bLiveBusy = false;
@@ -822,7 +821,7 @@ function ProcSys.OnTimer()
     if (bOK) then require("Autocomplete").Flush(); end
 
     if (not bOK) then
-        Log.Error(sError);
+        CFS.Log.Error(sError);
     end
 
 end
@@ -838,8 +837,8 @@ function ProcSys.PrepGame(oGame)
     assert(type(oGame) == "Game", "ProcSys.PrepGame requires a Game object.");
 
     Import = require("Globals.ImportSystem").Import;
-    FontStyle = FontStyle or require("FontStyle");
-    FontStyle.UpdateINI(FS.GetResourceRoot().."/Styles.ini");
+
+    CFS.FontStyle.UpdateINI(FS.GetResourceRoot().."/Styles.ini");
     Forge = Forge or require("Forge");
     UserEnv = UserEnv or require("Globals.UserEnv");
     UserEnv.Refresh();
@@ -849,7 +848,7 @@ function ProcSys.PrepGame(oGame)
     _oActiveGame                        = oGame;
     _oActiveCardSet, _tData, _nSelectedRow = false, nil, nil;
     _pActiveCSV, _pActiveBackup, _sCSVOriginal = nil, nil, nil;
-    Log.Note("ProcSys: active game prepared.");
+    CFS.Log.Note("ProcSys: active game prepared.");
     captureWatchFiles();
 
     if (Forge) then
@@ -885,7 +884,7 @@ function ProcSys.CloseCardSet()
     if (_oActiveGame) then captureWatchFiles(); else ProcSys.Shutdown(); end
     require("Autocomplete").SetHeaders({});
     if (_oActiveGame) then require("Autocomplete").Flush(); end
-    Log.Note("Card set closed: no active card set.");
+    CFS.Log.Note("Card set closed: no active card set.");
 end
 
 --[[!

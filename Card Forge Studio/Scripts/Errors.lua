@@ -39,7 +39,7 @@ function Errors.report(vError, bRenderer)
     end
     _bReporting = true;
     local bLogged = false;
-    if (Log) then bLogged = pcall(Log.Error, sError); end
+    if (CFS and CFS.Log) then bLogged = pcall(CFS.Log.Error, sError); end
     if (not bLogged) then
         local hFile = io.open(pFile, "a");
         if (hFile) then hFile:write(sError.."\n"); hFile:close(); end

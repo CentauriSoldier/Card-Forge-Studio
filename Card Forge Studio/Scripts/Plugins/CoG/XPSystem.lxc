@@ -1,0 +1,625 @@
+--[[!
+    @fqxn CoG.XPSystem
+    @desc An experience tracker and leveling system. Every curve calculates the
+    XP cost of gaining one level. Rounded-up costs accumulate into total thresholds;
+    earned XP is cumulative and is not spent when gaining levels. Level zero starts
+    at zero XP. Levels cap at MaxLevel, while surplus XP is retained.
+!]]
+namespace CoG {
+    class XPSystem requires(LuaEx.Classes.Protean) {
+
+        --[[!
+            @fqxn CoG.XPSystem.Enums.TYPE
+            @pulsarlua table XPSystem.TYPE
+            @desc Dictates the mathematical mechanisms used to calculate experience
+            cost per level. Let B be level-one cost, P progression, L the destination
+            level, and S step size. Each cost is rounded up before accumulation.
+            <ul>
+                <li><b>LINEAR</b>: B + P * (L - 1)</li>
+                <li><b>LOGARITHMIC</b>: B + P * log(L), using the natural logarithm</li>
+                <li><b>EXPONENTIAL</b>: B * P^(L - 1), with P at least 1</li>
+                <li><b>QUADRATIC</b>: B + P * (L - 1)^2</li>
+                <li><b>CUBIC</b>: B + P * (L - 1)^3</li>
+                <li><b>STEP</b>: B + P * floor((L - 1) / S)</li>
+            </ul>
+        !]]
+        public enum TYPE within CoG.XPSystem {
+            LINEAR; LOGARITHMIC; EXPONENTIAL; QUADRATIC; CUBIC; STEP;
+        }
+
+        private static _tXPBindings = setmetatable({}, {__mode = "k"});
+        private static const placeholder = function() end;
+
+        private levelOneXP = 1;
+
+        private levelBounds = {};
+
+        private levelBoundsCount = 0;
+
+        private MaxLevel = 1;
+
+        public final getMaxLevel() {
+            return this.MaxLevel;
+        }
+
+        private onChange = {XPSystem.placeholder};
+
+        private IsCallbackActive = false;
+
+        private IsCallbackLocked = false;
+
+        private IsCallbackToggleLocked = false;
+
+        private Progression = 0;
+
+        public final getProgression() {
+            return this.Progression;
+        }
+
+        private StepSize = 2;
+
+        public final getStepSize() {
+            return this.StepSize;
+        }
+
+        private Type = "LINEAR";
+
+        protected Level = 0;
+
+        protected XPProtean = null;
+
+        --[[!
+        @fqxn CoG.XPSystem.Helpers.validateNumber
+        @desc Requires finite XP settings and enforces the requested minimum and integer contract.
+        !]]
+        private static validateNumber(nValue, nMinimum, bInteger) {
+            type.assert.number(nValue);
+            assert(nValue == nValue and nValue > -math.huge and nValue < math.huge,
+                   "XPSystem values must be finite.");
+            assert(nValue >= nMinimum, "XPSystem value is below its minimum.");
+            assert(not bInteger or nValue % 1 == 0, "XPSystem value must be an integer.");
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Helpers.calculateBounds
+        @desc Preserves the six curve formulas, per-level rounding and cumulative thresholds.
+        !]]
+        private static calculateBounds(eType, nLevelOneXP, nMaxLevel, nProgression, nStepSize) {
+            assert(lxe.isMember(eType, XPSystem.TYPE), "XPSystem type must be a declared TYPE member.");
+            XPSystem.validateNumber(nLevelOneXP, 1, false);
+            XPSystem.validateNumber(nMaxLevel, 1, true);
+            XPSystem.validateNumber(nProgression, eType == XPSystem.TYPE.EXPONENTIAL and 1 or 0, false);
+            XPSystem.validateNumber(nStepSize, 1, true);
+
+            local tBounds   = {[0] = 0};
+            local nTotal    = 0;
+            local eTypes    = XPSystem.TYPE;
+
+            for nLevel = 1, nMaxLevel do
+                local nOffset = nLevel - 1;
+                local nCost   = nLevelOneXP;
+
+                -- Offset zero guarantees every curve starts at the supplied level-one cost.
+                if (eType == eTypes.LINEAR) then
+                    nCost = nLevelOneXP + nProgression * nOffset;
+
+                elseif (eType == eTypes.LOGARITHMIC) then
+                    nCost = nLevelOneXP + nProgression * math.log(nLevel);
+
+                elseif (eType == eTypes.EXPONENTIAL) then
+                    nCost = nLevelOneXP * nProgression ^ nOffset;
+
+                elseif (eType == eTypes.QUADRATIC) then
+                    nCost = nLevelOneXP + nProgression * nOffset ^ 2;
+
+                elseif (eType == eTypes.CUBIC) then
+                    nCost = nLevelOneXP + nProgression * nOffset ^ 3;
+
+                elseif (eType == eTypes.STEP) then
+                    nCost = nLevelOneXP + nProgression * math.floor(nOffset / nStepSize);
+                end
+
+                -- Round each level's cost, then accumulate it. Never round the running formula.
+                nCost = math.ceil(nCost);
+                local nNextTotal = nTotal + nCost;
+                assert(nNextTotal < math.huge and nNextTotal > nTotal,
+                       "XPSystem thresholds overflow or cannot represent distinct levels.");
+
+                nTotal = nNextTotal;
+                tBounds[nLevel] = nTotal;
+            end
+
+            return tBounds;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Helpers.updateLevel
+        @desc Commits the level before notifying the user callback, using the existing binary search.
+        !]]
+        private updateLevel(bNotify) {
+            local nFinalXP  = this.XPProtean.getValue();
+            local nOldLevel = this.Level;
+            local nNewLevel = 0;
+
+            -- Binary search handles gaining or losing many levels in one XP change.
+            local nLow  = 1;
+            local nHigh = this.levelBoundsCount;
+
+            while (nLow <= nHigh) do
+                local nMiddle = math.floor((nLow + nHigh) / 2);
+
+                if (nFinalXP >= this.levelBounds[nMiddle]) then
+                    nNewLevel = nMiddle;
+                    nLow = nMiddle + 1;
+                else
+                    nHigh = nMiddle - 1;
+                end
+            end
+
+            -- Commit the level before calling user code, so callbacks see the new state.
+            this.Level = nNewLevel;
+
+            if (bNotify and nOldLevel ~= nNewLevel and this.IsCallbackActive) then
+                this.onChange[1](this, nOldLevel, nNewLevel, nFinalXP);
+            end
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Helpers.changeSetting
+        @desc Validates complete replacement settings before changing live bounds; skip-update defers level notification.
+        !]]
+        private changeSetting(sField, vValue, bSkipUpdate) {
+            assert(bSkipUpdate == nil or type(bSkipUpdate) == "boolean", "Skip-update flag must be boolean.");
+
+            local tValues = {
+                Type = XPSystem.TYPE[this.Type], levelOneXP = this.levelOneXP, MaxLevel = this.MaxLevel,
+                Progression = this.Progression, StepSize = this.StepSize,
+            };
+            tValues[sField] = vValue;
+
+            -- Validate and build the complete candidate before changing the live settings.
+            local tBounds = XPSystem.calculateBounds(tValues.Type, tValues.levelOneXP, tValues.MaxLevel,
+                                            tValues.Progression, tValues.StepSize);
+            this.bindXP();
+
+            this[sField]          = sField == "Type" and vValue.Name or vValue;
+            this.levelBounds     = tBounds;
+            this.levelBoundsCount = tValues.MaxLevel;
+
+            if not (bSkipUpdate) then
+                this.updateLevel(true);
+            end
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Helpers.copyXP
+        @desc Creates an independent, unlinked Protean using public values and limit
+            getters only. The new component starts without callbacks or callback locks.
+            Manual calculation retains the cached final value; automatic calculation
+            is re-enabled only after all modifiers and limiter settings are restored.
+        @param Protean oSource Source XP component; never mutated or notified.
+        @ret Protean oCopy Independent XP values, modifiers, limits and calculation mode.
+        !]]
+        private static copyXP(oSource) {
+            local oCopy = Protean(oSource.getValue(), 0, 0, 0, 0, 0, 0,
+                                  nil, nil, nil, true);
+
+            for _, nType in ipairs({Protean.VALUE_BASE, Protean.BASE_BONUS,
+                    Protean.BASE_PENALTY, Protean.MULTIPLICATIVE_BONUS,
+                    Protean.MULTIPLICATIVE_PENALTY, Protean.ADDATIVE_BONUS,
+                    Protean.ADDATIVE_PENALTY}) do
+                oCopy.setValue(nType, oSource.getValue(nType));
+            end
+
+            -- Set the upper bound first so a negative bound cannot clamp a new minimum.
+            oCopy.setValue(Protean.LIMIT_MAX, oSource.getValue(Protean.LIMIT_MAX));
+            oCopy.setValue(Protean.LIMIT_MIN, oSource.getValue(Protean.LIMIT_MIN));
+            oCopy.setLimitMin(oSource.isLimitMinEnabled());
+            oCopy.setLimitMax(oSource.isLimitMaxEnabled());
+
+            if (oSource.isAutoCalculated()) then
+                oCopy.setAutoCalculate(true);
+            end
+
+            return oCopy;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Helpers.bindXP
+        @desc Attaches a new internal notification function to this tracker. Fresh
+            components bind directly. Restored or externally replaced components are
+            copied through public APIs first, retaining values without inherited locks.
+            User callbacks are reset on restored ownership, as in the original class.
+        @param boolean|nil bFresh True only for a newly created, callback-free component.
+        !]]
+        private bindXP(bFresh) {
+            local oProtean = this.XPProtean;
+
+            if (XPSystem._tXPBindings[this] ~= oProtean) then
+                if (not bFresh) then
+                    oProtean = XPSystem.copyXP(oProtean);
+                    this.XPProtean = oProtean;
+                end
+
+                oProtean.setCallback(function()
+                    this.updateLevel(true);
+                end);
+                oProtean.lockCallback();
+                oProtean.lockCallbackToggle();
+                XPSystem._tXPBindings[this] = oProtean;
+                this.onChange[1] = XPSystem.placeholder;
+                this.IsCallbackActive = false;
+            end
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Metamethods.__clone
+        @desc Creates independent XP data and a fresh internal Protean notification
+            function. Retains the user's callback function and its activation/locks;
+            that callback receives the cloned XPSystem as its sender. Cloning emits
+            no callbacks. Subclasses must provide a concrete-class clone when needed.
+        !]]
+        public __clone() {
+            this.bindXP();
+            local oCopy = XPSystem(XPSystem.TYPE[this.Type], this.levelOneXP,
+                                   this.MaxLevel, this.Progression, this.StepSize);
+            oCopy.XPProtean = XPSystem.copyXP(this.XPProtean);
+            oCopy.bindXP(true);
+            oCopy.updateLevel(false);
+            oCopy.onChange[1] = this.onChange[1];
+            oCopy.IsCallbackActive = this.IsCallbackActive;
+            oCopy.IsCallbackLocked = this.IsCallbackLocked;
+            oCopy.IsCallbackToggleLocked = this.IsCallbackToggleLocked;
+            return oCopy;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.prepareSnapshot
+        @desc Uses LXC's normal save path. User callbacks are runtime registrations;
+            do not save their closures or change the live tracker.
+        !]]
+        private prepareSnapshot(tState) {
+            tState.pri.onChange = {};
+            tState.pri.IsCallbackActive = false;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.validateSnapshot
+        @desc Restores the user callback placeholder without invoking callbacks or
+            constructors. The first public operation needing XP reconnects its owned
+            Protean after LXC has finished restoring the entire graph.
+        !]]
+        private validateSnapshot(tState) {
+            assert(class.isa(tState.pro.XPProtean, Protean), "Invalid saved XP component.");
+            type.assert.table(tState.pri.onChange);
+            tState.pri.onChange = {XPSystem.placeholder};
+            tState.pri.IsCallbackActive = false;
+        }
+
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.XPSystem
+        @pulsarlua function XPSystem
+        @desc Creates a tracker. Level-one cost is at least 1; maximum level and step
+        size are positive integers. Progression is nonnegative, or at least 1 for
+        exponential curves. All numbers must be finite. Step size defaults to 2.
+        @param XPSystem.TYPE eType The curve.
+        @param number nLevelOneXP The cost to reach level one.
+        @param number nMaxLevel The maximum level.
+        @param number nProgression The curve's increment or exponential multiplier.
+        @param number|nil nStepSize The levels per step.
+        !]]
+        public XPSystem(eType, nLevelOneXP, nMaxLevel, nProgression, nStepSize) {
+            nStepSize = nStepSize == nil and 2 or nStepSize;
+
+            local tBounds = XPSystem.calculateBounds(eType, nLevelOneXP, nMaxLevel, nProgression, nStepSize);
+
+            this.Type             = eType.Name;
+            this.levelOneXP       = nLevelOneXP;
+            this.MaxLevel         = nMaxLevel;
+            this.Progression      = nProgression;
+            this.StepSize         = nStepSize;
+            this.levelBounds      = tBounds;
+            this.levelBoundsCount = nMaxLevel;
+
+            this.XPProtean = Protean(0, 0, 0, 0, 0, 0, 0, 0);
+            this.bindXP(true);
+        }
+
+        --[[!
+            @fqxn CoG.XPSystem.Methods.getXP
+            @pulsarlua function XPSystem.getXP
+            @desc Returns the owned XP Protean, or its selected numeric value. Reconnects tracking after restoration.
+            @param number|nil nType Protean value category; omission returns the component.
+            @ret Protean|number vValue XP component or selected value.
+        !]]
+        public getXP(nType) {
+            this.bindXP();
+            local oXP = this.XPProtean;
+
+            -- Omission exposes the owned component; a category delegates value validation to Protean.
+            return nType == nil and oXP or oXP.getValue(nType);
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.getLevel
+        @desc Returns the level implied by current final XP, notifying when the level changes.
+        !]]
+        public getLevel() {
+            this.bindXP();
+            this.updateLevel(true);
+            return this.Level;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.getLevelOneXP
+        @desc Returns the XP cost of reaching level one.
+        !]]
+        public getLevelOneXP() {
+            return this.levelOneXP;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.getType
+        @desc Returns the canonical curve enum member.
+        !]]
+        public getType() {
+            return XPSystem.TYPE[this.Type];
+        }
+
+        --[[!
+            @fqxn CoG.XPSystem.Methods.getOnChangeCallback
+            @desc Returns the current level-change callback, including the default placeholder.
+            @ret function fCallback Current callback.
+        !]]
+        public getOnChangeCallback() {
+            this.bindXP();
+            return this.onChange[1];
+        }
+
+        --[[!
+            @fqxn CoG.XPSystem.Methods.isCallbackLocked
+            @desc Reports whether replacement of the level-change callback is locked.
+            @ret boolean bLocked Callback replacement lock.
+        !]]
+        public final isCallbackLocked() {
+            return this.IsCallbackLocked;
+        }
+
+        --[[!
+            @fqxn CoG.XPSystem.Methods.isCallbackToggleLocked
+            @desc Reports whether callback activation changes are locked.
+            @ret boolean bLocked Callback activation lock.
+        !]]
+        public final isCallbackToggleLocked() {
+            return this.IsCallbackToggleLocked;
+        }
+
+        --[[!
+            @fqxn CoG.XPSystem.Methods.isCallbackActive
+            @desc Reports whether the level-change callback is active.
+            @ret boolean bActive Callback activation state.
+        !]]
+        public isCallbackActive() {
+            this.bindXP();
+            return this.IsCallbackActive;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.refresh
+        @pulsarlua function XPSystem.refresh
+        @desc Recalculates the level from current final XP, notifying on changes.
+        Use after deferred setting updates or manual Protean calculation.
+        @return XPSystem oSystem This object.
+        !]]
+        public refresh() {
+            this.bindXP();
+            this.updateLevel(true);
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.getXPToLevel
+        @pulsarlua function XPSystem.getXPToLevel
+        @desc Returns remaining XP for a level, clamped to zero if already reached.
+        Returns -1 for a level above MaxLevel. Level zero is valid.
+        @param number nLevel The nonnegative integer destination level.
+        @return number nXP Remaining XP, or -1 if unavailable.
+        !]]
+        public getXPToLevel(nLevel) {
+            XPSystem.validateNumber(nLevel, 0, true);
+            this.bindXP();
+            local nRet = -1;
+
+            if (nLevel <= this.levelBoundsCount) then
+                nRet = math.max(0, this.levelBounds[nLevel] - this.XPProtean.getValue());
+            end
+
+            return nRet;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.getXPToNextLevel
+        @pulsarlua function XPSystem.getXPToNextLevel
+        @desc Returns remaining XP for the next level, or -1 at MaxLevel.
+        @return number nXP Remaining XP, or -1 when there is no next level.
+        !]]
+        public getXPToNextLevel() {
+            local nLevel = this.getLevel();
+            return this.getXPToLevel(nLevel + 1);
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.getXPRequired
+        @pulsarlua function XPSystem.getXPRequired
+        @desc Returns the cumulative XP threshold for a nonnegative integer level.
+        Returns -1 above MaxLevel; level zero requires zero XP.
+        @param number nLevel The destination level.
+        @return number nXP The total threshold, or -1 if unavailable.
+        !]]
+        public getXPRequired(nLevel) {
+            XPSystem.validateNumber(nLevel, 0, true);
+            local nRet = -1;
+
+            if (nLevel <= this.levelBoundsCount) then
+                nRet = this.levelBounds[nLevel];
+            end
+
+            return nRet;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.lockCallback
+        @desc Permanently locks replacement of the user level-change callback.
+        !]]
+        public lockCallback() {
+            this.bindXP();
+            this.IsCallbackLocked = true;
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.lockCallbackToggle
+        @desc Permanently locks activation changes for the user callback.
+        !]]
+        public lockCallbackToggle() {
+            this.bindXP();
+            this.IsCallbackToggleLocked = true;
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.setOnChangeCallback
+        @desc Installs or clears the user callback while preserving activation and lock rules.
+        !]]
+        public setOnChangeCallback(fCallback, bDoNotSetActive) {
+            this.bindXP();
+
+            assert(not this.IsCallbackLocked, "XPSystem callback is locked.");
+            assert(fCallback == nil or rawtype(fCallback) == "function", "Callback must be a function or nil.");
+            assert(bDoNotSetActive == nil or type(bDoNotSetActive) == "boolean", "Callback activation flag must be boolean.");
+
+            local bActive = rawtype(fCallback) == "function" and bDoNotSetActive ~= true;
+            assert(not this.IsCallbackToggleLocked or bActive == this.IsCallbackActive,
+                   "XPSystem callback toggling is locked.");
+
+            this.onChange[1]         = fCallback or XPSystem.placeholder;
+            this.IsCallbackActive = bActive;
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.setCallbackActive
+        @desc Changes callback activation under the existing toggle lock.
+        !]]
+        public setCallbackActive(bFlag) {
+            this.bindXP();
+
+            assert(not this.IsCallbackToggleLocked, "XPSystem callback toggling is locked.");
+            assert(bFlag == nil or type(bFlag) == "boolean", "Callback activation must be boolean.");
+
+            this.IsCallbackActive = bFlag == true and this.onChange[1] ~= XPSystem.placeholder;
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.setLevel
+        @pulsarlua function XPSystem.setLevel
+        @desc Sets base XP so the final Protean value equals the requested level's
+        threshold, accounting for modifiers. Rejects zero multipliers or active limits
+        that prevent the requested value. Updates XP and level before notification.
+        @param number nLevel The desired level, from zero through MaxLevel.
+        @return XPSystem oSystem This object.
+        !]]
+        public setLevel(nLevel) {
+            XPSystem.validateNumber(nLevel, 0, true);
+            assert(nLevel <= this.MaxLevel, "Level exceeds MaxLevel.");
+            local oXP = this.getXP();
+            local nTarget = this.levelBounds[nLevel];
+            local nMultiplier = 1 + oXP.getValue(Protean.MULTIPLICATIVE_BONUS) - oXP.getValue(Protean.MULTIPLICATIVE_PENALTY);
+            assert(nMultiplier ~= 0, "Cannot set level with a zero XP multiplier.");
+            local nBase = (nTarget - oXP.getValue(Protean.ADDATIVE_BONUS) + oXP.getValue(Protean.ADDATIVE_PENALTY)) / nMultiplier
+                          - oXP.getValue(Protean.BASE_BONUS) + oXP.getValue(Protean.BASE_PENALTY);
+            XPSystem.validateNumber(nBase, -math.huge, false);
+
+            -- Validate with a callback-free public copy before touching live XP or callbacks.
+            local oProbe = XPSystem.copyXP(oXP);
+            oProbe.setValue(nBase);
+            oProbe.calculateFinalValue();
+            assert(oProbe.getValue() == nTarget, "XP limits prevent setting the requested level.");
+
+            oXP.setValue(nBase);
+            oXP.calculateFinalValue();
+            this.updateLevel(true);
+            return this;
+        }
+
+        -- Setting methods build fresh bounds atomically. Skip-update defers only the
+        -- level/callback refresh; the next XP change, getLevel(), or refresh() updates it.
+        public setMaxLevel(nValue, bSkipUpdate) {
+            return this.changeSetting("MaxLevel", nValue, bSkipUpdate);
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.setLevelOneXP
+        @desc Validates and replaces the first-level XP cost.
+        !]]
+        public setLevelOneXP(nValue, bSkipUpdate) {
+            return this.changeSetting("levelOneXP", nValue, bSkipUpdate);
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.setProgression
+        @desc Validates and replaces curve progression.
+        !]]
+        public setProgression(nValue, bSkipUpdate) {
+            return this.changeSetting("Progression", nValue, bSkipUpdate);
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.setStepInterval
+        @desc Validates and replaces the number of levels per step.
+        !]]
+        public setStepInterval(nValue, bSkipUpdate) {
+            return this.changeSetting("StepSize", nValue, bSkipUpdate);
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.setStepSize
+        @desc Delegates to the existing step-interval setter.
+        !]]
+        public setStepSize(nValue, bSkipUpdate) {
+            return this.setStepInterval(nValue, bSkipUpdate);
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.setType
+        @desc Validates and replaces the curve type.
+        !]]
+        public setType(eType, bSkipUpdate) {
+            return this.changeSetting("Type", eType, bSkipUpdate);
+        }
+
+        --[[!
+        @fqxn CoG.XPSystem.Methods.eachLevelBound
+        @desc Iterates an immutable view of the current threshold table, independent of later setting changes.
+        !]]
+        public eachLevelBound() {
+            local nIndex  = 0;
+            local nMax    = this.levelBoundsCount;
+            -- Retain the threshold snapshot so configuration changes cannot mix two
+            -- different curves midway through this iterator.
+            local tBounds = this.levelBounds;
+
+            return function()
+                nIndex = nIndex + 1;
+
+                if (nIndex <= nMax) then
+                    return nIndex, tBounds[nIndex];
+                end
+            end;
+        }
+    }
+}

@@ -1,0 +1,390 @@
+--[[!
+    @fqxn CoG.ItemStashSystem
+    @desc A hierarchy of ItemSystem inventory tabs, initially one tab. Default new-tab capacity is math.huge. Stash-wide exclusivity and outer ownership apply across tabs; releasing tabs requires them to be empty and at least one tab must remain.
+!]]
+namespace CoG {
+    class ItemStashSystem {
+        private static _tRules = require("cog.Objects.ItemSystem.ItemRules");
+        private state = {};
+        private maxItemsPerTab = math.huge;
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.__len
+        @desc Returns the collection count used by the length operator; see the delegated count method.
+        !]]
+        public operator __len() {
+            return this.getTabCount();
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.__pairs
+        @desc Iterates a copied membership list through the collection's public iterator.
+        !]]
+        public operator __pairs() {
+            return this.eachTab();
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.__clone
+        @desc Requires callers to choose how concrete items are cloned before populating another container.
+        !]]
+        public operator clone() {
+            error("Clone concrete items explicitly, then construct a new ItemStashSystem.");
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.validateSnapshot
+        @desc Checks saved fields during native graph restoration.
+        !]]
+        private validateSnapshot(tState) {
+            ItemStashSystem._tRules.validateSnapshot(tState.pri.state, "stash");
+            ItemStashSystem._tRules.integer(tState.pri.maxItemsPerTab, 0, true);
+            this.restoreRuntime();
+            ItemStashSystem._tRules.validateRestored(this);
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.prepareSnapshot
+        @desc Prepares a copied class snapshot without changing the live inventory.
+        !]]
+        private prepareSnapshot(tState) {
+            -- Native projections are shallow; copy the state record before omitting links.
+            local tCopy = {};
+            for k, v in pairs(tState.pri.state) do tCopy[k] = v; end
+            ItemStashSystem._tRules.prepareSnapshot(tCopy);
+            tState.pri.state = tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.restoreRuntime
+        @desc Internal reconnection after native deserialization; retains saved
+        membership and restores runtime lookups without permission callbacks.
+        !]]
+        public final restoreRuntime(tToken) {
+            ItemStashSystem._tRules.restore(this, this.state, tToken);
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.ItemStashSystem
+        @desc Creates a stash with at least one inventory tab and a default capacity for newly created tabs.
+        !]]
+        public ItemStashSystem(oOwner, nTabs, nMaxItemsPerTab) {
+            nTabs = nTabs == nil and 1 or nTabs;
+            nMaxItemsPerTab = nMaxItemsPerTab == nil and math.huge or nMaxItemsPerTab;
+            ItemStashSystem._tRules.integer(nTabs, 1);
+            ItemStashSystem._tRules.integer(nMaxItemsPerTab, 0, true);
+            this.state = ItemStashSystem._tRules.create(this, "stash", math.huge, oOwner);
+            this.maxItemsPerTab = nMaxItemsPerTab;
+
+            -- Create each tab through the normal adoption path so parent links and shared rules agree.
+            for nIndex = 1, nTabs do
+                this.addTab();
+            end
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.setOwner
+        @desc Reconnects the caller-owned owner after loading. The owner is not saved.
+        @param object|null oOwner A class instance, or null to clear the owner.
+        @ret ItemStashSystem this This container.
+        !]]
+        public setOwner(oOwner) {
+            ItemStashSystem._tRules.setOwner(this, oOwner);
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.getOwner
+        @desc Resolves the owner through the container hierarchy; an outer owner takes precedence.
+        !]]
+        public getOwner() {
+            return ItemStashSystem._tRules.owner(this);
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.getTabCount
+        @desc Returns the number of child inventory tabs.
+        !]]
+        public getTabCount() {
+            return #ItemStashSystem._tRules.state(this).children;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.getItemCount
+        @desc Counts individual items across every tab.
+        !]]
+        public getItemCount() {
+            return #ItemStashSystem._tRules.items(this);
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.getTab
+        @desc Returns the tab at a positive one-based index, or nil when absent.
+        !]]
+        public getTab(nTab) {
+            ItemStashSystem._tRules.integer(nTab, 1);
+
+            return ItemStashSystem._tRules.state(this).children[nTab];
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.tabExistsAt
+        @desc Reports whether a tab exists at the requested positive index.
+        !]]
+        public tabExistsAt(nTab) {
+            return this.getTab(nTab) ~= nil;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.eachTab
+        @desc Iterates a copy of the ordered tab references so callers cannot edit the live child list.
+        !]]
+        public eachTab() {
+            local tOutput = {};
+
+            for nIndex, oTab in ipairs(ItemStashSystem._tRules.state(this).children) do
+                tOutput[nIndex] = oTab;
+            end
+
+            return ipairs(tOutput);
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.eachItem
+        @desc Iterates a copied list of item references, keeping callers away from the live membership array.
+        !]]
+        public eachItem() {
+            return ipairs(ItemStashSystem._tRules.items(this));
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.addTab
+        @desc Creates a tab when omitted, or adopts the supplied independent inventory; returns this, success,
+        adopted tab and reason.
+        !]]
+        public addTab(oTab) {
+
+            -- Omitted tabs receive this stash's configured default capacity and current owner.
+            if (oTab == nil) then
+                oTab = CoG.ItemSystem(this.maxItemsPerTab, nil, this.getOwner());
+            end
+
+            assert(class.isinstance(oTab) and class.isa(oTab, CoG.ItemSystem), "Expected an ItemSystem tab.");
+            local bOK, sReason = ItemStashSystem._tRules.adopt(this, oTab);
+
+            return this, bOK, bOK and oTab or nil, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.removeTab
+        @desc Releases an empty tab while retaining at least one tab. Returns this, success, the removed tab and an
+        optional reason.
+        !]]
+        public removeTab(nTab) {
+            ItemStashSystem._tRules.integer(nTab, 1);
+
+            -- Retaining one tab keeps the stash usable even after the caller removes empty tabs.
+            if (this.getTabCount() <= 1) then
+                return this, false, nil, "A stash must retain at least one tab.";
+            end
+
+            local bOK, vResult = ItemStashSystem._tRules.release(this, nTab);
+
+            return this, bOK, bOK and vResult or nil, not bOK and vResult or nil;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.containsItem
+        @desc Searches tabs for the exact item instance; returns success, tab index and item index, or false and
+        two -1 values.
+        !]]
+        public containsItem(oItem) {
+            ItemStashSystem._tRules.item(oItem);
+
+            for nTab, oTab in this.eachTab() do
+                local bFound, nItem = oTab.containsItem(oItem);
+
+                if (bFound) then
+                    return true, nTab, nItem;
+                end
+            end
+
+            return false, -1, -1;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.addItem
+        @desc Uses a selected tab, or tries tabs in order until one accepts the item under stash-wide rules.
+        !]]
+        public addItem(oItem, nTab) {
+            ItemStashSystem._tRules.item(oItem);
+
+            -- Use an explicitly selected tab directly; otherwise try each tab without displacing items.
+            if (nTab ~= nil) then
+                local oTab = this.getTab(nTab);
+
+                if (not oTab) then
+                    return this, false, nil, "Tab does not exist.";
+                end
+
+                local _, bOK, _, sReason = oTab.addItem(oItem);
+
+                return this, bOK, nil, sReason;
+            end
+
+            local sReason = "No tab has room.";
+
+            for _, oTab in this.eachTab() do
+                local _, bOK, _, sFailure = oTab.addItem(oItem);
+
+                if (bOK) then
+                    return this, true, nil, nil;
+                end
+
+                sReason = sFailure;
+            end
+
+            return this, false, nil, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.removeItem
+        @desc Locates the owning tab and delegates removal; missing items return a failure without changing
+        contents.
+        !]]
+        public removeItem(oItem, oActor) {
+            local bFound, nTab = this.containsItem(oItem);
+
+            if (not bFound) then
+                return this, false, nil, "Item was not found.";
+            end
+
+            local _, bOK, oRemoved, sReason = this.getTab(nTab).removeItem(oItem, oActor);
+
+            return this, bOK, oRemoved, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.transferItemTo
+        @desc Finds the source tab and, for a stash destination, selects its requested target tab before
+        transferring.
+        !]]
+        public transferItemTo(oDestination, oItem, nTab, bReplace) {
+            local bFound, nSourceTab = this.containsItem(oItem);
+
+            if (not bFound) then
+                return this, false, nil, "Item was not found.";
+            end
+
+            -- Resolve a stash destination to a leaf inventory before invoking the shared transfer rules.
+            local oTarget = oDestination;
+
+            if (class.isinstance(oDestination) and class.isa(oDestination, CoG.ItemStashSystem)) then
+                oTarget = oDestination.getTab(nTab);
+            end
+
+            local _, bOK, oRemoved, sReason = this.getTab(nSourceTab).transferItemTo(oTarget, oItem, bReplace);
+
+            return this, bOK, oRemoved, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.clear
+        @desc Removes items throughout this subtree in one transaction; returns this, success, removed items or
+        a failure reason.
+        !]]
+        public clear() {
+            local bOK, vResult = ItemStashSystem._tRules.clear(this);
+
+            return this, bOK, bOK and vResult or nil, not bOK and vResult or nil;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.consumeItem
+        @desc Checks the actor's consumption permission and removes the item. Gameplay effects remain the
+        caller's responsibility.
+        !]]
+        public consumeItem(oItem, oActor) {
+            local bFound, nTab = this.containsItem(oItem);
+
+            if (not bFound) then
+                return this, false, nil, "Item was not found.";
+            end
+
+            local _, bOK, oRemoved, sReason = this.getTab(nTab).consumeItem(oItem, oActor);
+
+            return this, bOK, oRemoved, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.tradeItemTo
+        @desc Checks both trading permissions before moving the item atomically; pricing and payment belong to
+        the caller.
+        !]]
+        public tradeItemTo(oDestination, oItem, oTrader, oRecipient, nTab) {
+            local bFound, nSourceTab = this.containsItem(oItem);
+
+            if (not bFound) then
+                return this, false, nil, "Item was not found.";
+            end
+
+            -- Resolve a stash destination to a leaf inventory before invoking the shared transfer rules.
+            local oTarget = oDestination;
+
+            if (class.isinstance(oDestination) and class.isa(oDestination, CoG.ItemStashSystem)) then
+                oTarget = oDestination.getTab(nTab);
+            end
+
+            local _, bOK, oRemoved, sReason = this.getTab(nSourceTab).tradeItemTo(oTarget, oItem, oTrader, oRecipient);
+
+            return this, bOK, oRemoved, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.isEnabled
+        @desc Returns this container's own enabled flag; mutations also check its ancestors.
+        !]]
+        public isEnabled() {
+            return ItemStashSystem._tRules.state(this).enabled;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.isLocked
+        @desc Returns this container's own lock flag; mutations also check its ancestors.
+        !]]
+        public isLocked() {
+            return ItemStashSystem._tRules.state(this).locked;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.setEnabled
+        @desc Sets the local enabled flag and returns this container. Ancestor restrictions still apply.
+        !]]
+        public setEnabled(bValue) {
+            ItemStashSystem._tRules.setFlag(this, "enabled", bValue);
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.setLocked
+        @desc Sets the local lock flag and returns this container. Locked ancestors still prevent edits.
+        !]]
+        public setLocked(bValue) {
+            ItemStashSystem._tRules.setFlag(this, "locked", bValue);
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.ItemStashSystem.Methods.validate
+        @desc Previews validation of the current hierarchy and rolls back projected state; returns success and
+        an optional reason.
+        !]]
+        public validate() {
+            return ItemStashSystem._tRules.check(this);
+        }
+
+    }
+}

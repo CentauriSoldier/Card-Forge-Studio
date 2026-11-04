@@ -17,7 +17,7 @@
 -- Draft style editing. Only Save writes the active game's style file.
 local wx = require("wx");
 local INI = require("Plugins.INI");
-local FontStyle = require("FontStyle");
+local FontStyle = CFS.FontStyle;
 local WindowState = require("Windows.WindowState");
 local StyleEditor = {};
 WindowState.register("StyleEditor", {savePosition = true, saveSize = true, saveVisible = false,});

@@ -1,0 +1,325 @@
+--[[!
+@fqxn CoG.RNG
+@pulsarlua class RNG
+@desc Static random utilities using the shared math.random stream. Seed that stream
+    with math.randomseed. Defaults apply only to omitted/nil inputs; supplied values
+    retain their existing finite-number, integer and range checks. All methods use
+    dot calls. The private constructor prevents direct instances.
+!]]
+namespace CoG {
+    class RNG {
+        -- Keep the original random function reference, as the Lua module did.
+        private static const random = math.random;
+        private static const _nDefaultDieSides   = 6;
+        private static const _n100               = 100;
+        private static const _nDefaultCheckSides = 20;
+        private static const _nDefaultWeight     = 0.5;
+
+        --[[!
+        @fqxn CoG.RNG.Helpers.validateFinite
+        @pulsarlua function RNG.validateFinite
+        @desc Requires a finite number and identifies the invalid parameter in its error.
+        !]]
+        private static validateFinite(nValue, sName) {
+            type.assert.number(nValue);
+            assert(nValue == nValue and nValue > -math.huge and nValue < math.huge,
+                   sName.." must be finite.");
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Helpers.validateInteger
+        @pulsarlua function RNG.validateInteger
+        @desc Applies an omitted-value default, then checks integer range and minimum.
+        !]]
+        private static validateInteger(nValue, nDefault, nMinimum, sName) {
+            nValue = nValue == nil and nDefault or nValue;
+            RNG.validateFinite(nValue, sName);
+            assert(nValue % 1 == 0, sName.." must be an integer.");
+            assert(nMinimum == nil or nValue >= nMinimum, sName.." is below its minimum.");
+            assert(math.maxinteger == nil or (nValue <= math.maxinteger and nValue >= math.mininteger),
+                   sName.." is outside the supported integer range.");
+
+            return nValue;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Helpers.weightedSuccess
+        @pulsarlua function RNG.weightedSuccess
+        @desc Draws a boolean with the supplied probability in [0,1], defaulting to 0.5.
+        !]]
+        private static weightedSuccess(vWeight) {
+            local nWeight = vWeight == nil and RNG._nDefaultWeight or vWeight;
+            RNG.validateFinite(nWeight, "Weight");
+            assert(nWeight >= 0 and nWeight <= 1, "Weight must be between 0 and 1 (both inclusive).");
+
+            -- Draws are in [0, 1). Strict comparison makes zero weight always fail,
+            -- including when the draw itself is exactly zero.
+            return RNG.random() < nWeight;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.binary
+        @pulsarlua function RNG.binary
+        @desc Returns 0 or 1; weight is the probability of 1. Defaults to 0.5.
+        !]]
+        public static binary(vWeight) {
+            local nResult = RNG.weightedSuccess(vWeight) and 1 or 0;
+
+            return nResult;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.bipolar
+        @pulsarlua function RNG.bipolar
+        @desc Returns -1 or 1; weight is the probability of 1. Defaults to 0.5.
+        !]]
+        public static bipolar(vWeight) {
+            local nResult = RNG.weightedSuccess(vWeight) and 1 or -1;
+
+            return nResult;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.boolean
+        @pulsarlua function RNG.boolean
+        @desc Returns a boolean; weight is the probability of true. Defaults to 0.5.
+        !]]
+        public static boolean(vWeight) {
+            return RNG.weightedSuccess(vWeight);
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.choice
+        @pulsarlua function RNG.choice
+        @desc Returns one of two supplied values; weight is the probability of the second.
+        !]]
+        public static choice(vItem1, vItem2, vWeight) {
+            assert(vItem1 ~= nil and vItem2 ~= nil, "Choice items cannot be nil.");
+            local vRet = vItem1;
+
+            -- Use an explicit branch: false is a valid choice, not a fallback trigger.
+
+            if (RNG.weightedSuccess(vWeight)) then
+                vRet = vItem2;
+            end
+
+            return vRet;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.multiChoice
+        @pulsarlua function RNG.multiChoice
+        @desc Uniformly selects among one or more non-nil arguments. Empty input or any nil position is rejected.
+        !]]
+        public static multiChoice(...) {
+            local nItems = select("#", ...);
+            assert(nItems > 0, "multiChoice requires at least one item.");
+
+            -- select counts nil arguments too, so holes cannot silently skew selection.
+
+            for nIndex = 1, nItems do
+                assert(select(nIndex, ...) ~= nil, "multiChoice items cannot be nil.");
+            end
+
+            local nIndex = RNG.random(1, nItems);
+            local vRet = select(nIndex, ...);
+
+            return vRet;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.percent
+        @pulsarlua function RNG.percent
+        @desc Returns an integer from 1 through 100; true returns that value divided by 100.
+        !]]
+        public static percent(bFloat) {
+            assert(bFloat == nil or type(bFloat) == "boolean", "Float flag must be boolean.");
+            local nResult = RNG.random(1, RNG._n100);
+
+            if (bFloat) then
+                nResult = nResult / RNG._n100;
+            end
+
+            return nResult;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.pick
+        @pulsarlua function RNG.pick
+        @desc Selects numeric-keyed values without changing the source. Omitted count returns one value; a count returns a list. Repeats default to false.
+        !]]
+        public static pick(tInput, nPicks, bAllowRepeats) {
+            type.assert.table(tInput);
+            assert(bAllowRepeats == nil or type(bAllowRepeats) == "boolean", "Repeat flag must be boolean.");
+            local bMultiple = nPicks ~= nil;
+
+            if (bMultiple) then
+                nPicks = RNG.validateInteger(nPicks, 1, 0, "Pick count");
+            end
+
+            local tKeys = {};
+
+            for vKey in pairs(tInput) do
+
+                if (type(vKey) == "number") then
+                    tKeys[#tKeys + 1] = vKey;
+                end
+
+            end
+
+            -- Stable key order makes seeded picks reproducible even for sparse lists.
+            table.sort(tKeys);
+            local vRet;
+
+            if (bMultiple) then
+                assert(nPicks == 0 or #tKeys > 0, "Cannot pick from an empty numeric list.");
+                assert(bAllowRepeats or nPicks <= #tKeys, "Pick count exceeds entries without repeats.");
+                vRet = {};
+
+                for nPick = 1, nPicks do
+                    local nIndex = RNG.random(1, #tKeys);
+                    vRet[nPick] = tInput[tKeys[nIndex]];
+
+                    -- Remove only the copied key. Never mutate the caller's source list.
+
+                    if not (bAllowRepeats) then
+                        table.remove(tKeys, nIndex);
+                    end
+
+                end
+
+            elseif (#tKeys > 0) then
+                vRet = tInput[tKeys[RNG.random(1, #tKeys)]];
+            end
+
+            return vRet;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.randomx
+        @pulsarlua function RNG.randomx
+        @desc Returns an integer from 1 through nMax (1..10), using geometric weights 1,w,w^2. Weight defaults to 0.5 and must lie in [0.01,1].
+        !]]
+        public static randomx(nMax, vWeight) {
+            nMax = RNG.validateInteger(nMax, 1, 1, "Maximum");
+            assert(nMax <= 10, "randomx maximum must be between 1 and 10.");
+            local nWeight = vWeight == nil and RNG._nDefaultWeight or vWeight;
+            RNG.validateFinite(nWeight, "Weight");
+            assert(nWeight >= 0.01 and nWeight <= 1, "randomx weight must be between 0.01 and 1.");
+
+            -- Geometric weights 1, w, w^2, ... form a truncated distribution.
+            -- Weight 1 makes all entries equally likely; smaller weights favor lows.
+            local nSum = 0;
+            local nTerm = 1;
+
+            for nIndex = 1, nMax do
+                nSum = nSum + nTerm;
+                nTerm = nTerm * nWeight;
+            end
+
+            local nDraw = RNG.random() * nSum;
+            local nAcc = 0;
+            local nResult = nMax;
+            nTerm = 1;
+
+            for nIndex = 1, nMax do
+                nAcc = nAcc + nTerm;
+
+                if (nDraw < nAcc) then
+                    nResult = nIndex;
+                    break;
+                end
+
+                nTerm = nTerm * nWeight;
+            end
+
+            -- The initialized result covers any final floating-point rounding gap.
+            return nResult;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.rollCheck
+        @pulsarlua function RNG.rollCheck
+        @desc Rolls a die and returns success (roll >= threshold), roll, and roll minus threshold. Defaults are 20 sides and threshold 10.
+        !]]
+        public static rollCheck(nSides, nCheck) {
+            nSides = RNG.validateInteger(nSides, RNG._nDefaultCheckSides, 1, "Die sides");
+            nCheck = RNG.validateInteger(nCheck, RNG._nDefaultCheckSides / 2, nil, "Check threshold");
+
+            local nRoll = RNG.random(1, nSides);
+            local bSuccess = nRoll >= nCheck;
+
+            return bSuccess, nRoll, nRoll - nCheck;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.rollDice
+        @pulsarlua function RNG.rollDice
+        @desc Returns the best complete dice sum across attempts. Defaults are 6 sides, one die and one attempt; all counts must be positive integers.
+        !]]
+        public static rollDice(nSides, nDice, nAttempts) {
+            nSides = RNG.validateInteger(nSides, RNG._nDefaultDieSides, 1, "Die sides");
+            nDice = RNG.validateInteger(nDice, 1, 1, "Dice count");
+            nAttempts = RNG.validateInteger(nAttempts, 1, 1, "Attempt count");
+
+            assert(math.maxinteger == nil or nDice <= math.floor(math.maxinteger / nSides),
+                   "Maximum dice total exceeds the integer range.");
+            local nGrandTotal = 0;
+
+            -- Each attempt rolls a fresh complete set of dice; keep its best total.
+            -- Every random draw contributes a die result, with no discarded draws.
+
+            for nAttempt = 1, nAttempts do
+                local nTotal = 0;
+
+                for nDie = 1, nDice do
+                    local nRoll = RNG.random(1, nSides);
+                    assert(math.maxinteger == nil or nTotal <= math.maxinteger - nRoll,
+                           "Dice total exceeds the integer range.");
+                    nTotal = nTotal + nRoll;
+                end
+
+                nGrandTotal = math.max(nGrandTotal, nTotal);
+            end
+
+            return nGrandTotal;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.rollPercentage
+        @pulsarlua function RNG.rollPercentage
+        @desc Returns success, lowest roll in (0,100], and chance minus roll. Stops on success. Defaults are 50 percent and one attempt; fractional chances are retained.
+        !]]
+        public static rollPercentage(nChance, nAttempts) {
+            nChance = nChance == nil and 50 or nChance;
+            RNG.validateFinite(nChance, "Chance");
+            assert(nChance >= 0 and nChance <= RNG._n100, "Chance must be between 0 and 100.");
+            nAttempts = RNG.validateInteger(nAttempts, 1, 1, "Attempt count");
+
+            local nRoll = RNG._n100;
+            local bSuccess = false;
+
+            for nAttempt = 1, nAttempts do
+                -- Draw in (0, 100]: zero chance cannot succeed, and fractional
+                -- chances retain their supplied probability instead of rounding up.
+                local nNewRoll = (1 - RNG.random()) * RNG._n100;
+                nRoll = math.min(nRoll, nNewRoll);
+                bSuccess = nRoll <= nChance;
+
+                if (bSuccess) then
+                    break;
+                end
+
+            end
+
+            return bSuccess, nRoll, nChance - nRoll;
+        }
+
+        --[[!
+        @fqxn CoG.RNG.Methods.RNG
+        @desc Keeps this utility class non-instantiable, matching the original API.
+        !]]
+        private RNG() {
+        }
+    }
+}

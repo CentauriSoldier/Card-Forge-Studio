@@ -1,50 +1,12 @@
----------🇩‌🇴‌ 🇳‌🇴‌🇹‌ 🇲‌🇴‌🇩‌🇮‌🇫‌🇾‌ 🇹‌🇭‌🇮‌🇸‌ 🇧‌🇱‌🇴‌🇨‌🇰---------
--- require caches this module; the guard also protects explicit repeated execution.
-if (_G.LUAEX_INIT) then
-    return;
-end
-
-local _nClassSystem         = 1;
-local _nBasicClasses        = 2;
-local _nComponentClasses    = 3;
-local _nGeometryClasses     = 5;
-local _nUtilClasses         = 4;
-local _nCoGClasses          = 6;
-
-local _tClassRequirements   = {
-    [_nClassSystem]       = {},
-    [_nBasicClasses]      = {_nClassSystem},
-    [_nComponentClasses]  = {_nClassSystem, _nBasicClasses},
-    [_nGeometryClasses]   = {_nClassSystem, _nBasicClasses, _nComponentClasses},
-    [_nUtilClasses]       = {_nClassSystem, _nBasicClasses, _nComponentClasses},
-    [_nCoGClasses]        = {_nClassSystem, _nBasicClasses, _nComponentClasses, _nGeometryClasses},
-};
----------🇩‌🇴‌ 🇳‌🇴‌🇹‌ 🇲‌🇴‌🇩‌🇮‌🇫‌🇾‌ 🇹‌🇭‌🇮‌🇸‌ 🇧‌🇱‌🇴‌🇨‌🇰---------
-
-
-
-
-
-
---🆂🆃🅰🆁🆃 🆄🆂🅴🆁 🆅🅰🆁🅸🅰🅱🅻🅴🆂-----------------------------------------------
-
---[[🅲🅻🅰🆂🆂 🅻🅾🅰🅳 🆅🅰🅻🆄🅴🆂
-🅽🅾🆃🅴: setting a Class Load Value
-        to true will cause its required
-        _tClassRequirements to be loaded
-        as well.]]
-local _tClassLoadValues = {
-    [_nClassSystem]         = true,  --should LuaEx load the class system?
-    [_nBasicClasses]        = true,  --load basic classes (set, queue, stack, dox, etc.)?
-    [_nComponentClasses]    = true,  --component class (potentiometer, protean, etc.)?
-    [_nGeometryClasses]     = true,  --geometry classes (shape, circle, polygon, etc.)?
-    [_nUtilClasses]         = true,  --other things like Dox, Ini, etc.
-    [_nCoGClasses]          = true,  --(Code of Gaming) game system classes
-};
-
--- Project modules are loaded explicitly; initialization does not scan the filesystem.
-
---🅴🅽🅳 🆄🆂🅴🆁 🆅🅰🆁🅸🅰🅱🅻🅴🆂---------------------------------------------------
+--[[
+     ██████╗ ██████╗ ████████╗██╗ ██████╗ ███╗   ██╗███████╗
+    ██╔═══██╗██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║██╔════╝
+    ██║   ██║██████╔╝   ██║   ██║██║   ██║██╔██╗ ██║███████╗
+    ██║   ██║██╔═══╝    ██║   ██║██║   ██║██║╚██╗██║╚════██║
+    ╚██████╔╝██║        ██║   ██║╚██████╔╝██║ ╚████║███████║
+     ╚═════╝ ╚═╝        ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
+]]
+-- FRAMEWORK INITIALIZATION
 
 --[[!
 @fqxn LuaEx
@@ -52,7 +14,7 @@ local _tClassLoadValues = {
 <div class="container py-4">
   <div class="text-center">
     <img src="https://raw.githubusercontent.com/CentauriSoldier/LuaEx/main/logo.png" alt="LuaEx Logo" class="img-fluid mb-4" style="max-height: 150px;">
-    <p class="lead">A powerful, lightweight extension of Lua 5.3+</p>
+    <p class="lead">A lightweight extension of Lua for Lua 5.4+</p>
   </div>
 
   <div class="my-5">
@@ -60,8 +22,6 @@ local _tClassLoadValues = {
     <ul class="list-group">
       <li class="list-group-item">✅ Drop-in global environment initializer</li>
       <li class="list-group-item">✅ Class system with full OOP: inheritance, encapsulation, polymorphism</li>
-      <li class="list-group-item">✅ Dox documentation generator</li>
-      <li class="list-group-item">✅ CoG game framework</li>
       <li class="list-group-item">✅ Event system</li>
       <li class="list-group-item">✅ Ships with basic classes (<em>E.g., Set, Stack, Queue, SortedDictionary, etc.</em>)</li>
       <li class="list-group-item">✅ Strict naming, coding and commenting conventions for clarity and consistency</li>
@@ -80,8 +40,8 @@ local _tClassLoadValues = {
     <ul>
       <li>Static initializers and constructors</li>
       <li>Final classes and final methods</li>
-      <li>Optional interface declarations</li>
-      <li>Auto-accessor properties via <code>__AUTO</code> directive</li>
+      <li>Scoped LXC class declarations discovered from .lxc files</li>
+      <li>Automatic and custom property accessors</li>
       <li>Support for encapsulation (private/protected/public)</li>
     </ul>
   </div>
@@ -131,8 +91,9 @@ local _tClassLoadValues = {
   <div class="my-5">
     <h3 class="mb-3">Simplicity & Compatibility</h3>
     <ul>
-      <li>Designed for Lua 5.3</li>
-      <li>Backwards-compatible with Lua 5.1 (where possible)</li>
+      <li>LuaEx supports Lua 5.4 and later (5.4+); Lua 5.3 and earlier are not supported.</li>
+      <li>Native I/O binaries must match the host Lua ABI; bundled lua54 binaries target Lua 5.4.</li>
+      <li>Windows x64 native I/O is tested; other native platforms remain unverified.</li>
       <li>Minimal learning curve with intuitive APIs</li>
       <li>Effortlessly extendable</li>
     </ul>
@@ -151,438 +112,310 @@ local _tClassLoadValues = {
 
 !]]
 
---🅼🅾🅳🅸🅵🆈 🆅🅰🅻🆄🅴🆂 🅱🅴🅻🅾🆆 🅰🆃 🆈🅾🆄🆁 🅾🆆🅽 🆁🅸🆂🅺
---for backward compatibility
---loadstring = loadstring;
---load = load or loadstring;
-
---if (type(loadstring) ~= "function" and type(load) == "function") then
---    loadstring = load;
---end
---[[
-local assert        = assert;
-local debug         = debug;
-local error         = error;
-local ipairs        = ipairs;
-local rawset        = rawset;
-local require       = require;
-local setmetatable  = setmetatable;
-local table         = table;
-local string        = string;
-local type          = type;
-]]
---TODO I think I need to do this with table.unpack
-
---enforce the class loading system to prevent errors
---for x = #_tClassLoadValues, 1, -1 do
-for x = 1, #_tClassLoadValues do
-
-    if _tClassLoadValues[x] then
-
-        for _, nRequirementIndex in ipairs(_tClassRequirements[x]) do
-            _tClassLoadValues[nRequirementIndex] = true;
-        --for x2 = 1, x - 1 do
-        --    _tClassLoadValues[x2] = true;
-        --end
-        --break;
-        end
-
-    end
-
-end
-
---[[
-Defaulted is true, this protects
-enum and const values from being
-overwritten (except by using
-rawget/rawset. of course). Set
-this to false to prevent alteration
-of the global environment.
-]]
-
---							🆂🅴🆃🆄🅿 🅻🆄🅰🅴🆇 🅿🅰🆃🅷 & 🅼🅴🆃🅰🆃🅰🅱🅻🅴
 --[[!
-    @fqxn LuaEx.Keywords
-    @des A list of all keywords (or types) used in Lua and LuaEx.
-    <br>
-    <h1>Lua</h1>
-    <ul>
-        <li>and</li>
-        <li>break</li>
-        <li>do</li>
-        <li>else</li>
-        <li>elseif</li>
-        <li>end</li>
-        <li>false</li>
-        <li>for</li>
-        <li>function</li>
-        <li>if</li>
-        <li>in</li>
-        <li>local</li>
-        <li>nil</li>
-        <li>not</li>
-        <li>or</li>
-        <li>repeat</li>
-        <li>return</li>
-        <li>then</li>
-        <li>true</li>
-        <li>until</li>
-        <li>while</li>
-    </ul>
-    <h1>LuaEx</h1>
-    <ul>
-        <li>array</li>
-        <li>arrayfactory</li>
-        <li>class</li>
-        <li>classfactory</li>
-        <li>constant</li>
-        <li>enum</li>
-        <li>enumfactory</li>
-        <li>event</li>
-        <li>eventrix</li>
-        <li>interface</li>
-        <li>null</li>
-        <li>struct</li>
-        <li>structfactory</li>
-        <li>structfactorybuilder</li>
-    </ul>
+@fqxn LuaEx.init
+@requires Lua 5.4+ and the debug library.
+@desc Initializes all LuaEx framework groups in the global environment when LuaEx.init is required. The file runs directly and returns no framework value. Successful require calls are cached; the initialization guard also prevents repeated initialization when the file is executed directly.
+@throws Module/configuration load errors. Failed initialization may leave loaded modules and globals; package.path is restored.
+@ex require("LuaEx.init");
 !]]
---list all keywords
-local tKeyWords = {	"and", 		"break", 	"do", 		"else", 	"elseif", 	"end",
-                    "false", 	"for", 		"function", "if", 		"in", 		"local",
-                    "nil", 		"not", 		"or", 		"repeat", 	"return", 	"then",
-                    "true", 	"until", 	"while",
-                    --LuaEx keywords/types
-                    "constant", 	"enum", "enumfactory",
-                    "event", "eventrix",
-                    "struct",	"null",	"class",	"interface",
-                    "array", "arrayfactory", "classfactory", "structfactory", "structfactorybuilder"
-};
+-- Requiring this module is cached by Lua; also guard direct file execution.
+if (_G.LUAEX_INIT) then
+    return;
+end
 
---create the 'protected' table used by LuaEx
-local tLuaEx = {--TODO fix inconsistency in naming and underscores
-        __isbooting = true,
-        --__config, --set below
-        --these metatables are protected from modification and general access
-        __metaguard  = {"class", "classfactory", "enum", "enumfactory",
-                        "eventrix", "eventrixfactory", "struct", "structfactory"},
-        __keywords__	= setmetatable({}, {
-            __index 	= tKeyWords,
-            __newindex 	= function(t, k)
-                error("Attempt to perform illegal operation: adding keyword to __keywords__ table.");
-            end,
-            __pairs		= function (t)
-                return function(_, vKey) return next(tKeyWords, vKey); end, t, nil;
-            end,
-            __metatable = false,
-        }),
-        __keywords__count__ = #tKeyWords,
-        _VERSION = "LuaEx 0.90",
-        --_SOURCE_PATH = getsourcepath(),
-};
+assert(type(debug) == "table" and type(debug.getinfo) == "function", "LuaEx requires the debug library during initialization. Please enable the debug library before initializing LuaEx.");
 
---_G.luaex = setmetatable({},
-_G.luaex = setmetatable({},
-{
-    __index 		= tLuaEx,
-    __newindex 		= function(t, k, v)
-
-        if tLuaEx[k] ~= nil then
-            error("Attempt to overwrite luaex value in key '"..tostring(k).."' ("..type(k)..") with value "..tostring(v).." ("..type(v)..") .");
-        end
-
-        rawset(tLuaEx, k, v);
-    end,
-    __metatable 	= false,
-});
-
---warn the user if debug is missing
-assert((type(debug) == "table" and type(debug.getinfo) == "function"), "LuaEx requires the debug library during initialization. Please enable the debug library before initializing LuaEx.");
-
---store the original package path;
 local sOriginalPackagePath = package.path;
---determine the call location
-local sSource = debug.getinfo(1, "S").source;
-local sPath = sSource:match("^@(.+)[/\\][^/\\]+$") or ".";
+local bSuccess, vResult = pcall(function()
+    --list all keywords
+    local tKeyWords = {	"and", 		"break", 	      "do", 		"else", 	"elseif", 	"end",
+                        "false", 	"for", 		      "function", "if", 		"in", 		"local",
+                        "nil", 		"not", 		      "or", 		"repeat", 	"return", 	"then",
+                        "true", 	"until", 	      "while",
+                        --LuaEx keywords/types
+                        "constant", "enum",           "enumfactory",
+                        "event",    "eventrix",
+                        "struct",	"null",           "class",	"interface",
+                        "array",    "arrayfactory",   "classfactory", "structfactory", "structfactorybuilder"
+    };
 
--- Windows also accepts forward slashes; use a portable package template.
-package.path = package.path..";"..sPath.."/../?.lua";
+    --create the 'protected' table used by LuaEx
+    local tLuaEx = {
+            __isbooting = true,
+            --these metatables are protected from modification and general access
+            __metaguard  = {"class", "classfactory", "enum", "enumfactory",
+                            "eventrix", "eventrixfactory", "struct", "structfactory"},
+            __keywords__	= setmetatable({}, {
+                __index 	= tKeyWords,
+                __newindex 	= function(t, k)
+                    error("Attempt to perform illegal operation: adding keyword to __keywords__ table.");
+                end,
+                __pairs		= function (t)
+                    return function(_, vKey) return next(tKeyWords, vKey); end, t, nil;
+                end,
+                __metatable = false,
+            }),
+            __keywords__count__ = #tKeyWords,
+            _VERSION = "LuaEx 0.62",
+    };
 
-cloner, clone = nil; --delcared here so all lower modules can use it
---QUESTION do i need serializer here too? I think not but double check
+    _G.luaex = setmetatable({},
+    {
+        __index 		= tLuaEx,
+        __newindex 		= function(t, k, v)
 
---🅸🅼🅿🅾🆁🆃 🅿🆁🅴🆁🅴🆀🆄🅸🆂🅸🆃🅴 🅼🅾🅳🆄🅻🅴🆂
-type 			        =  	require("LuaEx.hook.typehook");
-                            require("LuaEx.hook.metahook");
-                            require("LuaEx.lib.stdlib");
-constant 		        = 	require("LuaEx.lib.constant");
---clausum			    =	require("LuaEx.lib.clausum");--TODO what is the purpose of this? Does it have any practical use?
-local null		        = 	require("LuaEx.lib.null");
-                            rawset(tLuaEx, "null", null); 	-- make sure null can't be overwritten
-                            rawset(tLuaEx, "NULL", null);	-- create an uppercase alias for null
-array                   =   require("LuaEx.lib.array");
-enum			        = 	require("LuaEx.lib.enum");
-strata                  =   require("LuaEx.lib.strata"); --TODO docs for this
-envrepo			        = 	require("LuaEx.lib.envrepo");
-eventrix    	        = 	require("LuaEx.lib.eventrix");
-schema                  =  	require("LuaEx.extlib.schema");
-local tStruct           = 	require("LuaEx.lib.struct");
-struct                  =   tStruct.struct;
-structfactory           =   tStruct.structfactory;
---blueprint               =   require("LuaEx.lib.blueprint");
---sorteddictionary        =   require("LuaEx.lib.sorteddictionary");
-source			        =	require("LuaEx.util.source"); --TODO these should be organized into modules
-isotominutes            =   require("LuaEx.util.isotominutes"); --TODO these should be organized into modules
-infusedhelp		        = 	require("LuaEx.lib.infusedhelp");
---run the 'directives'
---directive	=	require("LuaEx.lib.directive"); TODO finish directives for enums (and classes?)
-
---🅼🅾🅳🅸🅵🆈 🆃🅷🅴 🅶🅻🅾🅱🅰🅻 🅼🅴🆃🅰🆃🅰🅱🅻🅴
---setup the global environment to properly manage enums, constants and their ilk
-local tGMeta = getmetatable(_G) or {};
-tGMeta.__newindex = function(t, k, v)
-
-    --make sure functions such as constant, enum, etc., constant values and enums values aren't being overwritten
-    if _G.luaex[k] ~= nil then
-        error("Attempt to overwrite protected item '"..tostring(k).."' ("..type(_G.luaex[k])..") with '"..tostring(v).."' ("..type(v)..").");
-    end
-
-    rawset(t, k, v);
-end
---__metatable = false, TODO should this be set to false again?
-tGMeta.__index = _G.luaex,
-setmetatable(_G, tGMeta);
-
---🅻🅾🅰🅳 🅻🆄🅰🅴🆇 🅲🅾🅽🆂🆃🅰🅽🆃🆂
-require("LuaEx.constants");
-
---🅸🅼🅿🅾🆁🆃 🅾🆃🅷🅴🆁 🅼🅾🅳🆄🅻🅴🆂
---import lua hook modules (except 'typehook' which is loaded first [above])
-io   		= require("LuaEx.hook.iohook");
-math 		= require("LuaEx.hook.mathhook");
-string		= require("LuaEx.hook.stringhook");
-table		= require("LuaEx.hook.tablehook");
-base64 		= require("LuaEx.lib.base64");
-qr          = require("LuaEx.lib.qr");
-
---import cloner
-cloner      = require("LuaEx.lib.cloner");
-clone       = cloner.clone;
-
---🆁🅴🅶🅸🆂🆃🅴🆁 🅻🆄🅰🅴🆇 🅵🅰🅲🆃🅾🆁🅸🅴🆂 🆆🅸🆃🅷 🆃🅷🅴 🅲🅻🅾🅽🅴🆁
-cloner.registerFactory(array);
-cloner.registerFactory(enum);
-cloner.registerFactory(eventrix);
-cloner.registerFactory(struct);
-cloner.registerFactory(structfactory);
-
-if (_tClassLoadValues[_nClassSystem]) then
-    interface = require("LuaEx.lib.interface");
-    class = require("LuaEx.lib.class");
-
-    cloner.registerFactory(class);
-end
-
---import serialization
-serializer  = require("LuaEx.lib.serializer");
-
---aliases
-serialize   = serializer.serialize;
-deserialize = serializer.deserialize;
-
---import the class system
-if (_tClassLoadValues[_nClassSystem]) then
-
-    --🅸🅼🅿🅾🆁🆃 🅸🅽🆃🅴🆁🅵🅰🅲🅴🆂
-    iCloneable 		= require("LuaEx.inc.interfaces.iCloneable");
-    iSerializable 	= require("LuaEx.inc.interfaces.iSerializable");
-    iShape 	        = require("LuaEx.inc.interfaces.iShape");
-
-    --🅸🅼🅿🅾🆁🆃 🅲🅻🅰🆂🆂🅴🆂
-
-    if (_tClassLoadValues[_nBasicClasses]) then
-        --primitive
-        local pPrimitives   = "LuaEx.inc.primitives";
-        point               = require(pPrimitives..".point");
-        line                = require(pPrimitives..".line");
-        circle              = require(pPrimitives..".circle");
-        circlearc           = require(pPrimitives..".circlearc");
-        ellipse             = require(pPrimitives..".ellipse");
-        polygon             = require(pPrimitives..".polygon");
-
-        --actual classes
-        local pClasses = "LuaEx.inc.classes";
-
-        --dependency class
-        Queue               = require(pClasses..".Queue");
-        Stack               = require(pClasses..".Stack");
-        Set                 = require(pClasses..".Set");
-        SortedDictionary    = require(pClasses..".SortedDictionary");
-
-        if (_tClassLoadValues[_nComponentClasses]) then
-            --component classes
-            Potentiometer   = require(pClasses..".component.Potentiometer");
-            Protean         = require(pClasses..".component.Protean");
-
-            if (_tClassLoadValues[_nGeometryClasses]) then
-                --geometry classes
-                Point   = require(pClasses..".geometry.Point");
-                Line    = require(pClasses..".geometry.Line");
-                --shapes
-                Shape   = require(pClasses..".geometry.shapes.Shape");
-                Circle  = require(pClasses..".geometry.shapes.Circle");
-                Polygon = require(pClasses..".geometry.shapes.Polygon");
-                --solids
-                Solid   = require(pClasses..".geometry.solids.Solid");
-
-                if (_tClassLoadValues[_nCoGClasses]) then
-                    local pCoG      = "LuaEx.inc.cog";
-
-                    --load the enums
-                    require(pCoG..".Enums");
-
-                    --create the CoG table
-                    local tCoG = {
-                        config  = require(pCoG..".config"),
-                        --Scaler  = require(pCoG..".Scaler"),
-                    };
-
-
-
-                    --import CoG's table into the luaex global table
-                    rawset(tLuaEx, "cog", table.readonly(tCoG));
-
-                    Scaler          = require(pCoG..".Scaler");
-                    Shuffler        = require(pCoG..".Shuffler");
-                    Rarity          = require(pCoG..".Rarity");
-                    RNG             = require(pCoG..".RNG");
-                    BaseMod         = require(pCoG..".ModSystem.BaseMod");
-                    Factorium       = require(pCoG..".ModSystem.Factorium");
-                    CoG             = require(pCoG..".CoG");
-
-                    --interfaces
-                    IEquippable     = require(pCoG..".Interfaces.IEquippable");
-                    IConsumable     = require(pCoG..".Interfaces.IConsumable");
-
-                    TagSystem       = require(pCoG..".TagSystem");
-                    Targetor        = require(pCoG..".Targetor");
-
-                    -- Register lightweight instance types with their exact names.
-                    type.TagSystem = true;
-                    type.Targetor = true;
-
-                    --affix system
-                    --local pAffixSystem  = pCoG..".AffixSystem";
-                    Affix               = require(pCoG..".Affix");
-                    --Affixory            = require(pAffixSystem..".Affixory");
-
-                    Pool            = require(pCoG..".Pool");
-                    StatusSystem    = require(pCoG..".StatusSystem");
-                    AStar           = require(pCoG..".AStar");
-
-                    --objects
-                    local pCoGObjects   = pCoG..".Objects";
-                    Registry            = require(pCoG..".Registry");
-                    ObjectRegistry      = require(pCoGObjects..".ObjectRegistry");
-                    BaseObject          = require(pCoGObjects..".BaseObject");
-                    BaseCreature        = require(pCoGObjects..".CreatureSystem.BaseCreature");
-                    BaseCard            = require(pCoG..".CardSystem.BaseCard");
-                    BaseDeck            = require(pCoG..".CardSystem.BaseDeck");
-
-
-                    --item system
-                    local pItemSystem   = pCoGObjects..".ItemSystem";
-                    SlotPattern         = require(pItemSystem..".SlotPattern");
-                    BaseItem            = require(pItemSystem..".BaseItem");
-                    ItemSlot            = require(pItemSystem..".ItemSlot");
-                    ItemSlotSystem      = require(pItemSystem..".ItemSlotSystem");
-                    ItemSystem          = require(pItemSystem..".ItemSystem");
-                    ItemStashSystem     = require(pItemSystem..".ItemStashSystem");
-
-                    XPSystem        = require(pCoG..".XPSystem");
-                end
-
+            if tLuaEx[k] ~= nil then
+                error("Attempt to overwrite luaex value in key '"..tostring(k).."' ("..type(k)..") with value "..tostring(v).." ("..type(v)..") .");
             end
 
-            if (_tClassLoadValues[_nUtilClasses]) then
-                local pDox              = pClasses..".util.Dox";
-                local pDoxBuilders      = pDox..".Builders";
-                local pDoxComponents    = pDox..".Components";
-                local pDoxParsers       = pDox..".Parsers";
-
-                --dox and dox component classes
-                DoxMime         = require(pDoxComponents..".DoxMime");
-                DoxSyntax       = require(pDoxComponents..".DoxSyntax");
-                DoxBlockTag     = require(pDoxComponents..".DoxBlockTag");
-                DoxBlock        = require(pDoxComponents..".DoxBlock");
-                DoxBuilder      = require(pDoxComponents..".DoxBuilder");
-
-                --require Dox Builders
-                DoxBuilderHTML      = require(pDoxBuilders..".HTML.DoxBuilderHTML");
-                DoxBuilderPulsarLua = require(pDoxBuilders..".Pulsar.Lua.DoxBuilderPulsarLua");
-
-                --require Dox and Dox parsers (subclasses)
-                Dox                     = require(pDox..".Dox");
-                DoxAssemblyNASM         = require(pDoxParsers..".DoxAssemblyNASM");
-                DoxAutoPlayMediaStudio  = require(pDoxParsers..".DoxAutoPlayMediaStudio");
-                DoxC                    = require(pDoxParsers..".DoxC");
-                DoxCSharp               = require(pDoxParsers..".DoxCSharp");
-                DoxCPlusPlus            = require(pDoxParsers..".DoxCPlusPlus");
-                DoxCSS                  = require(pDoxParsers..".DoxCSS");
-                DoxDart                 = require(pDoxParsers..".DoxDart");
-                DoxElm                  = require(pDoxParsers..".DoxElm");
-                DoxFSharp               = require(pDoxParsers..".DoxFSharp");
-                DoxFortran              = require(pDoxParsers..".DoxFortran");
-                DoxGo                   = require(pDoxParsers..".DoxGo");
-                DoxGroovy               = require(pDoxParsers..".DoxGroovy");
-                DoxHaskell              = require(pDoxParsers..".DoxHaskell");
-                DoxHTML                 = require(pDoxParsers..".DoxHTML");
-                DoxJava                 = require(pDoxParsers..".DoxJava");
-                DoxJavaScript           = require(pDoxParsers..".DoxJavaScript");
-                DoxJulia                = require(pDoxParsers..".DoxJulia");
-                DoxKotlin               = require(pDoxParsers..".DoxKotlin");
-                DoxLua                  = require(pDoxParsers..".DoxLua");
-                DoxMatlab               = require(pDoxParsers..".DoxMatlab");
-                DoxObjectiveC           = require(pDoxParsers..".DoxObjectiveC");
-                DoxPerl                 = require(pDoxParsers..".DoxPerl");
-                DoxPHP                  = require(pDoxParsers..".DoxPHP");
-                DoxPython               = require(pDoxParsers..".DoxPython");
-                DoxRuby                 = require(pDoxParsers..".DoxRuby");
-                DoxRust                 = require(pDoxParsers..".DoxRust");
-                DoxScala                = require(pDoxParsers..".DoxScala");
-                DoxSwift                = require(pDoxParsers..".DoxSwift");
-                DoxTypeScript           = require(pDoxParsers..".DoxTypeScript");
-                DoxXML                  = require(pDoxParsers..".DoxXML");
+            rawset(tLuaEx, k, v);
+        end,
+        __metatable 	= false,
+    });
 
 
+    --store the original package path;
+    --determine the call location
+    local sSource = debug.getinfo(1, "S").source;
+    local pSourceDirectory = sSource:match("^@(.+)[/\\][^/\\]+$") or ".";
 
-                --ini
-                Ini     = require(pClasses..".util.Ini"); --TODO need to finish OrderedSet first
-                BaseLog = require(pClasses..".util.BaseLog");
-            end
+    -- Windows also accepts forward slashes; use a portable package template.
+    package.path = package.path..";"..pSourceDirectory.."/../?.lua";
 
+    cloner, clone = nil; -- Module factories capture these globals after the cloner is loaded.
+
+    --[[
+         ██████╗ ██████╗ ██████╗ ███████╗
+        ██╔════╝██╔═══██╗██╔══██╗██╔════╝
+        ██║     ██║   ██║██████╔╝█████╗
+        ██║     ██║   ██║██╔══██╗██╔══╝
+        ╚██████╗╚██████╔╝██║  ██║███████╗
+         ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
+    ]]
+    -- CORE FACTORIES: type/metatable hooks precede factory creation.
+
+    type 			        =  	require("LuaEx.hook.typehook");
+                                require("LuaEx.hook.metahook");
+                                require("LuaEx.lib.stdlib");
+    constant 		        = 	require("LuaEx.lib.constant");
+    --clausum			    =	require("LuaEx.lib.clausum");--TODO what is the purpose of this? Does it have any practical use?
+    local null		        = 	require("LuaEx.lib.null");
+                                rawset(tLuaEx, "null", null); 	-- make sure null can't be overwritten
+                                rawset(tLuaEx, "NULL", null);	-- create an uppercase alias for null
+    array                   =   require("LuaEx.lib.array");
+    enum			        = 	require("LuaEx.lib.enum");
+    strata                  =   require("LuaEx.lib.strata");
+    envrepo			        = 	require("LuaEx.lib.envrepo");
+    eventrix    	        = 	require("LuaEx.lib.eventrix");
+    schema                  =  	require("LuaEx.libext.schema");
+    local tStruct           = 	require("LuaEx.lib.struct");
+    struct                  =   tStruct.struct;
+    structfactory           =   tStruct.structfactory;
+    source			        =	require("LuaEx.util.source");
+    isotominutes            =   require("LuaEx.util.isotominutes");
+    prettyLua               =   require("LuaEx.util.prettylua");
+    textcatalog             =   require("LuaEx.lib.textcatalog");
+
+    --[[
+         ██████╗ ██╗      ██████╗ ██████╗  █████╗ ██╗     ███████╗
+        ██╔════╝ ██║     ██╔═══██╗██╔══██╗██╔══██╗██║     ██╔════╝
+        ██║  ███╗██║     ██║   ██║██████╔╝███████║██║     ███████╗
+        ██║   ██║██║     ██║   ██║██╔══██╗██╔══██║██║     ╚════██║
+        ╚██████╔╝███████╗╚██████╔╝██████╔╝██║  ██║███████╗███████║
+         ╚═════╝ ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝
+    ]]
+    -- GLOBAL ENVIRONMENT: protect constants and enums before loading constants.
+
+    --setup the global environment to properly manage enums, constants and their ilk
+    local tGMeta = getmetatable(_G) or {};
+    tGMeta.__newindex = function(t, k, v)
+
+        --make sure functions such as constant, enum, etc., constant values and enums values aren't being overwritten
+        if _G.luaex[k] ~= nil then
+            error("Attempt to overwrite protected item '"..tostring(k).."' ("..type(_G.luaex[k])..") with '"..tostring(v).."' ("..type(v)..").");
         end
 
+        rawset(t, k, v);
+    end
+    tGMeta.__index = _G.luaex;
+    setmetatable(_G, tGMeta);
+
+    -- Constants depend on the factory/global-environment bootstrap above.
+    require("LuaEx.constants");
+
+    --[[
+        ██╗  ██╗ ██████╗  ██████╗ ██╗  ██╗███████╗
+        ██║  ██║██╔═══██╗██╔═══██╗██║ ██╔╝██╔════╝
+        ███████║██║   ██║██║   ██║█████╔╝ ███████╗
+        ██╔══██║██║   ██║██║   ██║██╔═██╗ ╚════██║
+        ██║  ██║╚██████╔╝╚██████╔╝██║  ██╗███████║
+        ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝
+    ]]
+    -- STANDARD LIBRARY HOOKS AND SUPPORT MODULES
+
+    --import lua hook modules (except 'typehook' which is loaded first [above])
+    io   		= require("LuaEx.hook.iohook");
+    math 		= require("LuaEx.hook.mathhook");
+    string		= require("LuaEx.hook.stringhook");
+    table		= require("LuaEx.hook.tablehook");
+    base64 		= require("LuaEx.lib.base64");
+    qr          = require("LuaEx.lib.qr");
+
+    --import cloner
+    cloner      = require("LuaEx.lib.cloner");
+    clone       = cloner.clone;
+
+    --[[
+        ███████╗ █████╗  ██████╗████████╗ ██████╗ ██████╗ ██╗███████╗███████╗
+        ██╔════╝██╔══██╗██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗██║██╔════╝██╔════╝
+        █████╗  ███████║██║        ██║   ██║   ██║██████╔╝██║█████╗  ███████╗
+        ██╔══╝  ██╔══██║██║        ██║   ██║   ██║██╔══██╗██║██╔══╝  ╚════██║
+        ██║     ██║  ██║╚██████╗   ██║   ╚██████╔╝██║  ██║██║███████╗███████║
+        ╚═╝     ╚═╝  ╚═╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝╚══════╝
+    ]]
+    -- CLONING, CLASS FACTORY, AND SERIALIZATION
+
+    cloner.registerFactory(array);
+    cloner.registerFactory(enum);
+    cloner.registerFactory(eventrix);
+    cloner.registerFactory(struct);
+    cloner.registerFactory(structfactory);
+
+
+    --import serialization
+    serializer  = require("LuaEx.lib.serializer");
+
+    --aliases
+    serialize   = serializer.serialize;
+    deserialize = serializer.deserialize;
+
+    --[[
+         ██████╗██╗      █████╗ ███████╗███████╗███████╗███████╗
+        ██╔════╝██║     ██╔══██╗██╔════╝██╔════╝██╔════╝██╔════╝
+        ██║     ██║     ███████║███████╗███████╗█████╗  ███████╗
+        ██║     ██║     ██╔══██║╚════██║╚════██║██╔══╝  ╚════██║
+        ╚██████╗███████╗██║  ██║███████║███████║███████╗███████║
+         ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝╚══════╝
+    ]]
+    -- LXE handles enum declarations (.lxe); LXC handles class declarations
+    -- (.lxc). A class file can also contain enum declarations. Both kinds of
+    -- file enter one loading batch so enums are ready before class static
+    -- fields and static constructors use them.
+    lxe = require("LuaEx.lib.lxe");
+
+    -- Find declaration files in the application's original package.path and
+    -- in LuaEx's own classes directory. Adding the framework directory here
+    -- ensures bundled classes are found even if package.path omits it.
+    -- SourceDiscovery returns one snapshot containing both .lxc and .lxe
+    -- files, including the bundled files; no second directory scan is needed.
+    local SourceDiscovery = require("LuaEx.lib.SourceDiscovery");
+    local pFrameworkRoot  = pSourceDirectory.."/classes";
+    local tDiscovery      = SourceDiscovery.scan(sOriginalPackagePath, {pFrameworkRoot});
+
+    -- Connect the class runtime to LuaEx's global environment, cloning and
+    -- serialization services. This installs class helpers without loading
+    -- any class declarations yet.
+    local LXC = require("LuaEx.lib.lxc");
+    LXC.bindHost(_G);
+
+    -- These geometry primitives are ordinary Lua modules, not .lxc classes.
+    -- Load them before the declaration batch so class initializers can use
+    -- point, line, circle, circlearc, ellipse and polygon.
+    point     = require("LuaEx.primitives.point");
+    line      = require("LuaEx.primitives.line");
+    circle    = require("LuaEx.primitives.circle");
+    circlearc = require("LuaEx.primitives.circlearc");
+    ellipse   = require("LuaEx.primitives.ellipse");
+    polygon   = require("LuaEx.primitives.polygon");
+
+    -- Keep the actual file paths for reading and separate comparison keys
+    -- for duplicate checks. Overlapping discovery roots must not cause a
+    -- declaration file to be included twice.
+    local tSourcePaths = {};
+    local tSeenPaths   = {};
+    local bWindows     = package.config:sub(1, 1) == "\\";
+
+    --[[!
+    @fqxn LuaEx.init.fGetPathKey
+    @desc Creates a comparison key for an already discovered file path.
+        Unifies directory separators and ignores letter case on Windows.
+        This does not resolve paths or change the filename used for reading.
+    @param string pFile Discovered source-file path.
+    @ret string Path key used to detect duplicate source files.
+    @vis internal
+    !]]
+    local function fGetPathKey(pFile)
+        local pKey = pFile:gsub("\\", "/");
+
+        if (bWindows) then
+            pKey = pKey:lower();
+        end
+
+        return pKey;
     end
 
-end
+    -- Files already includes bundled classes, application classes and enums.
+    -- Collect that complete list directly rather than splitting framework
+    -- files into a second list and then merging them back into this one.
+    for _, pFile in ipairs(tDiscovery.Files) do
+        local pKey = fGetPathKey(pFile);
 
+        if (not tSeenPaths[pKey]) then
+            tSeenPaths[pKey] = true;
+            tSourcePaths[#tSourcePaths + 1] = pFile;
+        end
+    end
 
+    -- Sort filenames for repeatable input. LXC validates the whole batch and
+    -- determines class initialization order from declaration dependencies;
+    -- alphabetical filename order does not decide inheritance order.
+    -- Passing .lxe files here also lets LXC coordinate enum initialization.
+    table.sort(tSourcePaths);
 
---🅰🅻🅸🅰🆂🅴🆂
-unpack = unpack or table.unpack;--TODO move this to table hook
---table.serialize 	= serialize.table;
---string.serialize 	= serialize.string;
---[[
-![LuaEx](https://raw.githubusercontent.com/CentauriSoldier/LuaEx/main/logo.png)
+    local tLoadedClassNames = LXC.loadFiles(tSourcePaths, _G);
 
-]]
+    -- Classes are published under their declared namespaces. Also expose
+    -- LuaEx's top-level framework classes by short names such as Stack.
+    -- Application class namespaces are left intact.
+    LXC.publishFrameworkAliases(tLoadedClassNames, _G);
 
+    -- Preserve existing require("LuaEx.classes.<relative module>") calls.
+    -- Each matching .lxc file has already been loaded above: cache its short
+    -- global class reference under the corresponding Lua module name so
+    -- require returns that class instead of executing an old .lua version.
+    for _, pFile in ipairs(tSourcePaths) do
+        local pNormalizedFile = pFile:gsub("\\", "/");
+        local pRelativeClass  = pNormalizedFile:match("/LuaEx/classes/(.*)%.lxc$");
 
---useful if using LuaEx as a dependency in multiple modules to prevent the need for loading multilple times
-constant("LUAEX_INIT", true); --TODO should this be a required check at the beginning of this module?\
+        if (pRelativeClass) then
+            -- Example: Ini becomes the module name
+            -- LuaEx.classes.Ini and the global name Ini.
+            local sClassName  = pRelativeClass:match("([^/]+)$");
+            local sModuleName = "LuaEx.classes."..pRelativeClass:gsub("/", ".");
 
-rawset(tLuaEx, "__isbooting", false);
+            package.loaded[sModuleName] = rawget(_G, sClassName);
+        end
+    end
 
---restore the original package path;
+    --[[
+        ███████╗██╗███╗   ██╗██╗███████╗██╗  ██╗
+        ██╔════╝██║████╗  ██║██║██╔════╝██║  ██║
+        █████╗  ██║██╔██╗ ██║██║███████╗███████║
+        ██╔══╝  ██║██║╚██╗██║██║╚════██║██╔══██║
+        ██║     ██║██║ ╚████║██║███████║██║  ██║
+        ╚═╝     ╚═╝╚═╝  ╚═══╝╚═╝╚══════╝╚═╝  ╚═╝
+    ]]
+    -- FINALIZE: publish the success flag only after every requested module loads.
+
+    unpack = unpack or table.unpack;
+
+    constant("LUAEX_INIT", true);
+
+    rawset(tLuaEx, "__isbooting", false);
+
+end);
 package.path = sOriginalPackagePath;
+if (not bSuccess) then
+    error(vResult, 0);
+end

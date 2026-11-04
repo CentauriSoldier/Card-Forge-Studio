@@ -1,0 +1,171 @@
+--[[!
+@fqxn CoG.SlotPattern
+@desc Occupied-slot geometry using relative integer coordinates. Negative offsets
+    and empty layouts are valid. Inputs, outputs and iterators own independent
+    coordinate records. Containers decide fit, occupancy and placement.
+!]]
+namespace CoG {
+    class SlotPattern {
+        private slots = {};
+
+        private static validateCoordinate(nValue) {
+            assert(rawtype(nValue) == "number" and nValue == nValue and
+                   nValue ~= math.huge and nValue ~= -math.huge and nValue % 1 == 0,
+                   "SlotPattern coordinates must be finite integers.");
+        }
+
+        private static copySlots(tInput) {
+            assert(rawtype(tInput) == "table", "SlotPattern requires a table of relative slots.");
+            local tSlots = {};
+            local tSeen = {};
+            local nCount = 0;
+
+            for nIndex, tSlot in pairs(tInput) do
+                assert(rawtype(nIndex) == "number" and nIndex >= 1 and nIndex % 1 == 0,
+                       "SlotPattern slots must use positive integer indices.");
+                assert(rawtype(tSlot) == "table", "Each slot must be a table containing x and y.");
+                SlotPattern.validateCoordinate(tSlot.x);
+                SlotPattern.validateCoordinate(tSlot.y);
+
+                for sField in pairs(tSlot) do
+
+                    assert(sField == "x" or sField == "y", "Unknown slot coordinate field.");
+                end
+
+                -- Track both coordinates so duplicate cells are rejected regardless of their list positions.
+                local nX, nY = tSlot.x, tSlot.y;
+                tSeen[nX] = tSeen[nX] or {};
+                assert(not tSeen[nX][nY], "SlotPattern contains duplicate coordinates.");
+                tSeen[nX][nY] = true;
+                tSlots[nIndex] = {x = nX, y = nY};
+                nCount = nCount + 1;
+            end
+
+            -- Valid integer keys can still leave holes; verify every position in the counted range.
+            for nIndex = 1, nCount do
+                assert(tSlots[nIndex] ~= nil, "SlotPattern slot lists cannot contain holes.");
+            end
+
+            return tSlots;
+        }
+
+        --[[!
+        @fqxn CoG.SlotPattern.SlotPattern
+        @desc Creates an empty layout or validates and copies the supplied slots.
+        !]]
+        public SlotPattern(tSlots) {
+
+            if (tSlots ~= nil) then
+                this.setSlots(tSlots);
+            end
+        }
+
+        --[[!
+        @fqxn CoG.SlotPattern.setSlots
+        @desc Validates before replacing storage; failure preserves the previous layout.
+        !]]
+        public setSlots(tSlots) {
+
+            -- Validate and copy everything before replacing the current layout.
+            this.slots = SlotPattern.copySlots(tSlots);
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.SlotPattern.getSlots
+        @desc Returns independent coordinate records.
+        !]]
+        public getSlots() {
+            return SlotPattern.copySlots(this.slots);
+        }
+
+        --[[!
+        @fqxn CoG.SlotPattern.getSlotCount
+        @desc Returns occupied-cell count, not bounding-box area.
+        !]]
+        public getSlotCount() {
+            return #this.slots;
+        }
+
+        --[[!
+        @fqxn CoG.SlotPattern.contains
+        @desc Validates integer coordinates and tests exact relative-cell membership.
+        !]]
+        public contains(nX, nY) {
+            SlotPattern.validateCoordinate(nX);
+            SlotPattern.validateCoordinate(nY);
+
+            for _, tSlot in ipairs(this.slots) do
+
+                if (tSlot.x == nX and tSlot.y == nY) then
+                    return true;
+                end
+            end
+
+            return false;
+        }
+
+        --[[!
+        @fqxn CoG.SlotPattern.eachSlot
+        @desc Captures a copied layout; yields index, x and y independently of later edits.
+        !]]
+        public eachSlot() {
+
+            -- Capture a copy so later pattern edits do not alter an iteration already in progress.
+            local tSlots = this.getSlots();
+            local nIndex = 0;
+
+            return function()
+                nIndex = nIndex + 1;
+                local tSlot = tSlots[nIndex];
+
+                if (tSlot) then
+                    return nIndex, tSlot.x, tSlot.y;
+                end
+            end;
+        }
+
+        --[[!
+        @fqxn CoG.SlotPattern.getBounds
+        @desc Returns inclusive bounds and dimensions, or nil for an empty layout.
+        !]]
+        public getBounds() {
+            local tSlots = this.slots;
+
+            if (#tSlots == 0) then
+                return nil;
+            end
+
+            -- Seed bounds from an occupied cell so offset-only patterns are not enlarged toward zero.
+            local nMinX, nMaxX = tSlots[1].x, tSlots[1].x;
+            local nMinY, nMaxY = tSlots[1].y, tSlots[1].y;
+
+            for _, tSlot in ipairs(tSlots) do
+                nMinX, nMaxX = math.min(nMinX, tSlot.x), math.max(nMaxX, tSlot.x);
+                nMinY, nMaxY = math.min(nMinY, tSlot.y), math.max(nMaxY, tSlot.y);
+            end
+
+            return {minX = nMinX, maxX = nMaxX, minY = nMinY, maxY = nMaxY,
+                    width = nMaxX - nMinX + 1, height = nMaxY - nMinY + 1};
+        }
+
+        --[[!
+        @fqxn CoG.SlotPattern.__len
+        @desc Returns occupied-cell count.
+        !]]
+        public operator __len() {
+            return #this.slots;
+        }
+
+        --[[!
+        @fqxn CoG.SlotPattern.validateSnapshot
+        @desc Validates and copies native declaring-class fields after clone or restore.
+        !]]
+        private validateSnapshot(tState) {
+            assert(rawtype(tState.pri) == "table", "Invalid SlotPattern snapshot.");
+            tState.pri.slots = SlotPattern.copySlots(tState.pri.slots);
+        }
+
+    }
+}

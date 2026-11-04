@@ -1,0 +1,360 @@
+--[[!
+@fqxn CoG.Rarity
+@pulsarlua class Rarity
+@desc Static rarity queries over parallel configuration lists indexed by CoG.LEVEL ordinals.
+    LuaEx discovers the declaration without reading application configuration.
+    cog.load validates and captures that configuration after CoG initializes.
+    MinLevel and MaxLevel describe the configured range. Lists are private snapshots; callers receive immutable enum members
+    and scalar settings. The private constructor prevents instances.
+!]]
+namespace CoG {
+    final class Rarity requires(CoG.LEVEL, CoG.TIER) {
+        --[[!
+        @fqxn CoG.Rarity.MinLevel
+        @desc First configured rarity, represented by the first CoG.LEVEL member.
+            Configuration is resolved lazily after cog.load; the property is read-only.
+        @ret CoG.LEVEL eLevel Lowest configured level.
+        !]]
+        public static MinLevel {
+            get {
+                return Rarity.getData().eLevel[1];
+            }
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.MaxLevel
+        @desc Last configured rarity. The NAME table's entry count selects the
+            corresponding CoG.LEVEL ordinal; this property does not change the enum.
+        @ret CoG.LEVEL eLevel Highest configured level.
+        !]]
+        public static MaxLevel {
+            get {
+                local tData = Rarity.getData();
+                return tData.eLevel[tData.nLevels];
+            }
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Helpers.getOrdinal
+        @desc Requires a canonical CoG.LEVEL member whose ordinal selects an existing
+            config row. Payload values are intentionally ignored. All queries share
+            this bounds check before indexing the unchanged parallel config lists.
+        @param CoG.LEVEL eLevel Requested level.
+        @ret number nOrdinal One-based configured row index.
+        !]]
+        private static getOrdinal(eLevel) {
+            assert(lxe.isMember(eLevel, CoG.LEVEL), "Expected a CoG.LEVEL member.");
+            local nOrdinal = eLevel.Ordinal;
+            local tData = Rarity.getData();
+            assert(nOrdinal >= 1 and nOrdinal <= tData.nLevels,
+                "Rarity level ordinal is outside the configured range.");
+
+            return nOrdinal;
+        }
+        private static _tData       = {};
+        private static _bConfigured = false;
+
+        --[[!
+        @fqxn CoG.Rarity.Helpers.validateList
+        @desc Requires positive integer keys, no holes and the expected number of rows.
+        !]]
+        private static validateList(tList, sField, nExpected) {
+            local sContext = "Rarity config "..sField;
+            type.assert.table(tList, "number", nil, nil, nil, "\n"..sContext);
+            local nCount = 0;
+
+            for nIndex in pairs(tList) do
+
+                assert(nIndex >= 1 and nIndex % 1 == 0,
+                       sContext.." indices must be positive integers.");
+                nCount = nCount + 1;
+            end
+
+            nExpected = nExpected or nCount;
+            assert(nCount == nExpected, sContext.." must have "..nExpected.." entries.");
+
+            -- Counting entries alone cannot detect holes; require every corresponding row.
+            for nIndex = 1, nExpected do
+                assert(tList[nIndex] ~= nil, sContext.." is missing row "..nIndex..'.');
+            end
+
+            return nCount;
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Helpers.validateNumber
+        @desc Requires a finite nonnegative number, optionally restricting it to integers.
+        !]]
+        private static validateNumber(nValue, sContext, bInteger) {
+            type.assert.number(nValue, nil, nil, nil, nil, nil, nil, nil, "\n"..sContext);
+            assert(nValue == nValue and nValue >= 0 and nValue < math.huge,
+                   sContext.." must be a finite nonnegative number.");
+            assert(not bInteger or nValue % 1 == 0, sContext.." must be an integer.");
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Helpers.validateConfig
+        @desc Checks unique level names, hex colors, descending integer thresholds and ordered affix tier/count limits. Equal thresholds are allowed.
+        !]]
+        private static validateConfig(tRarity) {
+            type.assert.table(tRarity, nil, nil, nil, nil, "\nRarity config must be a table.");
+            local nLevels = Rarity.validateList(tRarity.NAME, "NAME");
+            assert(nLevels > 0, "Rarity config NAME must contain at least one level.");
+
+            local tFields = {"COLOR", "CHANCE", "MIN_AFFIX_TIER", "MAX_AFFIX_TIER",
+                             "MIN_PREFIXES", "MAX_PREFIXES", "MIN_SUFFIXES", "MAX_SUFFIXES"};
+
+            for _, sField in ipairs(tFields) do
+                Rarity.validateList(tRarity[sField], sField, nLevels);
+            end
+
+            type.assert.table(tRarity.Affix, nil, nil, nil, nil, "\nRarity config Affix must be a table.");
+            assert(lxe.isMember(tRarity.Affix.maxTier, CoG.TIER), "Rarity config Affix.maxTier must be a CoG.TIER.");
+            local tNames = {};
+            local nPreviousChance = 100;
+
+            for nIndex = 1, nLevels do
+                local sContext = "Rarity config row "..nIndex;
+                local sName = tRarity.NAME[nIndex];
+                type.assert.string(sName, nil, "\n"..sContext.." NAME");
+                assert(sName:find("%S"), sContext.." NAME must be nonblank.");
+                assert(not tNames[sName], sContext.." NAME duplicates '"..sName.."'.");
+                tNames[sName] = true;
+
+                type.assert.string(tRarity.COLOR[nIndex], "^#%x%x%x%x%x%x$", "\n"..sContext.." COLOR must be #RRGGBB.");
+                local nChance = tRarity.CHANCE[nIndex];
+                Rarity.validateNumber(nChance, sContext.." CHANCE", true);
+                assert(nChance <= 100, sContext.." CHANCE cannot exceed 100.");
+                assert(nChance <= nPreviousChance, sContext.." CHANCE must not increase toward rarer levels.");
+                assert(nIndex ~= 1 or nChance == 100, "Rarity config first CHANCE must be 100.");
+                nPreviousChance = nChance;
+
+                -- Equal thresholds intentionally permit zero-probability rarities.
+                -- Compare tier ordinals so configured nested payloads remain supported.
+                -- Tier and count ranges must remain internally ordered for every row.
+                local eMinTier = tRarity.MIN_AFFIX_TIER[nIndex];
+                local eMaxTier = tRarity.MAX_AFFIX_TIER[nIndex];
+                assert(lxe.isMember(eMinTier, CoG.TIER), sContext.." MIN_AFFIX_TIER must be a CoG.TIER.");
+                assert(lxe.isMember(eMaxTier, CoG.TIER), sContext.." MAX_AFFIX_TIER must be a CoG.TIER.");
+                assert(eMinTier.Ordinal <= eMaxTier.Ordinal, sContext.." minimum affix tier exceeds maximum.");
+                assert(eMaxTier.Ordinal <= tRarity.Affix.maxTier.Ordinal, sContext.." affix tier exceeds Affix.maxTier.");
+
+                for _, sKind in ipairs({"PREFIXES", "SUFFIXES"}) do
+                    local nMinimum = tRarity["MIN_"..sKind][nIndex];
+                    local nMaximum = tRarity["MAX_"..sKind][nIndex];
+                    Rarity.validateNumber(nMinimum, sContext.." MIN_"..sKind, true);
+                    Rarity.validateNumber(nMaximum, sContext.." MAX_"..sKind, true);
+                    assert(nMinimum <= nMaximum, sContext.." minimum "..sKind.." exceeds maximum.");
+                end
+
+            end
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Helpers.snapshotList
+        @desc Copies an ordered settings array while retaining typed enum member identities.
+        !]]
+        private static snapshotList(tInput) {
+            local tCopy = {};
+
+            for nIndex, vValue in ipairs(tInput) do
+                tCopy[nIndex] = vValue;
+            end
+
+            return tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Helpers.getData
+        @desc Validates and snapshots configuration once. No static initializer
+            reads CoGBase.config, so discovery can run before cog.load selects overlays.
+            Publication occurs only after every row and the level enum are ready.
+        @ret table tData Private captured settings; never returned by the public API.
+        @throws CoG has not initialized configuration, or rarity settings are invalid.
+        !]]
+        private static getData() {
+            if (not Rarity._bConfigured) then
+                local tRarity = CoGBase.config.Rarity;
+                Rarity.validateConfig(tRarity);
+                local tData = {};
+
+                for _, sField in ipairs({"NAME", "COLOR", "CHANCE",
+                    "MIN_AFFIX_TIER", "MAX_AFFIX_TIER", "MIN_PREFIXES",
+                    "MAX_PREFIXES", "MIN_SUFFIXES", "MAX_SUFFIXES"}) do
+                    tData[sField] = Rarity.snapshotList(tRarity[sField]);
+                end
+
+                tData.nLevels = #tData.NAME;
+                tData.eLevel = CoG.LEVEL;
+                assert(tData.nLevels <= #CoG.LEVEL, "Rarity rows exceed the available CoG.LEVEL members.");
+
+                Rarity._tData       = tData;
+                Rarity._bConfigured = true;
+            end
+
+            return Rarity._tData;
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.getName
+        @desc Returns the configured display name without changing enum identity.
+        @param enumitem eLevel A member of CoG.LEVEL.
+        @ret string Display name for this rarity.
+        !]]
+        public static getName(eLevel) {
+            local nOrdinal = Rarity.getOrdinal(eLevel);
+            return Rarity.getData().NAME[nOrdinal];
+        }
+        --[[!
+        @fqxn CoG.Rarity.Methods.getColor
+        @pulsarlua function Rarity.getColor
+        @desc Returns the configured #RRGGBB color.
+        @param CoG.LEVEL eLevel Rarity member whose ordinal selects the settings row.
+        @ret string vValue Configured value.
+        !]]
+        public static getColor(eLevel) {
+            local tData = Rarity.getData();
+            local nOrdinal = Rarity.getOrdinal(eLevel);
+
+            return tData.COLOR[nOrdinal];
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Methods.getChance
+        @pulsarlua function Rarity.getChance
+        @desc Returns the cumulative percentage threshold, not the individual occurrence probability.
+        @param CoG.LEVEL eLevel Rarity member whose ordinal selects the settings row.
+        @ret number vValue Configured value.
+        !]]
+        public static getChance(eLevel) {
+            local tData = Rarity.getData();
+            local nOrdinal = Rarity.getOrdinal(eLevel);
+
+            return tData.CHANCE[nOrdinal];
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Methods.getMinAffixTier
+        @pulsarlua function Rarity.getMinAffixTier
+        @desc Returns the minimum permitted affix tier.
+        @param CoG.LEVEL eLevel Rarity member whose ordinal selects the settings row.
+        @ret TIER vValue Configured value.
+        !]]
+        public static getMinAffixTier(eLevel) {
+            local tData = Rarity.getData();
+            local nOrdinal = Rarity.getOrdinal(eLevel);
+
+            return tData.MIN_AFFIX_TIER[nOrdinal];
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Methods.getMaxAffixTier
+        @pulsarlua function Rarity.getMaxAffixTier
+        @desc Returns the maximum permitted affix tier.
+        @param CoG.LEVEL eLevel Rarity member whose ordinal selects the settings row.
+        @ret TIER vValue Configured value.
+        !]]
+        public static getMaxAffixTier(eLevel) {
+            local tData = Rarity.getData();
+            local nOrdinal = Rarity.getOrdinal(eLevel);
+
+            return tData.MAX_AFFIX_TIER[nOrdinal];
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Methods.getMinPrefixCount
+        @pulsarlua function Rarity.getMinPrefixCount
+        @desc Returns the minimum prefix count when affixes are present.
+        @param CoG.LEVEL eLevel Rarity member whose ordinal selects the settings row.
+        @ret number vValue Configured value.
+        !]]
+        public static getMinPrefixCount(eLevel) {
+            local tData = Rarity.getData();
+            local nOrdinal = Rarity.getOrdinal(eLevel);
+
+            return tData.MIN_PREFIXES[nOrdinal];
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Methods.getMaxPrefixCount
+        @pulsarlua function Rarity.getMaxPrefixCount
+        @desc Returns the maximum permitted prefix count.
+        @param CoG.LEVEL eLevel Rarity member whose ordinal selects the settings row.
+        @ret number vValue Configured value.
+        !]]
+        public static getMaxPrefixCount(eLevel) {
+            local tData = Rarity.getData();
+            local nOrdinal = Rarity.getOrdinal(eLevel);
+
+            return tData.MAX_PREFIXES[nOrdinal];
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Methods.getMinSuffixCount
+        @pulsarlua function Rarity.getMinSuffixCount
+        @desc Returns the minimum suffix count when affixes are present.
+        @param CoG.LEVEL eLevel Rarity member whose ordinal selects the settings row.
+        @ret number vValue Configured value.
+        !]]
+        public static getMinSuffixCount(eLevel) {
+            local tData = Rarity.getData();
+            local nOrdinal = Rarity.getOrdinal(eLevel);
+
+            return tData.MIN_SUFFIXES[nOrdinal];
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Methods.getMaxSuffixCount
+        @pulsarlua function Rarity.getMaxSuffixCount
+        @desc Returns the maximum permitted suffix count.
+        @param CoG.LEVEL eLevel Rarity member whose ordinal selects the settings row.
+        @ret number vValue Configured value.
+        !]]
+        public static getMaxSuffixCount(eLevel) {
+            local tData = Rarity.getData();
+            local nOrdinal = Rarity.getOrdinal(eLevel);
+
+            return tData.MAX_SUFFIXES[nOrdinal];
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Methods.getRandom
+        @pulsarlua function Rarity.getRandom
+        @desc Rolls an integer percentage through RNG.percent, adds the adjustment,
+            then scans thresholds from highest rarity to lowest. The first threshold
+            at least as large as the adjusted roll wins; the lowest level is the
+            fallback. Negative adjustments favor rarer levels.
+        @param number|nil nAdjustment Finite roll adjustment; defaults to zero.
+        @ret CoG.LEVEL eLevel Selected CoG.LEVEL member within the configured rarity range.
+        !]]
+        public static getRandom(nAdjustment) {
+            local tData = Rarity.getData();
+            local eRet = tData.eLevel[1];
+            local nRoll = RNG.percent();
+            nAdjustment = nAdjustment == nil and 0 or nAdjustment;
+            type.assert.number(nAdjustment);
+            assert(nAdjustment == nAdjustment and nAdjustment > -math.huge and
+                nAdjustment < math.huge, "Rarity adjustment must be finite.");
+
+            -- Adjust the roll, rather than altering the configured thresholds.
+            nRoll = nRoll + nAdjustment;
+
+            for nIndex = tData.nLevels, 1, -1 do
+                if (nRoll <= tData.CHANCE[nIndex]) then
+                    eRet = tData.eLevel[nIndex];
+                    break;
+                end
+            end
+
+            return eRet;
+        }
+
+        --[[!
+        @fqxn CoG.Rarity.Methods.Rarity
+        @desc Keeps this final utility class non-instantiable.
+        !]]
+        private Rarity() {
+        }
+    }
+}
+

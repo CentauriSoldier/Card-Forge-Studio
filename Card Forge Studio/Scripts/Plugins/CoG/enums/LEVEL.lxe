@@ -1,0 +1,114 @@
+--[[!
+@fqxn CoG.LEVEL
+@desc General-purpose levels from one through one hundred. Member names spell
+    their levels; omitted payloads use the ordinal, so Value and Ordinal match the
+    one-based declaration position. This default can be replaced by one ordinary
+    application enum named CoG.LEVEL in the same loading batch. It is independent
+    of progression rules; Rarity uses its ordinals to select configured rows.
+@ex local nOrdinal = CoG.LEVEL.TWENTY_ONE.Ordinal; -- 21
+!]]
+namespace CoG {
+    ---@default
+    public enum LEVEL {
+        ONE;
+        TWO;
+        THREE;
+        FOUR;
+        FIVE;
+        SIX;
+        SEVEN;
+        EIGHT;
+        NINE;
+        TEN;
+        ELEVEN;
+        TWELVE;
+        THIRTEEN;
+        FOURTEEN;
+        FIFTEEN;
+        SIXTEEN;
+        SEVENTEEN;
+        EIGHTEEN;
+        NINETEEN;
+        TWENTY;
+        TWENTY_ONE;
+        TWENTY_TWO;
+        TWENTY_THREE;
+        TWENTY_FOUR;
+        TWENTY_FIVE;
+        TWENTY_SIX;
+        TWENTY_SEVEN;
+        TWENTY_EIGHT;
+        TWENTY_NINE;
+        THIRTY;
+        THIRTY_ONE;
+        THIRTY_TWO;
+        THIRTY_THREE;
+        THIRTY_FOUR;
+        THIRTY_FIVE;
+        THIRTY_SIX;
+        THIRTY_SEVEN;
+        THIRTY_EIGHT;
+        THIRTY_NINE;
+        FORTY;
+        FORTY_ONE;
+        FORTY_TWO;
+        FORTY_THREE;
+        FORTY_FOUR;
+        FORTY_FIVE;
+        FORTY_SIX;
+        FORTY_SEVEN;
+        FORTY_EIGHT;
+        FORTY_NINE;
+        FIFTY;
+        FIFTY_ONE;
+        FIFTY_TWO;
+        FIFTY_THREE;
+        FIFTY_FOUR;
+        FIFTY_FIVE;
+        FIFTY_SIX;
+        FIFTY_SEVEN;
+        FIFTY_EIGHT;
+        FIFTY_NINE;
+        SIXTY;
+        SIXTY_ONE;
+        SIXTY_TWO;
+        SIXTY_THREE;
+        SIXTY_FOUR;
+        SIXTY_FIVE;
+        SIXTY_SIX;
+        SIXTY_SEVEN;
+        SIXTY_EIGHT;
+        SIXTY_NINE;
+        SEVENTY;
+        SEVENTY_ONE;
+        SEVENTY_TWO;
+        SEVENTY_THREE;
+        SEVENTY_FOUR;
+        SEVENTY_FIVE;
+        SEVENTY_SIX;
+        SEVENTY_SEVEN;
+        SEVENTY_EIGHT;
+        SEVENTY_NINE;
+        EIGHTY;
+        EIGHTY_ONE;
+        EIGHTY_TWO;
+        EIGHTY_THREE;
+        EIGHTY_FOUR;
+        EIGHTY_FIVE;
+        EIGHTY_SIX;
+        EIGHTY_SEVEN;
+        EIGHTY_EIGHT;
+        EIGHTY_NINE;
+        NINETY;
+        NINETY_ONE;
+        NINETY_TWO;
+        NINETY_THREE;
+        NINETY_FOUR;
+        NINETY_FIVE;
+        NINETY_SIX;
+        NINETY_SEVEN;
+        NINETY_EIGHT;
+        NINETY_NINE;
+        ONE_HUNDRED;
+    }
+}

@@ -1,0 +1,375 @@
+--[[!
+@fqxn CoG.StatusTracker
+@desc Tracks activation, duration and expiration for terminal effects within
+    CoG.EFFECT or one of its embedded categories. LuaEx discovers this class;
+    no short alias or config-time enum builder is required. Applications replace
+    the default CoG.EFFECT declaration before loading. Methods use bound dot calls.
+@ex local statuses = CoG.StatusTracker(CoG.EFFECT);
+statuses.activate(CoG.EFFECT.HASTENED, 5, true);
+statuses.cycle(1);
+!]]
+namespace CoG {
+    class StatusTracker requires(CoG.EFFECT) {
+        private static _tScopes = {};
+
+        private _eScope = null;
+        private _tStatuses = {};
+
+        --[[!
+        @fqxn CoG.StatusTracker.indexCategory
+        @desc Indexes canonical terminal identities and relative/absolute paths.
+            Embedded enums define scopes, not independently tracked effects.
+            The private indexes are built once after enum initialization.
+        @param enum eCategory Current enum collection.
+        @param string sPath Fully qualified collection path.
+        @ret table tScope Private scope metadata.
+        !]]
+        private static indexCategory(eCategory, sPath) {
+            local tScope = {path = sPath, names = {}, known = {}, effects = {}, absolute = {}};
+            StatusTracker._tScopes[eCategory] = tScope;
+
+            for _, eMember in eCategory() do
+                local sName = eMember.Name;
+                local sAbsolute = sPath.."."..sName;
+
+                if (lxe.isEnum(eMember)) then
+                    local tChild = StatusTracker.indexCategory(eMember, sAbsolute);
+
+                    for _, sChildName in ipairs(tChild.names) do
+                        local sRelative = sName.."."..sChildName;
+                        tScope.names[#tScope.names + 1] = sRelative;
+                        tScope.known[sRelative] = true;
+                    end
+
+                    for eEffect, sChildName in pairs(tChild.effects) do
+                        tScope.effects[eEffect] = sName.."."..sChildName;
+                    end
+
+                    for sEffectPath, sChildName in pairs(tChild.absolute) do
+                        tScope.absolute[sEffectPath] = sName.."."..sChildName;
+                    end
+                else
+                    tScope.names[#tScope.names + 1] = sName;
+                    tScope.known[sName] = true;
+                    tScope.effects[eMember] = sName;
+                    tScope.absolute[sAbsolute] = sName;
+                end
+            end
+
+            return tScope;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.StaticConstructor
+        @desc Indexes the selected default or application enum before instances exist.
+        !]]
+        static StatusTracker() {
+            StatusTracker.indexCategory(CoG.EFFECT, tostring(CoG.EFFECT));
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.validateDuration
+        @desc Requires finite nonnegative duration or time step; fractions are valid.
+        @param number nDuration Time in the caller's chosen units.
+        !]]
+        private static validateDuration(nDuration) {
+            assert(rawtype(nDuration) == "number" and nDuration == nDuration
+                and nDuration >= 0 and nDuration < math.huge,
+                "Status duration must be a finite nonnegative number.");
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.copyStatuses
+        @desc Validates all supplied status records before returning independent
+            complete storage. Missing effects begin inactive, at zero, expiring.
+            Used for initial storage and native clone/restore validation.
+        @param enum eScope Indexed collection within the selected CoG.EFFECT tree.
+        @param table tStatuses Existing records keyed by scope-relative paths.
+        @ret table tCopy Validated independent records.
+        !]]
+        private static copyStatuses(eScope, tStatuses) {
+            local tScope = StatusTracker._tScopes[eScope];
+            assert(tScope, "StatusTracker scope must be CoG.EFFECT or an embedded category, not an effect.");
+            type.assert.table(tStatuses);
+
+            for sName, tStatus in pairs(tStatuses) do
+                assert(rawtype(sName) == "string" and tScope.known[sName],
+                    "Saved status is outside the selected scope.");
+                type.assert.table(tStatus);
+                StatusTracker.validateDuration(tStatus.duration);
+                assert(rawtype(tStatus.active) == "boolean", "Status active state must be boolean.");
+                assert(rawtype(tStatus.doesExpire) == "boolean", "Status expiration flag must be boolean.");
+
+                for sKey in pairs(tStatus) do
+                    assert(sKey == "duration" or sKey == "active" or sKey == "doesExpire",
+                        "Unknown StatusTracker status field.");
+                end
+
+                assert(not (tStatus.active and tStatus.doesExpire and tStatus.duration == 0),
+                    "An active expiring status must have a positive duration.");
+            end
+
+            local tCopy = {};
+
+            for _, sName in ipairs(tScope.names) do
+                local tSaved = tStatuses[sName];
+                tCopy[sName] = {
+                    duration = tSaved and tSaved.duration or 0,
+                    active = tSaved and tSaved.active or false,
+                    doesExpire = tSaved == nil or tSaved.doesExpire,
+                };
+            end
+
+            return tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.Constructor
+        @desc Creates independent inactive records for terminal effects beneath eScope.
+        @param enum eScope CoG.EFFECT or one of its embedded enum collections.
+        !]]
+        public StatusTracker(eScope) {
+            local tStatuses = StatusTracker.copyStatuses(eScope, {});
+            this._eScope = eScope;
+            this._tStatuses = tStatuses;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.getName
+        @desc Resolves canonical effect identity, relative path or fully qualified
+            path without accepting another scope's effect or an enum collection.
+        @param string|enum vEffect Terminal effect or exact path.
+        @ret string sName Scope-relative status path.
+        !]]
+        private getName(vEffect) {
+            local tScope = StatusTracker._tScopes[this._eScope];
+            local sName = tScope.effects[vEffect];
+
+            if (not sName and rawtype(vEffect) == "string") then
+                sName = tScope.known[vEffect] and vEffect or tScope.absolute[vEffect];
+            end
+
+            assert(sName, "Unknown StatusTracker effect or effect outside this scope.");
+            return sName;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.activate
+        @desc Validates all arguments before activation. Omitted settings retain
+            their values; supplied settings replace rather than stack. Expiring
+            zero-duration statuses remain inactive; indefinite statuses may activate.
+        @param string|enum vEffect Effect identity or path.
+        @param number|nil nDuration Optional finite nonnegative duration.
+        @param boolean|nil bDoesExpire Optional expiration flag.
+        @ret boolean bActive Resulting active state.
+        !]]
+        public activate(vEffect, nDuration, bDoesExpire) {
+            local sName = this.getName(vEffect);
+
+            if (nDuration ~= nil) then
+                StatusTracker.validateDuration(nDuration);
+            end
+
+            assert(bDoesExpire == nil or rawtype(bDoesExpire) == "boolean",
+                "Status expiration flag must be boolean.");
+            local tStatus = this._tStatuses[sName];
+
+            if (nDuration ~= nil) then tStatus.duration = nDuration; end
+            if (bDoesExpire ~= nil) then tStatus.doesExpire = bDoesExpire; end
+
+            tStatus.active = not tStatus.doesExpire or tStatus.duration > 0;
+            return tStatus.active;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.deactivate
+        @desc Stops a status without changing duration or expiration settings.
+        @param string|enum vEffect Effect identity or path.
+        @ret boolean bChanged Whether it was active.
+        !]]
+        public deactivate(vEffect) {
+            local tStatus = this._tStatuses[this.getName(vEffect)];
+            local bRet = tStatus.active;
+            tStatus.active = false;
+            return bRet;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.isActive
+        @desc Reports explicit active state, independently of duration.
+        @param string|enum vEffect Effect identity or path.
+        @ret boolean bActive Current active flag.
+        !]]
+        public isActive(vEffect) {
+            return this._tStatuses[this.getName(vEffect)].active;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.getDuration
+        @desc Returns remaining duration in caller-defined time units.
+        @param string|enum vEffect Effect identity or path.
+        @ret number nDuration Remaining finite nonnegative duration.
+        !]]
+        public getDuration(vEffect) {
+            return this._tStatuses[this.getName(vEffect)].duration;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.setDuration
+        @desc Replaces duration without activating. Zero deactivates only expiring statuses.
+        @param string|enum vEffect Effect identity or path.
+        @param number nDuration Finite nonnegative remaining duration.
+        @ret CoG.StatusTracker oStatuses This instance for chaining.
+        !]]
+        public setDuration(vEffect, nDuration) {
+            local tStatus = this._tStatuses[this.getName(vEffect)];
+            StatusTracker.validateDuration(nDuration);
+            tStatus.duration = nDuration;
+
+            if (tStatus.doesExpire and nDuration == 0) then tStatus.active = false; end
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.adjustDuration
+        @desc Adds a finite signed delta, clamps underflow at zero and rejects overflow
+            before mutation. Does not activate an inactive status.
+        @param string|enum vEffect Effect identity or path.
+        @param number nDelta Finite signed duration change.
+        @ret CoG.StatusTracker oStatuses This instance for chaining.
+        !]]
+        public adjustDuration(vEffect, nDelta) {
+            local tStatus = this._tStatuses[this.getName(vEffect)];
+            assert(rawtype(nDelta) == "number" and nDelta == nDelta and math.abs(nDelta) < math.huge,
+                "Duration adjustment must be a finite number.");
+            local nDuration = math.max(0, tStatus.duration + nDelta);
+            return this.setDuration(vEffect, nDuration);
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.doesExpire
+        @desc Reports whether reaching zero automatically deactivates this status.
+        @param string|enum vEffect Effect identity or path.
+        @ret boolean bDoesExpire Expiration policy.
+        !]]
+        public doesExpire(vEffect) {
+            return this._tStatuses[this.getName(vEffect)].doesExpire;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.setDoesExpire
+        @desc Changes expiration policy without activation. Enabling expiration
+            at zero immediately deactivates the status.
+        @param string|enum vEffect Effect identity or path.
+        @param boolean bFlag Whether reaching zero should stop the status.
+        @ret CoG.StatusTracker oStatuses This instance for chaining.
+        !]]
+        public setDoesExpire(vEffect, bFlag) {
+            local tStatus = this._tStatuses[this.getName(vEffect)];
+            assert(rawtype(bFlag) == "boolean", "Status expiration flag must be boolean.");
+            tStatus.doesExpire = bFlag;
+
+            if (bFlag and tStatus.duration == 0) then tStatus.active = false; end
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.cycle
+        @desc Advances active timers by a finite nonnegative step (default one).
+            Durations clamp at zero; only expiring statuses deactivate there.
+        @param number|nil nStep Time to advance in caller-defined units.
+        @ret number nExpired Count deactivated by this cycle.
+        !]]
+        public cycle(nStep) {
+            nStep = nStep == nil and 1 or nStep;
+            StatusTracker.validateDuration(nStep);
+            local nRet = 0;
+
+            for _, sName in ipairs(StatusTracker._tScopes[this._eScope].names) do
+                local tStatus = this._tStatuses[sName];
+
+                if (tStatus.active) then
+                    tStatus.duration = math.max(0, tStatus.duration - nStep);
+
+                    if (tStatus.doesExpire and tStatus.duration == 0) then
+                        tStatus.active = false;
+                        nRet = nRet + 1;
+                    end
+                end
+            end
+
+            return nRet;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.eachStatus
+        @desc Iterates relative paths and independent copied records in enum order,
+            including inactive statuses. Later changes cannot alter the snapshot.
+        @ret function fIterator Iterator returning name and copied status record.
+        !]]
+        public eachStatus() {
+            local tSnapshot = StatusTracker.copyStatuses(this._eScope, this._tStatuses);
+            local tNames = StatusTracker._tScopes[this._eScope].names;
+            local nIndex = 0;
+
+            return function()
+                nIndex = nIndex + 1;
+                local sName = tNames[nIndex];
+
+                if (sName) then return sName, tSnapshot[sName]; end
+            end;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.clear
+        @desc Deactivates all statuses and clears duration, retaining expiration policy.
+        @ret number nCleared Number previously active.
+        !]]
+        public clear() {
+            local nRet = 0;
+
+            for _, sName in ipairs(StatusTracker._tScopes[this._eScope].names) do
+                local tStatus = this._tStatuses[sName];
+                if (tStatus.active) then nRet = nRet + 1; end
+                tStatus.active = false;
+                tStatus.duration = 0;
+            end
+
+            return nRet;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.__len
+        @desc Counts active statuses rather than the number of declared effects.
+        @ret number nActive Active status count.
+        !]]
+        public operator __len() {
+            local nRet = 0;
+
+            for _, sName in ipairs(StatusTracker._tScopes[this._eScope].names) do
+                if (this._tStatuses[sName].active) then nRet = nRet + 1; end
+            end
+
+            return nRet;
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.__pairs
+        @desc Exposes the same snapshot iterator as eachStatus.
+        @ret function fIterator Scope-relative status snapshot iterator.
+        !]]
+        public operator __pairs() {
+            return this.eachStatus();
+        }
+
+        --[[!
+        @fqxn CoG.StatusTracker.validateSnapshot
+        @desc Validates canonical scope and stored status records after native
+            clone/restore. Copies records so shared input cannot expose live state.
+        @param table tState Native declaring-class field projection.
+        !]]
+        private validateSnapshot(tState) {
+            tState.pri._tStatuses = StatusTracker.copyStatuses(tState.pri._eScope, tState.pri._tStatuses);
+        }
+    }
+}

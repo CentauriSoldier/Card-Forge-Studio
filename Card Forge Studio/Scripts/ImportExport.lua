@@ -198,7 +198,7 @@ function ImportExport.Export_1(sKind, oProject, pArchive)
     local sGameUUID = sKind == "Game" and sUUID or identity(oProject.GetGameUUID());
     local pSource = sKind == "Game" and FS.Game.GetRoot(sUUID) or FS.CardSet.GetRoot(sGameUUID, sUUID);
     local tMeta = metadata(pSource, sKind); local pStage = stage(); local pPayload = pStage.."/payload";
-    Log.Note("Exporting "..sKind.." package: "..tMeta.name);
+    CFS.Log.Note("Exporting "..sKind.." package: "..tMeta.name);
     local bOK, sError = xpcall(function()
         Archive.run("copy", pSource, pPayload);
         if (sKind == "Game") then
@@ -230,9 +230,9 @@ function ImportExport.Export_1(sKind, oProject, pArchive)
         assert(bPacked, sPackError);
     end, debug.traceback);
     local bClean, sClean = pcall(Archive.run, "remove", pStage);
-    if (not bClean) then Log.Warning(sClean); end
+    if (not bClean) then CFS.Log.Warning(sClean); end
     if (not bOK) then error(sError, 0); end
-    Log.Note(sKind.." package export complete: "..tMeta.name); return pArchive;
+    CFS.Log.Note(sKind.." package export complete: "..tMeta.name); return pArchive;
 end
 
 --[[!
@@ -247,7 +247,7 @@ end
 !]]
 function ImportExport.Import_1(pArchive, sKind, oDestination, fConfirm)
     local pStage = stage(); local tReport = {}; local bImported = false;
-    Log.Note("Importing "..sKind.." package.");
+    CFS.Log.Note("Importing "..sKind.." package.");
     local bOK, sError = xpcall(function()
         Archive.run("unpack", pArchive, pStage);
         local pManifest = pStage.."/Package.ini";
@@ -256,7 +256,7 @@ function ImportExport.Import_1(pArchive, sKind, oDestination, fConfirm)
         assert(tCompatible[nInput] and nInput == 1, "Cannot automatically import this package: its format version is not compatible with this importer.");
         assert(value("Kind") == sKind, "The package has the wrong project type.");
         local sUUID = identity(value("UUID")); local sOrigin = identity(value("GameUUID"));
-        local oActive = Game.GetActive(); local oSet = ProcSys.GetActiveCardSet();
+        local oActive = CFS.Game.GetActive(); local oSet = ProcSys.GetActiveCardSet();
         assert(not (sKind == "Game" and oActive and oActive.GetUUID() == sUUID), "Cannot import this game now: it is currently active. Close Game, then try importing again.");
         assert(not (sKind == "CardSet" and oSet and oSet.GetUUID() == sUUID), "Cannot import this card set now: it is currently active. Close Card Set, then try importing again.");
         local pTarget;
@@ -312,13 +312,13 @@ function ImportExport.Import_1(pArchive, sKind, oDestination, fConfirm)
         local sInstall = Archive.run("install", pPayload, pTarget);
         if (sInstall:match("%S")) then tReport[#tReport + 1] = sInstall; end
         bImported = true;
-        if (sKind == "Game") then Game.Refresh(); else oDestination.UpdateCardSets(); end
+        if (sKind == "Game") then CFS.Game.Refresh(); else oDestination.UpdateCardSets(); end
     end, debug.traceback);
     local bClean, sClean = pcall(Archive.run, "remove", pStage);
-    if (not bClean) then Log.Warning(sClean); end
-    for _, sMessage in ipairs(tReport) do Log.Warning(sMessage); end
+    if (not bClean) then CFS.Log.Warning(sClean); end
+    for _, sMessage in ipairs(tReport) do CFS.Log.Warning(sMessage); end
     if (not bOK) then error(sError, 0); end
-    Log.Note(bImported and (sKind.." package import complete; project activation unchanged.") or "Package import canceled; existing files unchanged.");
+    CFS.Log.Note(bImported and (sKind.." package import complete; project activation unchanged.") or "Package import canceled; existing files unchanged.");
     return bImported, tReport;
 end
 --[[!

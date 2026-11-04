@@ -1,0 +1,26 @@
+--[[!
+@fqxn CoG.CoGStructure
+@pulsarlua class CoGStructure
+@desc Marker subclass identifying structures, including concrete descendants.
+    Inherits CoGObject metadata, rarity, tags, events and owned affixes. Applications
+    define gameplay state in subclasses; world systems manage position and placement.
+    The protected constructor prevents direct construction of this marker class.
+!]]
+namespace CoG {
+    class CoGStructure : CoGObject {
+        --[[!
+        @fqxn CoG.CoGStructure.Methods.CoGStructure
+        @pulsarlua function CoGStructure
+        @desc Delegates metadata validation and independent component creation to
+            CoGObject. Concrete subclasses call this constructor through base.
+        @param string sName Structure name containing non-whitespace text.
+        @param string sDescription Nonblank structure description.
+        @param CoG.LEVEL|nil eRarity Initial rarity; defaults to the first level.
+        @param string|nil wEventrix Registered event environment name.
+        @throws Invalid metadata or inherited initialization errors.
+        !]]
+        protected CoGStructure(sName, sDescription, eRarity, wEventrix) {
+            base(sName, sDescription, eRarity, wEventrix);
+        }
+    }
+}

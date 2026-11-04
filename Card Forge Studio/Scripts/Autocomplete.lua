@@ -87,7 +87,7 @@ function Autocomplete.Flush()
         for _, fDismiss in pairs(tControls) do fDismiss(); end
         bDirty = false;
     end, debug.traceback);
-    if (not bOK) then Log.Error("Autocomplete: "..sError); end
+    if (not bOK) then CFS.Log.Error("Autocomplete: "..sError); end
 end
 
 function Autocomplete.Read()

@@ -1,4 +1,5 @@
 local wx = require("wx");
+local RNG = CoG.RNG;
 local Color = {RGBA = wx.wxColour, RGB = wx.wxColour};
 --[[!
 @fqxn CFS.UserEnv.Private.Functions.p
@@ -12,7 +13,7 @@ local function p(...)
         local vValue = select(nIndex, ...);
         tValues[nIndex] = rawtype(vValue) == "table" and serialize(vValue) or tostring(vValue);
     end
-    Log.Debug(table.concat(tValues, "\t"));
+    CFS.Log.Debug(table.concat(tValues, "\t"));
 end
                                                                                     --[[
                                                                                     ██╗   ██╗███████╗███████╗██████╗ ███████╗███╗   ██╗██╗   ██╗
@@ -195,8 +196,8 @@ local tEnv = { --TODO QUESTION do i need to protect this?
         assert(rawtype(pRoot) == "string" and pRoot ~= "", "Exists requires an active resource root.");
         return wx.wxFileExists(io.normalizepath(pRoot.."/"..sRelative));
     end,
-    LogClear         = Log.ClearWindow, --TODO NOTE THESE
-    Log              = Log.Note,
+    LogClear         = CFS.Log.ClearWindow, --TODO NOTE THESE
+    Log              = CFS.Log.Note,
     --[[!
     @fqxn CFS.UserEnv.Functions.Import
     @desc
@@ -442,6 +443,9 @@ InjectEnv("Forge", {
     --[[!@fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawStyledText
         @inheritdoc CFS.Modules.Forge.Functions.DrawStyledText!]]
     DrawStyledText  = Forge.DrawStyledText,
+    --[[!@fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawStyledTextFit
+        @inheritdoc CFS.Modules.Forge.Functions.DrawStyledTextFit!]]
+    DrawStyledTextFit = Forge.DrawStyledTextFit,
 });
 end
 

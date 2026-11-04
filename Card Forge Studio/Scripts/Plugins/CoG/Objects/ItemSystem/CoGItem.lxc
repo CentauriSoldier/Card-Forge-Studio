@@ -1,0 +1,611 @@
+--[[!
+    @fqxn CoG.CoGItem
+    @desc Base class for individual items. CoGRegistry action permissions and ClassRegistry storage/conflict fields express eligibility;
+    callers perform actions and enforce their gameplay consequences. Durability
+    reaching zero does not imply destruction. Inimitable is metadata only.
+    Every omitted registry/Pool/SlotPattern input creates a fresh object in the constructor;
+    validated supplied objects are retained by reference. Stacking belongs to
+    ItemSlot. Trading also covers selling; callers determine cost from Value.
+!]]
+namespace CoG {
+    class CoGItem : CoG.CoGObject requires(CoG.CoGRegistry, CoG.Pool, CoG.SlotPattern, LuaEx.Classes.ClassRegistry) {
+        private static _tRules = require("cog.Objects.ItemSystem.ItemRules");
+        private static _tPersistence = require("cog.Objects.ItemSystem.ItemPersistence");
+        private location = {};
+        private attachment = {};
+        private attachedItems = {};
+        private identity = {};
+        private persistenceID = 0;
+        protected Attachable_To = null;
+        protected Consumable_By = null;
+        protected Damageable_By = null;
+        protected Detachable_By = null;
+        protected Equipable_By = null;
+        protected Exclusive_In = null;
+        protected Exclusive_With = null;
+        protected Inimitable = false;
+        public isInimitable() { return this.Inimitable; }
+        protected Removable_By = null;
+        protected Repairable_By = null;
+        protected Storable_In = null;
+        protected Tradable_By = null;
+        protected Tradable_To = null;
+        protected Unequippable_By = null;
+        protected Upgradeable_By = null;
+        protected Downgradable_By = null;
+        protected Durability = null;
+        protected Size = null;
+        protected Value = null;
+        protected Weight = null;
+        protected Slot_Pattern = null;
+
+        private static acceptObject(vInput, cExpected, defaultFactory, sField) {
+
+            if (vInput == nil) then
+                return defaultFactory();
+            end
+
+            assert(class.isa(vInput, cExpected),
+                   "CoGItem "..sField.." must be an instance of "..class.getname(cExpected)..".");
+
+            return vInput;
+        }
+
+        private static defaultCoGRegistry() {
+
+            return CoG.CoGRegistry();
+        }
+
+        private static defaultRegistry() {
+
+            return LuaEx.Classes.ClassRegistry();
+        }
+
+        private static defaultDurability() {
+
+            return CoG.Pool(1, 1);
+        }
+
+        private static defaultQuantity() {
+
+            return CoG.Pool(1, 0);
+        }
+
+        private static defaultSlotPattern() {
+
+            return CoG.SlotPattern();
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.__clone
+        @desc Requires callers to choose how concrete items are cloned before populating another container.
+        !]]
+        public operator clone() {
+
+            --TODO Define copying of subclass state, attachments and CoGObject affixes.
+            -- Inimitable is deliberately not enforced here.
+            error("CoGItem subclasses must implement __clone for their item state.");
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.eachAttachmentOf
+        @desc Validates a CoG host and iterates a copied list of its attached item references.
+        !]]
+        public static eachAttachmentOf(oHost) {
+            assert(class.isinstance(oHost) and class.isa(oHost, CoG.CoGBase), "Attachment host must be a CoG instance.");
+
+            return ipairs(CoGItem._tRules.attachments(oHost));
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.validateSnapshot
+        @desc Validates saved identity and attachment/location holders during native graph restoration.
+        !]]
+        private validateSnapshot(tState) {
+            CoGItem._tRules.integer(tState.pri.persistenceID, 1);
+            type.assert.table(tState.pri.attachedItems);
+            type.assert.table(tState.pri.location);
+            type.assert.table(tState.pri.attachment);
+            assert(type.isnull(tState.pri.location.value) or class.isinstance(tState.pri.location.value), "Invalid saved item location.");
+            assert(type.isnull(tState.pri.attachment.host) or class.isa(tState.pri.attachment.host, CoG.CoGBase), "Invalid saved attachment host.");
+            this.restoreItemRuntime();
+            CoGItem._tRules.validateAttachment(this);
+            CoGItem._tRules.validateAttachments(this);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.prepareSnapshot
+        @desc Registers the concrete item adapter, wraps permission registries and omits inverse links from the
+        copied snapshot.
+        !]]
+        private prepareSnapshot(tState) {
+            -- Native registries retain callbacks, shared identities and cycles directly.
+            -- Replace projected records; never mutate the live holder tables.
+            tState.pri.identity = {};
+            tState.pri.location = {value = null};
+            tState.pri.attachment = {host = null};
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.CoGItem
+        @desc Protected constructor invoked by concrete item subclasses.
+        Registry/Pool arguments are optional objects, never booleans or numbers.
+        vExclusiveIn accepts a ClassRegistry or a particular supported system instance;
+        omission includes slot systems, inventories and stashes. Other registries start empty.
+        Location and Attached_To accept class instances or null/nil; omitted values
+        remain null. Attached_To identifies one CoG host. Inimitable defaults false.
+        !]]
+        protected CoGItem(sName, sDescription, eRarity, wEventrix,
+                        oAttachableTo, oConsumableBy, oDamageableBy, oDetachableBy,
+                        oEquippableBy, vExclusiveIn, oExclusiveWith, bInimitable,
+                        oRemovableBy, oRepairableBy, oStorableIn,
+                        oTradableBy, oTradableTo, oUnequippableBy,
+                        oUpgradeableBy, oDowngradableBy,
+                        oDurability, oSize, oValue, oWeight,
+                        oAttachedTo, oLocation, oSlotPattern) {
+            base(CoG.CoGItem.checkInputs(sName, sDescription, eRarity, wEventrix, oAttachableTo, oConsumableBy, oDamageableBy, oDetachableBy, oEquippableBy, vExclusiveIn, oExclusiveWith, bInimitable, oRemovableBy, oRepairableBy, oStorableIn, oTradableBy, oTradableTo, oUnequippableBy, oUpgradeableBy, oDowngradableBy, oDurability, oSize, oValue, oWeight, oAttachedTo, oLocation, oSlotPattern), sDescription, eRarity, wEventrix);
+            local pro = this;
+            local tFields = {};
+
+            -- Validate component inputs before publishing any of them as this item's fields.
+            local tObjectRegistries = {
+                {"Attachable_To", oAttachableTo}, {"Consumable_By", oConsumableBy},
+                {"Damageable_By", oDamageableBy}, {"Detachable_By", oDetachableBy},
+                {"Equipable_By", oEquippableBy}, {"Removable_By", oRemovableBy},
+                {"Repairable_By", oRepairableBy}, {"Tradable_By", oTradableBy},
+                {"Tradable_To", oTradableTo}, {"Unequippable_By", oUnequippableBy},
+                {"Upgradeable_By", oUpgradeableBy}, {"Downgradable_By", oDowngradableBy},
+            };
+
+            for _, tField in ipairs(tObjectRegistries) do
+                tFields[tField[1]] = CoGItem.acceptObject(tField[2], CoG.CoGRegistry, CoGItem.defaultCoGRegistry, tField[1]);
+            end
+
+            tFields.Exclusive_With = CoGItem.acceptObject(oExclusiveWith, LuaEx.Classes.ClassRegistry, CoGItem.defaultRegistry, "Exclusive_With");
+            tFields.Storable_In = CoGItem.acceptObject(oStorableIn, LuaEx.Classes.ClassRegistry, CoGItem.defaultRegistry, "Storable_In");
+
+            -- Default scopes match container classes. A supplied system instance narrows scope by identity.
+            if (vExclusiveIn == nil) then
+                tFields.Exclusive_In = LuaEx.Classes.ClassRegistry({CoG.ItemSlotSystem, CoG.ItemSystem, CoG.ItemStashSystem});
+            elseif (class.isinstance(vExclusiveIn) and
+                    (class.isa(vExclusiveIn, CoG.ItemSlotSystem) or
+                     class.isa(vExclusiveIn, CoG.ItemSystem) or
+                     class.isa(vExclusiveIn, CoG.ItemStashSystem))) then
+                tFields.Exclusive_In = LuaEx.Classes.ClassRegistry({vExclusiveIn});
+            else
+                tFields.Exclusive_In = CoGItem.acceptObject(vExclusiveIn, LuaEx.Classes.ClassRegistry, CoGItem.defaultRegistry, "Exclusive_In");
+            end
+
+            tFields.Durability = CoGItem.acceptObject(oDurability, CoG.Pool, CoGItem.defaultDurability, "Durability");
+            tFields.Size = CoGItem.acceptObject(oSize, CoG.Pool, CoGItem.defaultQuantity, "Size");
+            tFields.Value = CoGItem.acceptObject(oValue, CoG.Pool, CoGItem.defaultQuantity, "Value");
+            tFields.Weight = CoGItem.acceptObject(oWeight, CoG.Pool, CoGItem.defaultQuantity, "Weight");
+            assert(bInimitable == nil or rawtype(bInimitable) == "boolean", "Inimitable must be a boolean or nil.");
+
+            if (oAttachedTo ~= nil and oAttachedTo ~= null) then
+                assert(class.isinstance(oAttachedTo) and class.isa(oAttachedTo, CoG.CoGBase),
+                       "Attached_To must be a CoG instance or null.");
+            end
+
+            if (oLocation ~= nil and oLocation ~= null) then
+                assert(class.isinstance(oLocation), "Location must be a class instance or null.");
+            end
+
+            tFields.Slot_Pattern = CoGItem.acceptObject(oSlotPattern, CoG.SlotPattern, CoGItem.defaultSlotPattern, "Slot_Pattern");
+
+            -- Parent construction is complete; publish the validated item fields together.
+            for sField, oObject in pairs(tFields) do
+                pro[sField] = oObject;
+            end
+
+            -- Hold inverse references inside tables so changing targets preserves each declared field type.
+            pro.Inimitable = bInimitable == true;
+            this.attachment.host = oAttachedTo or null;
+            this.location.value = oLocation or null;
+            this.persistenceID = CoGItem._tPersistence.identify(this);
+            this.identity.object = this;
+            CoGItem._tRules.registerHost(this, this.attachedItems);
+            CoGItem._tRules.registerAttachment(this, this.attachment);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.restoreItemRuntime
+        @desc Internal save/load reconnection of location and attachment indexes.
+        Membership restores exact decoded identities without permission callbacks.
+        !]]
+        public final restoreItemRuntime(tToken) {
+
+            -- Optional tokens isolate explicit runtime reconnection sessions.
+            if (tToken) then
+                CoGItem._tPersistence.reconnect(this.persistenceID, this, tToken);
+            end
+
+            this.persistenceID = CoGItem._tPersistence.identify(this);
+            this.identity.object = this;
+            CoGItem._tRules.registerHost(this, this.attachedItems, tToken);
+            CoGItem._tRules.registerAttachment(this, this.attachment);
+
+            -- Repeated reconnection must not insert this item into the same location twice.
+            local oLocation = this.location.value;
+
+            if (oLocation ~= null) then
+                oLocation.restoreRuntime();
+                local tState = CoGItem._tRules.state(oLocation);
+
+                if (not CoGItem._tRules.indexOf(oLocation, this)) then
+                    tState.items[#tState.items + 1] = this;
+                end
+            end
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getAttached_To
+        @desc Returns this item's attachment host, or null when detached.
+        !]]
+        public final getAttached_To() {
+            return this.attachment.host;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.eachAttachment
+        @desc Iterates a copied list of items attached to this item.
+        !]]
+        public eachAttachment() {
+            return ipairs(CoGItem._tRules.attachments(this));
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.attachTo
+        @desc Checks attachment permission and cycle rules before connecting this item to the host.
+        !]]
+        public attachTo(oHost) {
+            local bOK, sReason = CoGItem._tRules.attach(this, oHost);
+
+            return this, bOK, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.detach
+        @desc Checks the actor's detach permission before removing this item from its current host.
+        !]]
+        public detach(oActor) {
+            local bOK, sReason = CoGItem._tRules.detach(this, oActor);
+
+            return this, bOK, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getLocation
+        @desc Returns the current leaf container, or null while the item is not stored.
+        !]]
+        public final getLocation() {
+            return this.location.value;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.setLocation
+        @desc Changes the location only when the expected previous identity matches; transactions control writes
+        during callbacks.
+        !]]
+        public final setLocation(oLocation, oExpectedLocation) {
+            assert(CoGItem._tRules.canWriteLocation(), "Location mutations are forbidden inside prerequisite callbacks.");
+            assert(oLocation == null or class.isinstance(oLocation), "Location must be a class instance or null.");
+
+            -- Refuse to overwrite a location whose exact identity changed since the operation began.
+            assert(rawequal(this.location.value, oExpectedLocation), "Item location changed; transfer rejected.");
+            this.location.value = oLocation;
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getAttachableToRegistry
+        @desc Returns the Attachable_To component by reference without a replacement setter.
+        !]]
+        public getAttachableToRegistry() {
+            return this.Attachable_To;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getConsumableByRegistry
+        @desc Returns the Consumable_By component by reference without a replacement setter.
+        !]]
+        public getConsumableByRegistry() {
+            return this.Consumable_By;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getDamageableByRegistry
+        @desc Returns the Damageable_By component by reference without a replacement setter.
+        !]]
+        public getDamageableByRegistry() {
+            return this.Damageable_By;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getDetachableByRegistry
+        @desc Returns the Detachable_By component by reference without a replacement setter.
+        !]]
+        public getDetachableByRegistry() {
+            return this.Detachable_By;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getEquippableByRegistry
+        @desc Returns the Equipable_By component by reference without a replacement setter.
+        !]]
+        public getEquippableByRegistry() {
+            return this.Equipable_By;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getExclusiveInRegistry
+        @desc Returns the Exclusive_In component by reference without a replacement setter.
+        !]]
+        public getExclusiveInRegistry() {
+            return this.Exclusive_In;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getExclusiveWithRegistry
+        @desc Returns the Exclusive_With component by reference without a replacement setter.
+        !]]
+        public getExclusiveWithRegistry() {
+            return this.Exclusive_With;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getRemovableByRegistry
+        @desc Returns the Removable_By component by reference without a replacement setter.
+        !]]
+        public getRemovableByRegistry() {
+            return this.Removable_By;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getRepairableByRegistry
+        @desc Returns the Repairable_By component by reference without a replacement setter.
+        !]]
+        public getRepairableByRegistry() {
+            return this.Repairable_By;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getStorableInRegistry
+        @desc Returns the Storable_In component by reference without a replacement setter.
+        !]]
+        public getStorableInRegistry() {
+            return this.Storable_In;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getTradableByRegistry
+        @desc Returns the Tradable_By component by reference without a replacement setter.
+        !]]
+        public getTradableByRegistry() {
+            return this.Tradable_By;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getTradableToRegistry
+        @desc Returns the Tradable_To component by reference without a replacement setter.
+        !]]
+        public getTradableToRegistry() {
+            return this.Tradable_To;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getUnequippableByRegistry
+        @desc Returns the Unequippable_By component by reference without a replacement setter.
+        !]]
+        public getUnequippableByRegistry() {
+            return this.Unequippable_By;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getUpgradeableByRegistry
+        @desc Returns the Upgradeable_By component by reference without a replacement setter.
+        !]]
+        public getUpgradeableByRegistry() {
+            return this.Upgradeable_By;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getDowngradableByRegistry
+        @desc Returns the Downgradable_By component by reference without a replacement setter.
+        !]]
+        public getDowngradableByRegistry() {
+            return this.Downgradable_By;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getDurabilityPool
+        @desc Returns the Durability component by reference without a replacement setter.
+        !]]
+        public getDurabilityPool() {
+            return this.Durability;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getSizePool
+        @desc Returns the Size component by reference without a replacement setter.
+        !]]
+        public getSizePool() {
+            return this.Size;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getValuePool
+        @desc Returns the Value component by reference without a replacement setter.
+        !]]
+        public getValuePool() {
+            return this.Value;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getWeightPool
+        @desc Returns the Weight component by reference without a replacement setter.
+        !]]
+        public getWeightPool() {
+            return this.Weight;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.getSlotPattern
+        @desc Returns the Slot_Pattern component by reference without a replacement setter.
+        !]]
+        public getSlotPattern() {
+            return this.Slot_Pattern;
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canAttachTo
+        @desc Checks Attachable_To with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canAttachTo(oObject, ...) {
+            return this.Attachable_To.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canConsumeBy
+        @desc Checks Consumable_By with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canConsumeBy(oObject, ...) {
+            return this.Consumable_By.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canDamageBy
+        @desc Checks Damageable_By with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canDamageBy(oObject, ...) {
+            return this.Damageable_By.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canDetachBy
+        @desc Checks Detachable_By with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canDetachBy(oObject, ...) {
+            return this.Detachable_By.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canEquipBy
+        @desc Checks Equipable_By with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canEquipBy(oObject, ...) {
+            return this.Equipable_By.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canRemoveBy
+        @desc Checks Removable_By with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canRemoveBy(oObject, ...) {
+            return this.Removable_By.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canRepairBy
+        @desc Checks Repairable_By with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canRepairBy(oObject, ...) {
+            return this.Repairable_By.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canStoreIn
+        @desc Checks Storable_In with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canStoreIn(oObject, ...) {
+            return this.Storable_In.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canTradeBy
+        @desc Checks Tradable_By with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canTradeBy(oObject, ...) {
+            return this.Tradable_By.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canTradeTo
+        @desc Checks Tradable_To with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canTradeTo(oObject, ...) {
+            return this.Tradable_To.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canUnequipBy
+        @desc Checks Unequippable_By with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canUnequipBy(oObject, ...) {
+            return this.Unequippable_By.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canUpgradeBy
+        @desc Checks Upgradeable_By with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canUpgradeBy(oObject, ...) {
+            return this.Upgradeable_By.allows(oObject, this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGItem.Methods.canDowngradeBy
+        @desc Checks Downgradable_By with the actor/host, this item and additional arguments.
+            Returns the permission boolean and optional reason.
+        !]]
+        public canDowngradeBy(oObject, ...) {
+            return this.Downgradable_By.allows(oObject, this, ...);
+        }
+
+        -- Validate supplied components before the parent constructor runs. The
+        -- constructor then creates each omitted default exactly once.
+        private static checkComponent(vInput, cExpected, sField) {
+            assert(vInput == nil or class.isa(vInput, cExpected),
+                "CoGItem "..sField.." must be an instance of "..class.getname(cExpected)..".");
+        }
+
+        private static checkInputs(sName, sDescription, eRarity, wEventrix, oAttachableTo, oConsumableBy, oDamageableBy, oDetachableBy, oEquippableBy, vExclusiveIn, oExclusiveWith, bInimitable, oRemovableBy, oRepairableBy, oStorableIn, oTradableBy, oTradableTo, oUnequippableBy, oUpgradeableBy, oDowngradableBy, oDurability, oSize, oValue, oWeight, oAttachedTo, oLocation, oSlotPattern) {
+            for _, tField in ipairs({{"Attachable_To", oAttachableTo}, {"Consumable_By", oConsumableBy},
+            {"Damageable_By", oDamageableBy}, {"Detachable_By", oDetachableBy},
+            {"Equipable_By", oEquippableBy}, {"Removable_By", oRemovableBy},
+            {"Repairable_By", oRepairableBy}, {"Tradable_By", oTradableBy},
+            {"Tradable_To", oTradableTo}, {"Unequippable_By", oUnequippableBy},
+            {"Upgradeable_By", oUpgradeableBy}, {"Downgradable_By", oDowngradableBy}}) do
+                CoGItem.checkComponent(tField[2], CoG.CoGRegistry, tField[1]);
+            end
+            CoGItem.checkComponent(oExclusiveWith, LuaEx.Classes.ClassRegistry, "Exclusive_With");
+            CoGItem.checkComponent(oStorableIn, LuaEx.Classes.ClassRegistry, "Storable_In");
+            if (vExclusiveIn ~= nil and not (class.isa(vExclusiveIn, CoG.ItemSlotSystem)
+                or class.isa(vExclusiveIn, CoG.ItemSystem) or class.isa(vExclusiveIn, CoG.ItemStashSystem))) then
+                CoGItem.checkComponent(vExclusiveIn, LuaEx.Classes.ClassRegistry, "Exclusive_In");
+            end
+            CoGItem.checkComponent(oDurability, CoG.Pool, "Durability");
+            CoGItem.checkComponent(oSize, CoG.Pool, "Size");
+            CoGItem.checkComponent(oValue, CoG.Pool, "Value");
+            CoGItem.checkComponent(oWeight, CoG.Pool, "Weight");
+            assert(bInimitable == nil or rawtype(bInimitable) == "boolean", "Inimitable must be a boolean or nil.");
+            assert(oAttachedTo == nil or oAttachedTo == null or class.isa(oAttachedTo, CoG.CoGBase), "Attached_To must be a CoG instance or null.");
+            assert(oLocation == nil or oLocation == null or class.isinstance(oLocation), "Location must be a class instance or null.");
+            CoGItem.checkComponent(oSlotPattern, CoG.SlotPattern, "Slot_Pattern");
+            return sName;
+        }
+    }
+}

@@ -1,0 +1,478 @@
+--[[!
+    @fqxn CFS.Classes.LiveFileRepo
+    @pulsarlua table LiveFileRepo
+    @desc
+<section aria-label="Live File Repository overview">
+<div style="padding:1.6rem;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface-raised),var(--surface));margin-bottom:1.5rem"><p style="margin:0;color:var(--accent);font-weight:700;letter-spacing:.08em">CARD FORGE STUDIO · OVERVIEW</p><h2 style="margin:.5rem 0">Live File Repository</h2><p style="font-size:1.15rem;margin:0">This watcher notices edits to the files Studio is following.</p></div>
+<h3>How it fits into your work</h3><p>ProcSys registers the active project's files. Native timers check their contents and report changes to callbacks for later processing.</p>
+<figure style="margin:1.5rem 0"><figcaption style="font-weight:700;margin-bottom:.8rem">The big picture</figcaption><div role="img" aria-label="Changed file then Watcher callback then Queued processing then Updated preview" style="display:flex;flex-wrap:wrap;align-items:center;gap:.7rem"><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Changed file</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Watcher callback</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Queued processing</span><span aria-hidden="true" style="color:var(--accent)">→</span><span style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0">Updated preview</span></div></figure>
+<h3>Follow the handoffs</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">What a watcher actually watches</h3><p style="margin:0">A watcher remembers a registered file and a fingerprint of its contents. Timer checks compare the current contents with that remembered state. When a change is detected, the registered callback tells the owning system about it. The watcher does not interpret a drawing script or save card data.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)">How changes reach the rest of Studio</h3><p style="margin:0">ProcSys uses these notifications to queue work. Its timer handles the affected processing stages in sequence, so a changed file can lead to refreshed data or artwork through the appropriate owner. Registration and starting the watcher are separate steps; merely having a file on disk does not make it watched.</p></article>
+</div>
+<h3>Explore the connected parts</h3><p>These topics explain the nearby pieces of the workflow. Follow a card to see the part it plays.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem;margin:1rem 0">
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.ProcSys">Processing System</a></h3><p style="margin:0">ProcSys keeps project files, card values, and the preview working together as you edit.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Classes.Game">Game</a></h3><p style="margin:0">A game is the home for a whole project: its name, shared settings, and collection of card sets.</p></article>
+<article style="padding:1.2rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);min-width:0"><h3 style="margin:0 0 .6rem;color:var(--accent)"><a href="#CFS.Modules.Forge">Forge</a></h3><p style="margin:0">Forge is the visual workbench that turns selected card data and drawing instructions into artwork.</p></article>
+</div>
+<aside style="padding:1rem 1.2rem;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;margin:1.5rem 0"><strong>Good to know</strong><p style="margin:.4rem 0 0">Watching a file does not save it or interpret its meaning. The callback consumer decides what to reload or redraw.</p></aside>
+<p style="color:var(--muted)">Ready for the details? The child entries in the navigation describe individual methods, inputs, and results.</p>
+</section>
+!]]
+namespace CFS
+{
+    class LiveFileRepo
+    {
+        private static wx = require("wx");
+        private static tTimers = {};
+        private static dTimerOwner = LiveFileRepo.wx.wxEvtHandler();
+        private static tCRC = {};
+        --[[!
+        @fqxn CFS.Constants.LIVECODE_TIMER_ID_MIN
+        @pulsarlua number LIVECODE_TIMER_ID_MIN
+        @desc Inclusive lower bound for allocated live-file timer IDs.
+        !]]
+        private static LIVECODE_TIMER_ID_MIN = 1000000;
+        --[[!
+        @fqxn CFS.Constants.LIVECODE_TIMER_ID_MAX
+        @pulsarlua number LIVECODE_TIMER_ID_MAX
+        @desc Inclusive upper bound for allocated live-file timer IDs.
+        !]]
+        private static LIVECODE_TIMER_ID_MAX = 1999999;
+        private static _nNextTimerID = LiveFileRepo.LIVECODE_TIMER_ID_MIN - 1;
+        private static GlobalTimer = {
+            Start = function(nInterval, nID, fCallback)
+                LiveFileRepo.GlobalTimer.Stop(nID);
+                local oTimer = LiveFileRepo.wx.wxTimer(LiveFileRepo.dTimerOwner, nID);
+                local fHandler = function()
+                    local bOK, sError = pcall(fCallback, nID);
+                    if (not bOK and Log) then Log.Error(sError); end
+                end;
+                LiveFileRepo.tTimers[nID] = {timer = oTimer, handler = fHandler,};
+                LiveFileRepo.dTimerOwner:Connect(nID, LiveFileRepo.wx.wxEVT_TIMER, fHandler);
+                assert(oTimer:Start(nInterval), "Cannot start live-file timer.");
+            end,
+            Stop = function(nID)
+                local tTimer = LiveFileRepo.tTimers[nID];
+                if (tTimer) then
+                    tTimer.timer:Stop();
+                    LiveFileRepo.dTimerOwner:Disconnect(nID, LiveFileRepo.wx.wxEVT_TIMER);
+                    tTimer.timer:delete();
+                    LiveFileRepo.tTimers[nID] = nil;
+                end
+            end
+        };
+
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Private.Functions.ReadToString
+        @desc Reads a normalized file path in binary mode and checks read and close success.
+        @param any pFile File.
+        @vis private
+        !]]
+        private static ReadToString(pFile)
+        {
+            local hFile = assert(io.open(io.normalizepath(pFile), "rb"));
+            local sText, sError = hFile:read("a");
+            local bClosed, sCloseError = hFile:close();
+
+            assert(sText, sError);
+            assert(bClosed, sCloseError);
+
+            return sText;
+        }
+
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Private.Functions.GetCRC
+        @desc Computes a CRC-32 checksum over the file text.
+        @param any sText Text.
+        @vis private
+        !]]
+        private static GetCRC(sText)
+        {
+            local nCRC = 0xFFFFFFFF;
+            for nIndex = 1, #sText do
+                nCRC = LiveFileRepo.tCRC[(nCRC ~ sText:byte(nIndex)) & 255] ~ (nCRC >> 8);
+            end
+            return (nCRC ~ 0xFFFFFFFF) & 0xFFFFFFFF;
+        }
+
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Private.Functions.sink
+        @desc Provides a no-operation callback for files without a change handler.
+        @vis private
+        !]]
+        private static sink()
+        {
+
+        }
+
+        static LiveFileRepo()
+        {
+            constant("LIVECODE_TIMER_ID_MIN", LiveFileRepo.LIVECODE_TIMER_ID_MIN);
+            constant("LIVECODE_TIMER_ID_MAX", LiveFileRepo.LIVECODE_TIMER_ID_MAX);
+            for nByte = 0, 255 do
+                local nCRC = nByte;
+                for nBit = 1, 8 do
+                    nCRC = (nCRC & 1) ~= 0 and ((nCRC >> 1) ~ 0xEDB88320) or (nCRC >> 1);
+                end
+                LiveFileRepo.tCRC[nByte] = nCRC;
+            end
+        }
+
+        --PRIVATE
+        private DecoysByID = {};
+        private LiveFiles = {};
+
+        --indexed by decoy
+        private LiveFilesByID = {};
+
+        --indexed by user-set id
+        private LiveFilesByTimerID = {};
+
+        --indexed by timer id
+
+                --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Private.Functions.OnTimer
+                @desc Reads a watched file, updates text and CRC on change, invokes its callback, and retains read or callback errors on the file record.
+                @param any nID Id.
+                @vis private
+                !]]
+        private OnTimer(nID)
+        {
+            local pri       = this;
+            local tLiveFile = pri.LiveFilesByTimerID[nID];
+
+            if (tLiveFile and tLiveFile.TimerID == nID) then
+
+                local pFile = tLiveFile.Path;
+                local bReadOK, sNewText = pcall(LiveFileRepo.ReadToString, pFile);
+                if (not bReadOK) then
+                    if (tLiveFile.LastError ~= sNewText and Log) then Log.Error(sNewText); end
+                    tLiveFile.LastError = sNewText;
+                    return;
+                end
+                local nCRC = LiveFileRepo.GetCRC(sNewText);
+
+                if (sNewText ~= tLiveFile.Text) then
+                    --update the CRC
+                    local nOldCRC = tLiveFile.CRC
+                    tLiveFile.CRC = nCRC;
+
+                    --update the repo
+                    local sOldText = tLiveFile.Text;
+
+                    tLiveFile.Text = sNewText;
+
+                    --indicate a change has occured (since last Text lookup)
+                    tLiveFile.HasChanged = true;
+
+                    tLiveFile.LastError = nil;
+
+                    if (tLiveFile.Callback) then
+                        local tLiveFileDecoy    = pri.DecoysByID[tLiveFile.ID];
+                        local bOK, sError       = pcall(tLiveFile.Callback, tLiveFileDecoy, sOldText, sNewText, nOldCRC, nCRC);
+
+                        if not (bOK) then
+                            --TODO FINISH first check for tLiveFile Error Callback, then, if not present, use the repo or default
+                            --if (_tErrorCallbacks[tLiveFile]) then
+                        --        _tErrorCallbacks[tLiveFile](tLiveFile, sOldText, sNewText, nOldCRC, nCRC, sError);
+                            --end
+
+                            tLiveFile.LastError = sError; --TODO Set error per ID
+                        end
+
+                    end
+
+                end
+
+            end
+        }
+
+        --PUBLIC
+                --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Methods.LiveFileRepo
+                @pulsarlua function LiveFileRepo
+                @desc Creates an empty live-file repository using the class system's per-instance storage.
+                @ret LiveFileRepo Created instance.
+                !]]
+        public LiveFileRepo()
+        {
+
+        }
+
+        --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Methods.Add
+                @pulsarlua function LiveFileRepo.Add
+                @desc Registers an existing file with a unique case-insensitive ID and an allocated timer; returns a read-only file view without starting monitoring.
+                @param any vID Id.
+                @param any pFile File.
+                @param any nTimerInterval Timer interval.
+                @param any fCallback Callback.
+                !]]
+        public Add(vID, pFile, nTimerInterval, fCallback)
+        {
+            --bStart TODO Add this option, also allow error callback
+                        type.assert.string(vID, "%S", "LiveFileRepo.Add: ID must be a non-blank string.");
+                        type.assert.string(pFile, "%S", "LiveFileRepo.Add: File must be a non-blank string.");
+                        type.assert.number(nTimerInterval, true, true, false, true);
+                        local pri = this;
+
+                        local sID = vID:upper();
+
+                        if (pri.LiveFilesByID[sID]) then
+                            error("LiveFileRepo.Add: LiveFile, '${id}', already exists." % {id = sID}, 2);
+                        end
+
+
+                        if not LiveFileRepo.wx.wxFileExists(pFile) then
+                            error("LiveFileRepo.Add: File '${path}' doesn't exist." % {path = pFile}, 2);
+                        end
+
+                        --get a timer id
+                        LiveFileRepo._nNextTimerID = LiveFileRepo._nNextTimerID + 1;
+
+                        --throw error on timer ID range exceeded
+                        if (LiveFileRepo._nNextTimerID < LiveFileRepo.LIVECODE_TIMER_ID_MIN or LiveFileRepo._nNextTimerID > LiveFileRepo.LIVECODE_TIMER_ID_MAX) then
+                            error(  "LiveFileRepo.Add: Timer ID is out of range. Permissable range is from ${min} to ${max} (inclusive)." %
+                                    { min = LiveFileRepo.LIVECODE_TIMER_ID_MIN, max = LiveFileRepo.LIVECODE_TIMER_ID_MAX }, 2);
+                        end
+
+                        local sText = LiveFileRepo.ReadToString(pFile);
+                        local tLiveFile = {
+                            CRC             = LiveFileRepo.GetCRC(sText),
+                            Callback        = rawtype(fCallback) == "function" and fCallback or LiveFileRepo.sink,
+                            HasChanged      = false, --indicated whether a change has occured since last Text lookup
+                            IsActive        = false,
+                            ID              = sID,
+                            LastError       = nil,
+                            Path            = pFile,
+                            Text            = sText,
+                            TimerID         = LiveFileRepo._nNextTimerID,
+                            TimerInterval   = nTimerInterval,
+                        };
+                        local tLiveFileDecoy = {};
+                        local tLiveFileMeta  = {
+                            __type  = "LiveFile",
+                            __index = function(t, k)
+                                local vRet;
+
+                                if (k == "Text") then
+                                    tLiveFile.HasChanged = false;
+                                    vRet = tLiveFile.Text;
+                                else--TODO ERROR ON no such item??
+                                    vRet = tLiveFile[k];
+                                end
+
+                                return vRet;
+                            end,
+                            __newindex = function() end, --deadcall
+                        };
+
+                        setmetatable(tLiveFileDecoy, tLiveFileMeta);
+
+                        --store the LiveFile info
+                        pri.DecoysByID[sID]                           = tLiveFileDecoy;
+                        pri.LiveFiles[tLiveFileDecoy]                 = tLiveFile;
+                        pri.LiveFilesByID[sID]                        = tLiveFile;
+                        pri.LiveFilesByTimerID[tLiveFile.TimerID]     = tLiveFile;
+
+                        return tLiveFileDecoy;
+        }
+
+        --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Methods.Get
+                @pulsarlua function LiveFileRepo.Get
+                @desc Returns the read-only file view for a registered case-insensitive ID; unknown IDs raise an error.
+                @param any vID Id.
+                !]]
+        public Get(vID)
+        {
+            type.assert.string(vID, "%S", "LiveFileRepo.Get: ID must be a non-blank string.");
+            local sID       = vID:upper();
+            local tDecoy    = this.DecoysByID[sID];
+
+            if not (tDecoy) then
+                error("LiveFileRepo.Get: ID '${id}' doesn't exist." % {id = vID});
+            end
+
+            return tDecoy;
+        }
+
+        --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Methods.GetIDs
+                @pulsarlua function LiveFileRepo.GetIDs
+                @desc Returns sorted registered file IDs.
+                !]]
+        public GetIDs()
+        {
+            local tIDs = {};
+            for sID in pairs(this.LiveFilesByID) do tIDs[#tIDs + 1] = sID; end
+            table.sort(tIDs);
+            return tIDs;
+        }
+
+        --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Methods.Reset
+                @pulsarlua function LiveFileRepo.Reset
+                @desc Stops all timers, invalidates existing file views, and clears repository records.
+                !]]
+        public Reset()
+        {
+            local pri = this;
+
+            for tDecoy, tLiveFile in pairs(pri.LiveFiles) do
+                LiveFileRepo.GlobalTimer.Stop(tLiveFile.TimerID);
+                tLiveFile.CRC             = -2;
+                tLiveFile.Callback        = LiveFileRepo.sink;
+                tLiveFile.HasChanged      = false;
+                tLiveFile.IsActive        = false;
+                tLiveFile.ID              = "";
+                tLiveFile.LastError       = nil;
+                tLiveFile.Path            = "";
+                tLiveFile.Text            = "";
+                tLiveFile.TimerID         = -1;
+                tLiveFile.TimerInterval   = -1;
+                setmetatable(tDecoy, {
+                    __type = "LiveFile",
+                    __index = function()
+                        error("LiveFile is no longer valid.", 2);
+                    end,
+                    __newindex = function()
+                        error("LiveFile is no longer valid.", 2);
+                    end,
+                });
+            end
+
+            pri.DecoysByID          = {};
+            pri.LiveFiles           = {};
+            pri.LiveFilesByTimerID  = {};
+            pri.LiveFilesByID       = {};
+
+            return true;
+        }
+
+        --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Methods.SetCallback
+                @pulsarlua function LiveFileRepo.SetCallback
+                @desc Replaces a watched file's change callback; non-function values restore the no-operation callback.
+                @param any vID Id.
+                @param any fCallback Callback.
+                !]]
+        public SetCallback(vID, fCallback)
+        {
+            --IS FINISH ED
+                        type.assert.string(vID, "%S", "LiveFileRepo.SetCallback: ID must be a non-blank string.");
+                        local sID           = vID:upper();
+                        local tLiveFile     = this.LiveFilesByID[sID];
+
+                        if not (tLiveFile) then
+                            error("LiveFileRepo.SetCallback: ID '${id}' doesn't exist." % {id = vID});
+                        end
+
+                        tLiveFile.Callback  = rawtype(fCallback) == "function" and fCallback or LiveFileRepo.sink;
+        }
+
+        --[[SetErrorCallback = function(this, cdat, fCallback)
+                    type.assert.custom(oRepo, "LiveFileRepo:SetErrorCallback", "Argument 1 must be of type LiveFileRepo. Got "..type(oRepo)..'.');
+                    local tRepo = _tRepos[oRepo];
+                    _tErrorCallbacks[oRepo] = rawtype(fCallback) == "function" and fCallback or nil;
+                end,]]
+                --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Methods.Start
+                @pulsarlua function LiveFileRepo.Start
+                @desc Starts monitoring one registered file if it is not already active.
+                @param any vID Id.
+                !]]
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Private.Functions.GlobalTimer_Start
+        @desc Replaces any timer with the same ID, binds its callback to a native event handler, and starts periodic monitoring.
+        @param any nInterval Interval.
+        @param any nID Id.
+        @param any fCallback Callback.
+        @vis private
+        !]]
+        public Start(vID)
+        {
+            --IS FINISH ED
+                        type.assert.string(vID, "%S", "LiveFileRepo.Start: ID must be a non-blank string.");
+                        local sID = vID:upper();
+                        local pri = this;
+                        local tLiveFile = pri.LiveFilesByID[sID];
+
+                        if not (tLiveFile) then
+                            error("LiveFileRepo.Start: ID '${id}' doesn't exist." % {id = vID});
+                        end
+
+                        if not (tLiveFile.IsActive) then
+                            tLiveFile.IsActive = true;
+                            LiveFileRepo.GlobalTimer.Start(tLiveFile.TimerInterval, tLiveFile.TimerID, pri.OnTimer);
+                        end
+        }
+
+        --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Methods.StartAll
+                @pulsarlua function LiveFileRepo.StartAll
+                @desc Starts monitoring all inactive registered files.
+                !]]
+        public StartAll()
+        {
+            local pri = this;
+
+            for tDecoy, tLiveFile in pairs(pri.LiveFiles) do
+
+                if not (tLiveFile.IsActive) then
+                    tLiveFile.IsActive = true;
+                    LiveFileRepo.GlobalTimer.Start(tLiveFile.TimerInterval, tLiveFile.TimerID, pri.OnTimer);
+                end
+
+            end
+        }
+
+        --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Methods.Stop
+                @pulsarlua function LiveFileRepo.Stop
+                @desc Stops monitoring one registered file while retaining its record.
+                @param any vID Id.
+                !]]
+        --[[!
+        @fqxn CFS.Classes.LiveFileRepo.Private.Functions.GlobalTimer_Stop
+        @desc Stops and deletes a registered native timer and disconnects its event callback.
+        @param any nID Id.
+        @vis private
+        !]]
+        public Stop(vID)
+        {
+            type.assert.string(vID, "%S", "LiveFileRepo.Stop: ID must be a non-blank string.");
+            local sID = vID:upper();
+            local tLiveFile = this.LiveFilesByID[sID];
+
+            if not (tLiveFile) then
+                error("LiveFileRepo.Stop: ID '${id}' doesn't exist." % {id = vID});
+            end
+
+            if (tLiveFile.IsActive) then
+                tLiveFile.IsActive = false;
+                LiveFileRepo.GlobalTimer.Stop(tLiveFile.TimerID);
+            end
+        }
+
+        --[[!
+                @fqxn CFS.Classes.LiveFileRepo.Methods.StopAll
+                @pulsarlua function LiveFileRepo.StopAll
+                @desc Stops all active file timers while retaining repository records.
+                !]]
+        public StopAll()
+        {
+            local pri = this;
+
+            for tDecoy, tLiveFile in pairs(pri.LiveFiles) do
+
+                if (tLiveFile.IsActive) then
+                    tLiveFile.IsActive = false;
+                    LiveFileRepo.GlobalTimer.Stop(tLiveFile.TimerID);
+                end
+
+            end
+        }
+    }
+}

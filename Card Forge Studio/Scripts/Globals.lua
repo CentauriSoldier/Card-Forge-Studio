@@ -22,6 +22,8 @@ local fBootstrapRead = tBootstrapMeta.__index;
 local fBootstrapWrite = tBootstrapMeta.__newindex;
 local type = type;
 
+package.path = APP_PATH.."/Scripts/Plugins/?.lua;"..package.path;
+
 require("Plugins.LuaEx.init");
 
 -- Preserve the launcher's path guard alongside LuaEx's protected globals.
@@ -76,11 +78,11 @@ assert(wx.wxFont.AddPrivateFont(_Fonts.."/CRYSTAL-Regular.ttf"), "Cannot load th
 CFG     = {};
 FTCSV   = require("Plugins.FTCSV.ftcsv");
 dLog    = require("Windows.Log");
-Log     = require("Log");
+
 INIFile = require("Plugins.INI");
 FS      = require("Globals.FS");
 ProcSys = require("ProcSys");
-Game    = require("Game");
+
 
 _bLoaded = false;
 
@@ -97,11 +99,11 @@ function LoadGameModules()
     Import          = tImportSystem.Import;
     SanitizePath    = tImportSystem.SanitizePath;
     ProcessDox      = require("Globals.ProcessDox");
-    FontStyle       = require("FontStyle");
+
     ProcSys         = require("ProcSys");
     Forge           = require("Forge");
     StyleEditor     = require("StyleEditor");
-    Game            = require("Game");
+
     Tutorial        = require("Tutorial");
     UserEnv         = require("Globals.UserEnv");
 end
@@ -249,7 +251,7 @@ function OnStartUp(dMainFrame)
 
     -- TODO Restore the development startup copy of Docs/Changelog.md to the repository's Changelog.md using the new file paths and Lua file operations.
     -- TODO Connect card-set processing after the remaining ProcSys services are ported.
-    Game.Refresh();
+    CFS.Game.Refresh();
     -- Startup does not clear logs, write configuration, or create files in linked games.
-    Log.Note("Globals initialized: application paths, constants, INI, CSV, and virtual filesystem.");
+    CFS.Log.Note("Globals initialized: application paths, constants, INI, CSV, and virtual filesystem.");
 end

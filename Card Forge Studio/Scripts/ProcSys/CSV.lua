@@ -132,7 +132,7 @@ function CSV.create(tHeaders, tBase, fRowProc, tCodeColumns, UserEnv, fProgress)
                             tFinalRow[sHeader] = "COMPILED";
                         else
                             tFinalRow[sHeader] = "ERROR";
-                            Log.Warning(vCodeResult);
+                            CFS.Log.Warning(vCodeResult);
                         end
                     end
                 else

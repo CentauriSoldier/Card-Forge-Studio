@@ -252,7 +252,7 @@ local function GetSubfolderUUIDs(pFolder, sCaller)
             else
 
                 if (sDirName ~= ".IGNORE") then
-                    Log.Warning("FS.GetSubfolderUUIDs (called by '"..sCaller.."'): Folder '"..sDirName.."' at path '"..pFolder.."' is invalid.\r\nFolder name must be a valid UUID string.");
+                    CFS.Log.Warning("FS.GetSubfolderUUIDs (called by '"..sCaller.."'): Folder '"..sDirName.."' at path '"..pFolder.."' is invalid.\r\nFolder name must be a valid UUID string.");
                 end
 
             end
@@ -358,13 +358,13 @@ tGame.Create = function(sUUID, sName)
     if (not bOK) then
         for nIndex = #tCreatedFiles, 1, -1 do
             if (not wx.wxRemoveFile(tCreatedFiles[nIndex])) then
-                Log.Warning("Could not remove incomplete game file: "..tCreatedFiles[nIndex]);
+                CFS.Log.Warning("Could not remove incomplete game file: "..tCreatedFiles[nIndex]);
             end
         end
 
         for nIndex = #tCreatedDirs, 1, -1 do
             if (not wx.wxRmdir(tCreatedDirs[nIndex])) then
-                Log.Warning("Could not remove incomplete game folder: "..tCreatedDirs[nIndex]);
+                CFS.Log.Warning("Could not remove incomplete game folder: "..tCreatedDirs[nIndex]);
             end
         end
 
@@ -388,7 +388,7 @@ tGame.GetCardSetUUIDs = function(vUUID)
         local pCardSets = tFS.Games.."\\"..sGameUUID:upper().."\\"..FOLDER_CARD_SETS;
 
         if not (wx.wxDirExists(pCardSets)) then
-            Log.Warning("Error getting Game's CardSet UUIDs: The specified Game path does not exist.");
+            CFS.Log.Warning("Error getting Game's CardSet UUIDs: The specified Game path does not exist.");
             return;
         end
 
@@ -483,7 +483,7 @@ tGame.Prep = function(oGame)
     end
 
     package.path = _sOriginalPackagePath..";"..pScripts.."\\?.lua";
-    Log.Note("FS.Game.Prep: Active game paths updated.");
+    CFS.Log.Note("FS.Game.Prep: Active game paths updated.");
 end
 
 
@@ -548,12 +548,12 @@ tCardSet.Create = function(sGameUUID, sUUID, sName, nWidth, nHeight)
     if (not bOK) then
         for nIndex = #tCreatedFiles, 1, -1 do
             if (not wx.wxRemoveFile(tCreatedFiles[nIndex])) then
-                Log.Warning("Could not remove incomplete card-set file: "..tCreatedFiles[nIndex]);
+                CFS.Log.Warning("Could not remove incomplete card-set file: "..tCreatedFiles[nIndex]);
             end
         end
 
         if (bCreated and not wx.wxRmdir(pRoot)) then
-            Log.Warning("Could not remove incomplete card-set directory: "..pRoot);
+            CFS.Log.Warning("Could not remove incomplete card-set directory: "..pRoot);
         end
 
         error(sError, 2);
@@ -601,7 +601,7 @@ tCardSet.GetRoot = function(vGameUUID, vUUID)
         sRet = tFS.Games.."\\"..sGameUUID.."\\"..FOLDER_CARD_SETS.."\\"..sUUID;
 
         if not (wx.wxDirExists(sRet)) then
-            Log.Warning("Error getting CardSet's path ("..sUUID..") at path '"..sRet.."': The specified path does not exist.");
+            CFS.Log.Warning("Error getting CardSet's path ("..sUUID..") at path '"..sRet.."': The specified path does not exist.");
             return;
         end
 

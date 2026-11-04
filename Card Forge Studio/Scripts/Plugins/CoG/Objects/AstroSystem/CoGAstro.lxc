@@ -1,0 +1,514 @@
+--[[!
+@fqxn CoG.CoGAstro
+@desc Generic astronomical body with mass, spherical radius, rotation and synchronized
+    orbital relationships. Inherits metadata, rarity, tags, events and affixes from CoGObject.
+    Units are caller-defined: default labels are units and the gravitational constant is 1.
+    All supplied quantities and G must use the same coherent unit system. Labels do not
+    convert values. Geometry assumes a sphere; gravity/orbits use Newtonian two-body models,
+    not movement simulation, relativistic physics, luminosity or atmosphere rules.
+!]]
+namespace CoG {
+    class CoGAstro : CoG.CoGObject {
+        private mass = 1;
+        private radius = 1;
+        private rotationPeriod = 0;
+        private units = {};
+        -- Box the nullable link so changing a typed parent back to null is valid.
+        private orbit = {parent = null, children = {}};
+
+        --[[!
+        @fqxn CoG.CoGAstro.Helpers.positive
+        @desc Requires a finite positive physical quantity before changing state or dividing.
+        @param number nValue Quantity in the caller's units.
+        @param string sName Diagnostic quantity name.
+        !]]
+        private static positive(nValue, sName) {
+            assert(type(nValue) == "number" and nValue == nValue and
+                nValue > 0 and nValue < math.huge, sName.." must be finite and positive.");
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.Helpers.period
+        @desc Validates rotation duration; zero explicitly denotes no rotation.
+        @param number nPeriod Duration in the configured time unit.
+        !]]
+        private static period(nPeriod) {
+            assert(type(nPeriod) == "number" and nPeriod == nPeriod and
+                nPeriod >= 0 and nPeriod < math.huge, "RotationPeriod must be finite and nonnegative.");
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.Helpers.unitSettings
+        @desc Copies unit labels and G. Defaults use abstract units with G=1. Real unit
+            systems must provide a matching gravitational constant; no conversion is inferred.
+        @param table|nil tUnits Mass, Length, Time labels and GravitationalConstant.
+        @ret table tSettings Independent unit settings.
+        !]]
+        private static unitSettings(tUnits) {
+            tUnits = tUnits == nil and {} or tUnits;
+            type.assert.table(tUnits);
+            local tSettings = {};
+
+            for _, sKind in ipairs({"Mass", "Length", "Time"}) do
+                local sLabel = tUnits[sKind] == nil and "units" or tUnits[sKind];
+                type.assert.string(sLabel, "%S+");
+                tSettings[sKind] = sLabel;
+            end
+
+            local nG = tUnits.GravitationalConstant == nil and 1 or tUnits.GravitationalConstant;
+            CoGAstro.positive(nG, "GravitationalConstant");
+            tSettings.GravitationalConstant = nG;
+            return tSettings;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.Helpers.checkedName
+        @desc Checks required physical options before inherited components are allocated.
+        @param string sName Body name passed to CoGObject.
+        @param table tOptions Required Mass/Radius; optional RotationPeriod and Units.
+        @ret string sName Unchanged body name.
+        !]]
+        private static checkedName(sName, tOptions) {
+            type.assert.table(tOptions);
+            CoGAstro.positive(tOptions.Mass, "Mass");
+            CoGAstro.positive(tOptions.Radius, "Radius");
+            CoGAstro.period(tOptions.RotationPeriod == nil and 0 or tOptions.RotationPeriod);
+            CoGAstro.unitSettings(tOptions.Units);
+            return sName;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.CoGAstro
+        @desc Creates a body without an orbital parent. Pass physical options in a table.
+            RotationPeriod defaults to zero, meaning no rotation. Units are fixed for the
+            body's lifetime; change values only in that unit system. Use setOrbitalParent
+            or addOrbitingBody afterward to link existing bodies.
+        @param string sName Nonblank name.
+        @param string sDescription Nonblank description.
+        @param CoG.LEVEL|nil eRarity Inherited rarity.
+        @param string|nil sEnvironment Inherited event environment name.
+        @param table tOptions Mass, Radius, optional RotationPeriod and Units.
+        @ex local oStar = CoG.CoGAstro("Star", "Example body", nil, nil,
+            {Mass = 1000, Radius = 10});
+        !]]
+        public CoGAstro(sName, sDescription, eRarity, sEnvironment, tOptions) {
+            base(CoGAstro.checkedName(sName, tOptions), sDescription, eRarity, sEnvironment);
+            this.mass = tOptions.Mass;
+            this.radius = tOptions.Radius;
+            this.rotationPeriod = tOptions.RotationPeriod == nil and 0 or tOptions.RotationPeriod;
+            this.units = CoGAstro.unitSettings(tOptions.Units);
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getMass
+        @desc Returns mass in the configured mass unit.
+        @ret number nMass Positive mass.
+        !]]
+        public final getMass() { return this.mass; }
+
+        --[[!
+        @fqxn CoG.CoGAstro.setMass
+        @desc Replaces mass after validation. Derived quantities use the new value immediately.
+        @param number nMass Positive mass in the existing unit system.
+        @ret CoGAstro this Body for chaining.
+        !]]
+        public final setMass(nMass) {
+            CoGAstro.positive(nMass, "Mass");
+            this.mass = nMass;
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getRadius
+        @desc Returns spherical radius in the configured length unit.
+        @ret number nRadius Positive radius.
+        !]]
+        public final getRadius() { return this.radius; }
+
+        --[[!
+        @fqxn CoG.CoGAstro.setRadius
+        @desc Replaces spherical radius after validation without changing orbital links.
+        @param number nRadius Positive radius in the existing length unit.
+        @ret CoGAstro this Body for chaining.
+        !]]
+        public final setRadius(nRadius) {
+            CoGAstro.positive(nRadius, "Radius");
+            this.radius = nRadius;
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getRotationPeriod
+        @desc Returns rotation duration in time units; zero means no rotation.
+        @ret number nPeriod Nonnegative duration.
+        !]]
+        public final getRotationPeriod() { return this.rotationPeriod; }
+
+        --[[!
+        @fqxn CoG.CoGAstro.setRotationPeriod
+        @desc Sets rotation duration; zero explicitly selects a nonrotating body.
+        @param number nPeriod Finite nonnegative duration in the existing time unit.
+        @ret CoGAstro this Body for chaining.
+        !]]
+        public final setRotationPeriod(nPeriod) {
+            CoGAstro.period(nPeriod);
+            this.rotationPeriod = nPeriod;
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getUnits
+        @desc Returns independent Mass/Length/Time labels and GravitationalConstant.
+            Editing the returned table does not alter this body or convert its values.
+        @ret table tUnits Unit metadata and G.
+        !]]
+        public final getUnits() {
+            local tCopy = {};
+            for sKey, vValue in pairs(this.units) do tCopy[sKey] = vValue; end
+            return tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getDiameter
+        @desc Returns 2*radius in length units.
+        @ret number nDiameter Spherical diameter.
+        !]]
+        public final getDiameter() { return 2 * this.radius; }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getSurfaceArea
+        @desc Returns 4*pi*radius^2 in squared length units.
+        @ret number nArea Spherical surface area.
+        !]]
+        public final getSurfaceArea() { return 4 * math.pi * this.radius ^ 2; }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getVolume
+        @desc Returns (4/3)*pi*radius^3 in cubed length units.
+        @ret number nVolume Spherical volume.
+        !]]
+        public final getVolume() { return (4 / 3) * math.pi * this.radius ^ 3; }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getDensity
+        @desc Returns mass divided by spherical volume, in mass per cubed length unit.
+        @ret number nDensity Mean density, not a radial density profile.
+        !]]
+        public final getDensity() { return this.mass / this.getVolume(); }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getGravitationalParameter
+        @desc Returns G*mass in cubed length per squared time unit.
+        @ret number nMu Standard gravitational parameter in the chosen units.
+        !]]
+        public final getGravitationalParameter() { return this.units.GravitationalConstant * this.mass; }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getSurfaceGravity
+        @desc Returns G*mass/radius^2. Assumes spherical Newtonian gravity without rotation.
+        @ret number nGravity Surface acceleration in length per squared time unit.
+        !]]
+        public final getSurfaceGravity() { return this.getGravitationalParameter() / this.radius ^ 2; }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getEscapeVelocity
+        @desc Returns sqrt(2*G*mass/radius), ignoring atmosphere, rotation and other bodies.
+        @ret number nSpeed Escape speed in length per time unit.
+        !]]
+        public final getEscapeVelocity() { return math.sqrt(2 * this.getGravitationalParameter() / this.radius); }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getEquatorialSpeed
+        @desc Returns 2*pi*radius/rotationPeriod; a nonrotating body returns zero.
+        @ret number nSpeed Surface rotation speed in length per time unit.
+        !]]
+        public final getEquatorialSpeed() {
+            if (this.rotationPeriod == 0) then return 0; end
+            return 2 * math.pi * this.radius / this.rotationPeriod;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.Helpers.pairParameter
+        @desc Requires another body with matching unit labels and G, then returns
+            G*(this.mass+other.mass). No unit conversions or orbital-link changes occur.
+        @param CoGAstro oOther Other body in the two-body model.
+        @ret number nMu Combined gravitational parameter.
+        !]]
+        private pairParameter(oOther) {
+            assert(class.isa(oOther, CoGAstro) and not rawequal(this, oOther), "Supply another CoGAstro.");
+            for _, sKey in ipairs({"Mass", "Length", "Time", "GravitationalConstant"}) do
+                assert(this.units[sKey] == oOther.units[sKey], "Two-body calculations require matching units and G.");
+            end
+            return this.units.GravitationalConstant * (this.mass + oOther.mass);
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getOrbitalPeriod
+        @desc Returns 2*pi*sqrt(a^3/(G*(m1+m2))) for a bound Newtonian two-body orbit.
+            Distance is the relative orbit's semimajor axis, not an altitude above a surface.
+            This calculation does not require or assign an orbital parent.
+        @param CoGAstro oOther Other body using the same unit system.
+        @param number nSemiMajorAxis Positive center-to-center relative semimajor axis.
+        @ret number nPeriod Duration in time units.
+        !]]
+        public final getOrbitalPeriod(oOther, nSemiMajorAxis) {
+            CoGAstro.positive(nSemiMajorAxis, "SemiMajorAxis");
+            return 2 * math.pi * math.sqrt(nSemiMajorAxis ^ 3 / this.pairParameter(oOther));
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getCircularOrbitalSpeed
+        @desc Returns sqrt(G*(m1+m2)/distance), the relative circular-orbit speed.
+            This is not either body's individual barycentric speed.
+        @param CoGAstro oOther Other body using the same unit system.
+        @param number nDistance Positive center-to-center separation.
+        @ret number nSpeed Relative speed in length per time unit.
+        !]]
+        public final getCircularOrbitalSpeed(oOther, nDistance) {
+            CoGAstro.positive(nDistance, "Distance");
+            return math.sqrt(this.pairParameter(oOther) / nDistance);
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getAngularVelocity
+        @desc Returns angular speed in radians per time unit. Zero rotation period
+            denotes no rotation and returns zero rather than dividing by zero.
+        @ret number nSpeed Nonnegative angular speed.
+        !]]
+        public final getAngularVelocity() {
+            if (this.rotationPeriod == 0) then return 0; end
+            return 2 * math.pi / this.rotationPeriod;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getRotationPeriodForSpeed
+        @desc Calculates rotation duration from a positive equatorial surface speed.
+            This helper returns a value without changing this body's rotation state.
+        @param number nSpeed Positive equatorial speed in length per time unit.
+        @ret number nPeriod Rotation duration in time units.
+        !]]
+        public final getRotationPeriodForSpeed(nSpeed) {
+            CoGAstro.positive(nSpeed, "EquatorialSpeed");
+            return 2 * math.pi * this.radius / nSpeed;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getSynchronousRotationPeriod
+        @desc Returns the rotation duration for assumed 1:1 synchronous rotation:
+            one rotation per orbital revolution. This does not predict tidal locking
+            or a body's unconstrained spin, and changes no rotation or orbital state.
+            See https://science.nasa.gov/moon/tidal-locking/ for the physical distinction.
+        @param CoGAstro oOther Other body with matching units and G.
+        @param number nSemiMajorAxis Relative orbit semimajor axis, in length units.
+        @ret number nPeriod Assumed synchronous rotation duration.
+        !]]
+        public final getSynchronousRotationPeriod(oOther, nSemiMajorAxis) {
+            return this.getOrbitalPeriod(oOther, nSemiMajorAxis);
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getSemiMajorAxisForPeriod
+        @desc Inverts the two-body period equation: cube root of mu*(period/(2*pi))^2.
+            Returns a center-to-center relative semimajor axis, not surface altitude.
+        @param CoGAstro oOther Other body with matching units and G.
+        @param number nPeriod Positive orbital duration in time units.
+        @ret number nSemiMajorAxis Relative semimajor axis in length units.
+        !]]
+        public final getSemiMajorAxisForPeriod(oOther, nPeriod) {
+            CoGAstro.positive(nPeriod, "OrbitalPeriod");
+            return (this.pairParameter(oOther) * (nPeriod / (2 * math.pi)) ^ 2) ^ (1 / 3);
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getGravitationalAcceleration
+        @desc Returns this body's G*mass/distance^2 at or outside its spherical surface.
+            Interior gravity would require a density profile and is not inferred.
+        @param number nDistance Center-to-point distance, at least this body's radius.
+        @ret number nAcceleration Magnitude in length per squared time unit.
+        !]]
+        public final getGravitationalAcceleration(nDistance) {
+            CoGAstro.positive(nDistance, "Distance");
+            assert(nDistance >= this.radius, "Exterior gravity requires a distance at least equal to the radius.");
+            return this.getGravitationalParameter() / nDistance ^ 2;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getGravitationalForce
+        @desc Returns G*m1*m2/distance^2 using a point-mass/two-sphere exterior model.
+            This is a scalar magnitude; no position, direction or motion is assigned.
+        @param CoGAstro oOther Other body with matching units and G.
+        @param number nDistance Positive center-to-center separation.
+        @ret number nForce Magnitude in mass*length per squared time unit.
+        !]]
+        public final getGravitationalForce(oOther, nDistance) {
+            CoGAstro.positive(nDistance, "Distance");
+            this.pairParameter(oOther); -- Validate the other body's unit system before combining masses.
+            return this.getGravitationalParameter() * oOther.mass / nDistance ^ 2;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getBarycenterDistance
+        @desc Returns distance*m2/(m1+m2): distance from this body's center toward
+            the other body to their shared center of mass. The barycenter can be
+            inside a body. This does not create a barycenter object or orbital link.
+        @param CoGAstro oOther Other body with matching units and G.
+        @param number nDistance Positive center-to-center separation.
+        @ret number nDistanceToCenterOfMass Distance in length units.
+        !]]
+        public final getBarycenterDistance(oOther, nDistance) {
+            CoGAstro.positive(nDistance, "Distance");
+            this.pairParameter(oOther);
+            return nDistance * (oOther.mass / (this.mass + oOther.mass));
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.Helpers.changeParent
+        @desc Validates the full proposed ancestry before updating any relationship.
+            Direct same-class private access updates both sides without calling public
+            setters recursively. Children retain insertion order when moved between parents.
+        @param CoGAstro|null|nil oParent New parent; nil/null detaches this body.
+        @ret CoGAstro this Body whose parent changed.
+        !]]
+        private changeParent(oParent) {
+            oParent = oParent == nil and null or oParent;
+            assert(type.isnull(oParent) or class.isa(oParent, CoGAstro), "Orbital parent must be CoGAstro or null.");
+            local oCursor, tSeen = oParent, {};
+
+            -- Check even unchanged requests before any mutation, so corrupt ancestry cannot loop.
+            while (not type.isnull(oCursor)) do
+                assert(not rawequal(oCursor, this) and not tSeen[oCursor], "Orbital relationships cannot contain cycles.");
+                tSeen[oCursor] = true;
+                oCursor = oCursor.orbit.parent;
+            end
+
+            local oPrevious = this.orbit.parent;
+            if (rawequal(oPrevious, oParent)) then return this; end
+
+            if (not type.isnull(oPrevious)) then
+                for nIndex, oChild in ipairs(oPrevious.orbit.children) do
+                    if (rawequal(oChild, this)) then
+                        table.remove(oPrevious.orbit.children, nIndex);
+                        break;
+                    end
+                end
+            end
+
+            this.orbit.parent = oParent;
+            if (not type.isnull(oParent)) then
+                oParent.orbit.children[#oParent.orbit.children + 1] = this;
+            end
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getOrbitalParent
+        @desc Returns the parent body or LuaEx null when this body has no parent.
+        @ret CoGAstro|null oParent Current orbital parent.
+        !]]
+        public final getOrbitalParent() { return this.orbit.parent; }
+
+        --[[!
+        @fqxn CoG.CoGAstro.setOrbitalParent
+        @desc Moves this body to a parent, synchronizing old/new child lists.
+            Rejects self-parenting and ancestry cycles before changing either side.
+        @param CoGAstro|null|nil oParent New parent or detach request.
+        @ret CoGAstro this Body for chaining.
+        !]]
+        public final setOrbitalParent(oParent) { return this.changeParent(oParent); }
+
+        --[[!
+        @fqxn CoG.CoGAstro.getOrbitingBodies
+        @desc Returns an ordered array snapshot. The bodies retain identity, but editing
+            the returned array cannot change the private orbital relationship lists.
+        @ret table tBodies Independent array of immediate children.
+        !]]
+        public final getOrbitingBodies() {
+            local tCopy = {};
+            for nIndex, oChild in ipairs(this.orbit.children) do tCopy[nIndex] = oChild; end
+            return tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.addOrbitingBody
+        @desc Assigns this as another body's parent through the same private operation.
+        @param CoGAstro oOther Body to adopt.
+        @ret CoGAstro this Parent for chaining.
+        !]]
+        public final addOrbitingBody(oOther) {
+            assert(class.isa(oOther, CoGAstro), "Expected a CoGAstro child.");
+            oOther.changeParent(this);
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.removeOrbitingBody
+        @desc Detaches only a body currently parented by this body. A body elsewhere is
+            left unchanged; its parent cannot be cleared through an unrelated parent's API.
+        @param CoGAstro oOther Body to remove.
+        @ret CoGAstro this Parent for chaining.
+        @ret boolean bRemoved Whether the relationship was removed.
+        !]]
+        public final removeOrbitingBody(oOther) {
+            assert(class.isa(oOther, CoGAstro), "Expected a CoGAstro child.");
+            if (not rawequal(oOther.orbit.parent, this)) then return this, false; end
+            oOther.changeParent(null);
+            return this, true;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.clone
+        @desc Requires a subclass's explicit graph-copy policy. The base does not guess
+            whether cloning one body should duplicate or detach its entire orbital system.
+        @throws Always unless an override supplies a concrete copying policy.
+        !]]
+        public operator clone() {
+            error("CoGAstro subclasses must define their orbital graph clone policy.");
+        }
+
+        --[[!
+        @fqxn CoG.CoGAstro.validateSnapshot
+        @desc Validates restored physics and both directions of every orbital link.
+            Native graph persistence preserves shared identities and parent/child cycles;
+            ancestry itself must remain acyclic. Restoration invokes no public link setters.
+        @param table tState Restored private-field projection.
+        !]]
+        private validateSnapshot(tState) {
+            local pri = tState.pri;
+            CoGAstro.positive(pri.mass, "Mass");
+            CoGAstro.positive(pri.radius, "Radius");
+            CoGAstro.period(pri.rotationPeriod);
+            local tUnits = CoGAstro.unitSettings(pri.units);
+            for sKey, vValue in pairs(tUnits) do
+                assert(pri.units[sKey] == vValue, "Invalid saved unit settings.");
+            end
+            type.assert.table(pri.orbit);
+            type.assert.table(pri.orbit.children);
+            local tChildren, nCount = {}, 0;
+
+            for nIndex, oChild in pairs(pri.orbit.children) do
+                assert(type(nIndex) == "number" and nIndex % 1 == 0 and nIndex >= 1 and
+                    nIndex <= #pri.orbit.children, "Invalid saved child index.");
+                assert(class.isa(oChild, CoGAstro) and not tChildren[oChild] and
+                    rawequal(oChild.orbit.parent, this), "Invalid saved child relationship.");
+                tChildren[oChild] = true;
+                nCount = nCount + 1;
+            end
+            assert(nCount == #pri.orbit.children, "Saved child list must be dense.");
+
+            local oCursor, tSeen = pri.orbit.parent, {[this] = true};
+            while (not type.isnull(oCursor)) do
+                assert(class.isa(oCursor, CoGAstro) and not tSeen[oCursor], "Invalid saved orbital ancestry.");
+                tSeen[oCursor] = true;
+                oCursor = oCursor.orbit.parent;
+            end
+
+            if (not type.isnull(pri.orbit.parent)) then
+                local nMatches = 0;
+                for _, oChild in ipairs(pri.orbit.parent.orbit.children) do
+                    if (rawequal(oChild, this)) then nMatches = nMatches + 1; end
+                end
+                assert(nMatches == 1, "Saved parent must list this body exactly once.");
+            end
+        }
+    }
+}

@@ -1,0 +1,14 @@
+--[[!
+@fqxn CoG.TIER
+@desc Shared affix tier identities, loaded by LuaEx before CoG classes.
+    Ordinal determines tier ordering; configuration supplies gameplay limits.
+    This default declaration may be replaced by one application enum named CoG.TIER
+    in the same loading batch. Configuration must reference the selected members.
+!]]
+namespace CoG {
+    ---@default
+    public enum TIER {
+        I; II; III; IV; V; VI; VII; VIII; IX; X;
+        XI; XII; XIII; XIV; XV; XVI; XVII; XVIII; XIX; XX;
+    }
+}

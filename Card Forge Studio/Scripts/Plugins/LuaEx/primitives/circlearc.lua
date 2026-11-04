@@ -1,0 +1,323 @@
+local circlearcFactory;
+local rawsetmetatable = rawsetmetatable;
+local rawtype = rawtype;
+local error = error;
+local tostring = tostring;
+local _nPi = math.pi;
+local _nTau = 2 * _nPi;
+local _nHuge = math.huge;
+
+--[[!
+@fqxn LuaEx.Primitives.circlearc.Functions.validateNumber
+@desc Rejects nonnumeric, infinite and NaN inputs before mutation.
+!]]
+local function validateNumber(vInput, sName)
+    if (rawtype(vInput) ~= "number" or vInput ~= vInput or
+        vInput == _nHuge or vInput == -_nHuge) then
+        error("Circle arc: '"..sName.."' must be a finite number.", 3);
+    end
+end
+
+--[[!
+@fqxn LuaEx.Primitives.circlearc.Functions.getSweep
+@desc Returns the counterclockwise sweep in radians, wrapping through zero. Equal angles give zero. A nonzero difference of whole turns gives one full turn; other differences wrap into one turn.
+!]]
+local function getSweep(nStartAngle, nEndAngle)
+    validateNumber(nStartAngle, "startAngle");
+    validateNumber(nEndAngle, "endAngle");
+    local nDifference = nEndAngle * 1.0 - nStartAngle;
+
+    validateNumber(nDifference, "angle difference");
+    if (nDifference == 0) then
+
+        return 0;
+    end
+
+    local nSweep = nDifference % _nTau;
+
+    return nSweep == 0 and _nTau or nSweep;
+end
+
+--[[!
+@fqxn LuaEx.Primitives.circlearc.Functions.validateGeometry
+@desc Validates radius, angles and representability of arc length and sector area before changing state.
+!]]
+local function validateGeometry(nRadius, nStartAngle, nEndAngle)
+    validateNumber(nRadius, "radius");
+    if (nRadius < 0) then
+        error("Circle arc: radius must be non-negative.", 3);
+    end
+
+    local nSweep = getSweep(nStartAngle, nEndAngle);
+
+    -- Multiplication order supports a zero sweep and avoids integer overflow.
+    validateNumber((nSweep * nRadius) * 0.5 * nRadius, "sector area");
+    validateNumber(nSweep * nRadius, "arc length");
+
+    return nSweep;
+end
+
+--[[!
+@fqxn LuaEx.Primitives.circlearc
+@pulsarlua function circlearc
+@desc A circular arc defined by a center, radius and two angles in radians. Its direction is counterclockwise in Cartesian coordinates; on a screen with downward-positive Y it appears clockwise. Angles wrap through zero. Equal angles give zero arc; nonzero whole-turn differences give a full circle. Length and sector area are read-only. Invalid assignments preserve existing state. Rawset and debug tools bypass normal Lua protections.
+@param number nCenterX Finite center X coordinate.
+@param number nCenterY Finite center Y coordinate.
+@param number nRadius Non-negative finite radius.
+@param number nStartAngle Start angle in radians from the positive X axis.
+@param number nEndAngle End angle in radians from the positive X axis.
+@param boolean|nil bSkipFirstUpdate Optional initial calculation deferral until a read.
+@ret primitive A circle arc primitive.
+@example
+local oArc = circlearc(0, 0, 4, 0, math.pi / 2);
+oArc.radius = 6;
+oArc.center.x = 10;
+!]]
+local function build(nCenterX, nCenterY, nRadius, nStartAngle, nEndAngle, bSkipFirstUpdate)
+    validateNumber(nCenterX, "center.x");
+    validateNumber(nCenterY, "center.y");
+    local nSweep = validateGeometry(nRadius, nStartAngle, nEndAngle);
+
+    if (bSkipFirstUpdate ~= nil and rawtype(bSkipFirstUpdate) ~= "boolean") then
+        error("Circle arc: skip-first-update must be a boolean.", 2);
+    end
+
+    local bDirty = true;
+    local tCenterActual = {
+        --[[!
+        @fqxn LuaEx.Primitives.circlearc.Properties.center.x
+        @pulsarlua number circlearc.center.x
+        @desc Writable finite center X coordinate; moving the center does not change size.
+        !]]
+        x = nCenterX,
+        --[[!
+        @fqxn LuaEx.Primitives.circlearc.Properties.center.y
+        @pulsarlua number circlearc.center.y
+        @desc Writable finite center Y coordinate; moving the center does not change size.
+        !]]
+        y = nCenterY,
+    };
+    local tActual = {
+        --[[!
+        @fqxn LuaEx.Primitives.circlearc.Properties.autoUpdate
+        @pulsarlua boolean circlearc.autoUpdate
+        @desc Writable boolean, initially true. False defers derived updates until a read or update call. Clean values are not recalculated.
+        !]]
+        autoUpdate = true,
+        --[[!
+        @fqxn LuaEx.Primitives.circlearc.Properties.radius
+        @pulsarlua number circlearc.radius
+        @desc Writable non-negative finite radius. Changes invalidate derived values.
+        !]]
+        radius = nRadius,
+        --[[!
+        @fqxn LuaEx.Primitives.circlearc.Properties.startAngle
+        @pulsarlua number circlearc.startAngle
+        @desc Writable finite start angle in radians. Changing it updates the counterclockwise sweep.
+        !]]
+        startAngle = nStartAngle,
+        --[[!
+        @fqxn LuaEx.Primitives.circlearc.Properties.endAngle
+        @pulsarlua number circlearc.endAngle
+        @desc Writable finite end angle in radians. Lower end angles wrap through zero.
+        !]]
+        endAngle = nEndAngle,
+        --[[!
+        @fqxn LuaEx.Primitives.circlearc.Properties.length
+        @pulsarlua number circlearc.length
+        @desc Read-only non-negative arc length: radius times counterclockwise sweep.
+        !]]
+        length = 0,
+        --[[!
+        @fqxn LuaEx.Primitives.circlearc.Properties.area
+        @pulsarlua number circlearc.area
+        @desc Read-only non-negative sector area: half the radius squared times sweep. This is the wedge including the center, not circular-segment area.
+        !]]
+        area = 0,
+    };
+
+    --[[!
+    @fqxn LuaEx.Primitives.circlearc.Methods.update
+    @pulsarlua function circlearc.update
+    @desc Refreshes dirty arc length and sector area once. Call with dot syntax and no arguments. Repeated clean calls do not recalculate.
+    !]]
+    local function update()
+        if (bDirty) then
+            tActual.length = nSweep * tActual.radius;
+            tActual.area = (nSweep * tActual.radius) * 0.5 * tActual.radius;
+            bDirty = false;
+        end
+    end
+
+    tActual.update = update;
+
+    --[[!
+    @fqxn LuaEx.Primitives.circlearc.Properties.center
+    @pulsarlua table circlearc.center
+    @desc Protected coordinate proxy. Change center.x or center.y individually; the center reference itself is read-only.
+    !]]
+    tActual.center = rawsetmetatable({}, {
+        __index = function(tInput, vKey)
+            update();
+
+            return tCenterActual[vKey];
+        end,
+        __newindex = function(tInput, vKey, vValue)
+            if (vKey ~= "x" and vKey ~= "y") then
+                error("Circle arc center: cannot set field '"..tostring(vKey).."'.", 2);
+            end
+
+            validateNumber(vValue, "center."..vKey);
+            tCenterActual[vKey] = vValue;
+        end,
+        __metatable = false,
+    });
+
+    local tDecoy = {};
+
+    --[[!
+    @fqxn LuaEx.Primitives.circlearc.Functions.getState
+    @desc Copies defining geometry and update settings. Derived caches are not saved.
+    @ret table tState Independent restoration data.
+    @scope local
+    !]]
+    local function getState()
+
+        return {
+            centerX = tCenterActual.x,
+            centerY = tCenterActual.y,
+            radius = tActual.radius,
+            startAngle = tActual.startAngle,
+            endAngle = tActual.endAngle,
+            autoUpdate = tActual.autoUpdate,
+        };
+    end
+
+    rawsetmetatable(tDecoy, {
+        __index = function(tInput, vKey)
+            update();
+
+            return tActual[vKey];
+        end,
+        __newindex = function(tInput, vKey, vValue)
+            if (vKey == "autoUpdate") then
+                if (rawtype(vValue) ~= "boolean") then
+                    error("Circle arc: autoUpdate must be a boolean.", 2);
+                end
+
+                tActual.autoUpdate = vValue;
+                if (vValue) then
+                    update();
+                end
+
+                return;
+            end
+
+            if (vKey ~= "radius" and vKey ~= "startAngle" and vKey ~= "endAngle") then
+                error("Circle arc: cannot set field '"..tostring(vKey).."'.", 2);
+            end
+
+            validateNumber(vValue, vKey);
+            local nNewRadius = vKey == "radius" and vValue or tActual.radius;
+            local nNewStart = vKey == "startAngle" and vValue or tActual.startAngle;
+            local nNewEnd = vKey == "endAngle" and vValue or tActual.endAngle;
+            local nNewSweep = validateGeometry(nNewRadius, nNewStart, nNewEnd);
+
+            if (vValue ~= tActual[vKey]) then
+                tActual[vKey] = vValue;
+                nSweep = nNewSweep;
+                bDirty = true;
+            end
+
+            if (tActual.autoUpdate) then
+                update();
+            end
+        end,
+        --[[!
+        @fqxn LuaEx.Primitives.circlearc.Metamethods.__clone
+        @desc Creates independent geometry from current defining inputs, retaining update settings.
+        @ret primitive oCopy Independent circlearc primitive.
+        !]]
+        __clone = function()
+
+            return circlearcFactory.deserialize(getState());
+        end,
+        --[[!
+        @fqxn LuaEx.Primitives.circlearc.Metamethods.__serialize
+        @desc Supplies fresh defining state for global serialize; derived values are recomputed.
+        @ret table tState Restoration data.
+        !]]
+        __serialize = getState,
+        __serialtype = "circlearc",
+        __type = "primitive",
+        __subtype = "circle_arc",
+        __metatable = {__type = "primitive", __subtype = "circle_arc"},
+    });
+    if (not bSkipFirstUpdate) then
+        update();
+    end
+
+    return tDecoy;
+end
+
+local circlearcFactoryActual = {
+    --[[!
+    @fqxn LuaEx.Primitives.circlearc.Functions.deserialize
+    @pulsarlua function circlearc.deserialize
+    @desc Validates saved defining state, rebuilds geometry and restores update settings.
+    Invalid state raises before a restored object is returned. Derived values are not trusted.
+    @param table tState State supplied by global serialize or the object's __serialize hook.
+    @ret primitive oCopy Restored independent circlearc primitive.
+    !]]
+    deserialize = function(tState)
+
+        type.assert.table(tState);
+        local tAllowed = { centerX = true, centerY = true, radius = true, startAngle = true, endAngle = true, autoUpdate = true };
+
+        -- Step 1: reject unknown state fields before constructing an object.
+        for sField in pairs(tState) do
+            assert(tAllowed[sField], "Unknown circlearc restoration field.");
+        end
+
+        -- Step 2: require all defining coordinates/sizes as finite numbers.
+        for _, sField in ipairs({ "centerX", "centerY", "radius", "startAngle", "endAngle" }) do
+            local nValue = tState[sField];
+            assert(rawtype(nValue) == "number" and nValue == nValue and math.abs(nValue) < math.huge,
+                   "Invalid circlearc restoration number: "..sField);
+        end
+
+        assert(rawtype(tState.autoUpdate) == "boolean", "Restored autoUpdate must be boolean.");
+
+        -- Step 3: constructor validation enforces geometry-specific constraints.
+        local oCopy = build(tState.centerX, tState.centerY, tState.radius, tState.startAngle, tState.endAngle);
+        oCopy.autoUpdate = tState.autoUpdate;
+        return oCopy;
+    end,
+};
+local circlearcFactoryMeta = {
+    __call = function(this, ...)
+
+        return build(...);
+    end,
+    __index = function(t, k)
+
+        return circlearcFactoryActual[k] or nil;
+    end,
+    __newindex = function()
+
+        error("circlearc factory members cannot be assigned directly.", 2);
+    end,
+    __type = "circlearcPrimitiveFactory",
+};
+circlearcFactory = {};
+circlearcFactoryMeta.__clone = function() return circlearcFactory; end;
+circlearcFactoryMeta.__serialize = function() return "circlearc"; end;
+circlearcFactoryMeta.__metatable = table.readonly({
+    __type = circlearcFactoryMeta.__type,
+    __call = circlearcFactoryMeta.__call,
+    __clone = circlearcFactoryMeta.__clone,
+    __serialize = circlearcFactoryMeta.__serialize,
+});
+setmetatable(circlearcFactory, circlearcFactoryMeta);
+require("LuaEx.lib.serializer").registerFactory(circlearcFactory, {name = "circlearc", types = {"circlearc"}});
+return circlearcFactory;

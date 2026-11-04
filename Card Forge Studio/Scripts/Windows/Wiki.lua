@@ -499,7 +499,7 @@ function Wiki.create(dParent, pRoot, tOptions)
     @vis private
     !]]
     local function save()
-        capture(); tStore.save(); title(); message("Wiki saved."); require("Log").Note("Game wiki saved.");
+        capture(); tStore.save(); title(); message("Wiki saved."); CFS.Log.Note("Game wiki saved.");
     end
     button(oBottom, "Save", save);
     button(oBottom, "Close", function() dFrame:Close(); end);

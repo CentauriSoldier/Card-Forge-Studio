@@ -1,5 +1,5 @@
 local Dox      = Dox;
-local DoxLua   = DoxLua;
+local DoxLua   = Dox.DoxLua;
 local assert   = assert;
 local base64   = base64;
 local error    = error;
@@ -73,7 +73,7 @@ local function CollectLuaFiles(pFolder, tFiles)
             if (sName:lower() ~= "plugins") then
                 CollectLuaFiles(pEntry, tFiles);
             end
-        elseif (sName:lower():match("%.lua$")) then
+        elseif (sName:lower():match("%.lua$") or sName:lower():match("%.lxc$") or sName:lower():match("%.lxe$")) then
             table.insert(tFiles, pEntry);
         end
 
@@ -145,7 +145,7 @@ local Util = {};
 @vis public
 !]]
 function Util.BuildAPIDocs()
-    Log.Note("Building API docs");
+    CFS.Log.Note("Building API docs");
 
     local pDocs     = APP_PATH.."/Docs";
     local pProfile  = os.getenv("USERPROFILE");
@@ -179,7 +179,7 @@ function Util.BuildAPIDocs()
     local pZIP = oDox.export("CFS");
 
     InstallPulsarPackage(pZIP, pProfile.."/.pulsar/packages");
-    Log.Note("API docs build complete");
+    CFS.Log.Note("API docs build complete");
 end
 
 
@@ -192,7 +192,7 @@ end
 !]]
 function Util.BuildRelease(pZIP)
     assert(rawtype(pZIP) == "string" and pZIP:lower():match("%.zip$"), "Choose a release ZIP destination.");
-    Log.Note("Building release package");
+    CFS.Log.Note("Building release package");
 
     local sRoot   = "'"..APP_PATH:gsub("'", "''").."'";
     local sZIP    = "'"..pZIP:gsub("'", "''").."'";
@@ -275,7 +275,7 @@ try {
     local bOK = hProcess:close();
     assert(os.remove(pScript), "Cannot remove release packaging command file.");
     assert(bOK, "Release packaging failed: "..tostring(sOutput));
-    Log.Note("Release package build complete: "..pZIP);
+    CFS.Log.Note("Release package build complete: "..pZIP);
     return pZIP;
 end
 

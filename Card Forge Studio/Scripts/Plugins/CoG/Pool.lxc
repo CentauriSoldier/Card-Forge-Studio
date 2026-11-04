@@ -1,0 +1,1268 @@
+--[[!
+@fqxn CoG.Pool
+@pulsarlua class Pool
+@desc Mutable resource Pool with modifiers, reservations, regeneration and events.
+    Arithmetic updates the left Pool in place; percent sets maximum, unary minus
+    empties, and length fills available capacity. Clone retains callback references;
+    save/load deliberately disables runtime callbacks. Helpers below separate
+    status updates, modifier arithmetic, reservation validation and event dispatch.
+!]]
+namespace CoG {
+    class Pool {
+        --[[!
+        @fqxn CoG.Pool.ASPECT
+        @desc Canonical resource selectors. Payloads are the internal storage keys.
+        !]]
+        public enum ASPECT within CoG.Pool {
+            AVAILABLE           = "available";
+            CURRENT             = "current";
+            CYCLE               = "cycle";
+            RESERVED            = "reserved";
+            MAX                 = "max";
+            CYCLE_FLAT          = "cycle_flat";
+            CYCLE_PERCENT       = "cycle_percent";
+            RESERVED_FLAT       = "reserved_flat";
+            RESERVED_PERCENT    = "reserved_percent";
+        }
+
+        --[[!
+        @fqxn CoG.Pool.MODIFIER
+        @desc Ordered modifier selectors; FINAL is calculated and read-only.
+        !]]
+        public enum MODIFIER within CoG.Pool {
+            BASE;
+            FINAL;
+            MAX;
+            BASE_BONUS;
+            BASE_PENALTY;
+            MULTIPLICATIVE_BONUS;
+            MULTIPLICATIVE_PENALTY;
+            ADDITIVE_BONUS;
+            ADDITIVE_PENALTY;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.EVENT
+        @desc Callback selectors retain the established event storage keys.
+        !]]
+        public enum EVENT within CoG.Pool {
+            ON_INCREASE     = "onIncrease";
+            ON_DECREASE     = "onDecrease";
+            ON_EMPTY        = "onEmpty";
+            ON_LOW          = "onLow";
+            ON_FULL         = "onFull";
+            ON_CYCLE        = "onCycle";
+            ON_RESERVE      = "OnReserve";
+            ON_UNRESERVE    = "onUnreserve";
+            ON_HIGH         = "onHigh";
+        }
+        private static _nReservationMax = null;
+        private static _tDeferredEvents = {};
+        private static _bDeferringEvents = false;
+        private static eventPlaceholder = function() end;
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.defaultReservationMax
+        @desc Captures and validates configuration after discovery, on first use.
+        @ret number nMaximum Supported reservation fraction.
+        !]]
+        private static defaultReservationMax() {
+            if (type.isnull(Pool._nReservationMax)) then
+                local nMaximum = CoGBase.config.Pool.reservationMax;
+                assert(rawtype(nMaximum) == "number" and nMaximum >= 0 and
+                    nMaximum <= 0.9999999999999,
+                    "Pool reservationMax config must be within the supported nonnegative reservation range.");
+                Pool._nReservationMax = nMaximum;
+            end
+
+            return Pool._nReservationMax;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Enums.EVENT
+        @desc Immutable event selectors; callbacks are runtime registrations.
+            Change events run before threshold events; ON_CYCLE runs after a change.
+            Callback signatures (the first argument is always this Pool):
+            <ul>
+                <li>ON_INCREASE / ON_DECREASE: (pool, oldCurrent, newCurrent).</li>
+                <li>ON_EMPTY: (pool, oldCurrent).</li>
+                <li>ON_LOW / ON_HIGH / ON_FULL: (pool, oldCurrent, newCurrent).
+                    Status-only recalculation supplies current in both positions.</li>
+                <li>ON_CYCLE: (pool, oldCurrent, newCurrent, cycle, multiplier,
+                    delta, positive, changed).</li>
+                <li>ON_RESERVE / ON_UNRESERVE: (pool, oldReserved, newReserved,
+                    currentChanged, newCurrent, available, maximum).</li>
+            </ul>
+        !]]
+        -- Event selectors are declared above; the signatures apply to their callbacks.
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.newEvents
+        @desc Allocates a fresh dictionary of shared no-op callbacks.
+        !]]
+        private static newEvents() {
+            local tEvents = {};
+
+            for _, eEvent in Pool.EVENT() do
+                tEvents[eEvent.Value] = Pool.eventPlaceholder;
+            end
+
+            return tEvents;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.newActiveEvents
+        @desc Allocates an independent event activation dictionary, initially false.
+        !]]
+        private static newActiveEvents() {
+            local tActive = {};
+
+            for _, eEvent in Pool.EVENT() do
+                tActive[eEvent.Value] = false;
+            end
+
+            return tActive;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.newModifiers
+        @desc Allocates independent modifier storage with its selected cap.
+        @param number nCap Upper cap for the calculated modifier value.
+        @param boolean|nil bMaximum Whether the record also carries the minimum capacity.
+        !]]
+        private static newModifiers(nCap, bMaximum) {
+            local tModifiers = {0, 0, nCap, 0, 0, 0, 0, 0, 0, final = 0};
+
+            if (bMaximum) then
+                tModifiers.min = 1;
+            end
+
+            return tModifiers;
+        }
+
+        -- Protected state remains available to subclasses. Status flags have
+        -- distinct names so fields never hide the public isEmpty/isFull methods.
+        protected activeEvents = Pool.newActiveEvents();
+        protected events = Pool.newEvents();
+        protected available = 1;
+        protected current = -1;
+        protected _nCycle = 0;
+        protected reserved = 0;
+        protected max = Pool.newModifiers(math.huge, true);
+        protected cycle_flat = Pool.newModifiers(math.huge);
+        protected cycle_percent = Pool.newModifiers(math.huge);
+        protected reserved_flat = Pool.newModifiers(math.huge);
+        protected reserved_percent = Pool.newModifiers(Pool.defaultReservationMax());
+        protected lowMarker = 0.3;
+        protected highMarker = 1;
+        protected _bEmpty = false;
+        protected _bHigh = false;
+        protected _bFull = false;
+        protected _bLow = false;
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.dispatchEvent
+        @desc Queues notifications during a deferred action; otherwise invokes them.
+        !]]
+        private static dispatchEvent(fCallback, ...) {
+            if (Pool._bDeferringEvents) then
+                local tQueue = Pool._tDeferredEvents;
+                tQueue[#tQueue + 1] = {callback = fCallback, args = table.pack(...)};
+            else
+                fCallback(...);
+            end
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.validateNumber
+        @desc Validates numeric input, admitting infinity only for modifier caps.
+        !]]
+        private static validateNumber(nValue, bAllowInfinity) {
+            type.assert.number(nValue);
+            assert(nValue == nValue and (bAllowInfinity or (nValue ~= math.huge and nValue ~= -math.huge)), "Pool values must be finite numbers.");
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.updateStatus
+        @desc Recalculates state flags and optionally emits newly reached threshold events.
+        !]]
+        private static updateStatus(other, tValues, bFireEvents) {
+            local pro           = tValues;
+            local nCurrent      = pro["current"];
+            local nStatus       = nCurrent;
+            local nMax          = pro["max"][2];
+            local bWasEmpty     = pro._bEmpty;
+            local bWasLow       = pro._bLow;
+            local bWasFull      = pro._bFull;
+            local bWasHigh      = pro._bHigh;
+
+            pro._bEmpty = nCurrent <= 0;
+            pro._bLow   = not pro._bEmpty and nStatus <= nMax * pro.lowMarker;
+            pro._bHigh  = nStatus >= nMax * pro.highMarker;
+            pro._bFull  = nCurrent >= pro["available"];
+
+            if (bFireEvents) then
+
+                if (pro._bEmpty and not bWasEmpty and pro.activeEvents["onEmpty"]) then
+                    Pool.dispatchEvent(pro.events["onEmpty"], other, nCurrent);
+                elseif (pro._bLow and not bWasLow and pro.activeEvents["onLow"]) then
+                    Pool.dispatchEvent(pro.events["onLow"], other, nCurrent, nCurrent);
+                end
+
+                if (pro._bHigh and not bWasHigh and pro.activeEvents["onHigh"]) then
+                    Pool.dispatchEvent(pro.events["onHigh"], other, nCurrent, nCurrent);
+                end
+
+                if (pro._bFull and not bWasFull and pro.activeEvents["onFull"]) then
+                    Pool.dispatchEvent(pro.events["onFull"], other, nCurrent, nCurrent);
+                end
+
+            end
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.setCurrent
+        @desc Clamps current to available capacity and dispatches change/threshold events.
+        !]]
+        private static setCurrent(other, tValues, nNew) {
+            Pool.validateNumber(nNew);
+            local pro           = tValues;
+            local nCurrent      = pro["current"];
+            local nAvailable    = pro["available"];
+            local bWasEmpty     = pro._bEmpty;
+            local bWasLow       = pro._bLow;
+            local bWasFull      = pro._bFull;
+            local bWasHigh      = pro._bHigh;
+
+            --clamp the value
+            nNew = math.max(0, math.min(nNew, nAvailable));
+            local bChanged = nCurrent ~= nNew;
+
+            --set the current value
+            pro["current"] = nNew;
+            Pool.updateStatus(other, tValues, false);
+
+            --process events
+            local tActiveEvents = pro.activeEvents;
+            local tEvents       = pro.events;
+
+            if (bChanged) then
+
+                if (nNew > nCurrent and tActiveEvents["onIncrease"]) then
+                    Pool.dispatchEvent(tEvents["onIncrease"], other, nCurrent, nNew);
+                elseif (nNew < nCurrent and tActiveEvents["onDecrease"]) then
+                    Pool.dispatchEvent(tEvents["onDecrease"], other, nCurrent, nNew);
+                end
+
+                if (pro._bEmpty and not bWasEmpty and tActiveEvents["onEmpty"]) then
+                    Pool.dispatchEvent(tEvents["onEmpty"], other, nCurrent);
+                elseif (pro._bLow and not bWasLow and tActiveEvents["onLow"]) then
+                    Pool.dispatchEvent(tEvents["onLow"], other, nCurrent, nNew);
+                end
+
+                if (pro._bHigh and not bWasHigh and tActiveEvents["onHigh"]) then
+                    Pool.dispatchEvent(tEvents["onHigh"], other, nCurrent, nNew);
+                end
+
+                if (pro._bFull and not bWasFull and tActiveEvents["onFull"]) then
+                    Pool.dispatchEvent(tEvents["onFull"], other, nCurrent, nNew);
+                end
+
+            end
+
+            return bChanged, nNew;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.calculateFinal
+        @desc Calculates one modifier record without changing it.
+        !]]
+        private static calculateFinal(other, tValues, sIndex) {
+            local tValue = tValues[sIndex];
+
+            -- MODIFIER slot numbers are unpacked once so the formula reads by name.
+            local nBase, nBaseBonus, nBasePenalty = tValue[1], tValue[4], tValue[5];
+            local nMultBonus, nMultPenalty = tValue[6], tValue[7];
+            local nAddBonus, nAddPenalty = tValue[8], tValue[9];
+            local nFinal = (nBase + nBaseBonus - nBasePenalty) *
+                (1 + nMultBonus - nMultPenalty) + nAddBonus - nAddPenalty;
+
+            return math.min(nFinal, tValue[3]); -- MAX modifier caps the result.
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.setCycle
+        @desc Updates a cycle modifier and recalculates the total regeneration amount.
+        !]]
+        private static setCycle(other, tValues, sAspect, nValue, nModifier) {
+            local pro = tValues;
+            local bRet          = false;
+            local bIsFlat       = sAspect == "cycle_flat";
+            local bIsPercent    = not bIsFlat;
+            local tCyclePercent = pro["cycle_percent"];
+            local tCycleFlat    = pro["cycle_flat"];
+            local tActive       = bIsPercent and tCyclePercent or tCycleFlat;
+
+            --set the new modifier value
+            tActive[nModifier] = nValue;
+
+            --calculate the final values
+            local nFlatFinal        = Pool.calculateFinal(other, tValues, "cycle_flat");
+            tCycleFlat[2]     = nFlatFinal;
+
+            local nPercentFinal     = Pool.calculateFinal(other, tValues, "cycle_percent");
+            tCyclePercent[2]  = nPercentFinal;
+            pro._nCycle = nFlatFinal + (nPercentFinal * pro["max"][2]);
+            return true, 0;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.attemptSettingMax
+        @desc Commits a valid maximum change or restores its previous modifier.
+        !]]
+        private static attemptSettingMax(other, tValues, nValue, nModifier) {
+            local pro           = tValues;
+            local bRet          = false;
+            local nOverage      = 0;
+            local tMax          = pro["max"];
+
+            --store the old value
+            local nOldValue  = tMax[nModifier];
+
+            --set the new value
+            tMax[nModifier]  = nValue;
+
+            --calculate the new final value
+            local nNewFinal  = Pool.calculateFinal(other, tValues, "max");
+
+            --get the reserved
+            local nResFlat      = pro["reserved_flat"][2]
+            local nResPercent   = pro["reserved_percent"][2]
+
+            --calucalte the new total reserved
+            local nTotalReserved = nResFlat + (nNewFinal * nResPercent);
+
+
+            --calculate the new available
+            local nNewAvailable = nNewFinal - nTotalReserved;
+            --check the success
+            bRet = nNewFinal >= tMax.min and nTotalReserved >= 0 and nNewAvailable > 0 and nTotalReserved / nNewFinal <= 0.9999999999999;
+
+            if (bRet) then
+                --set the new max
+                tMax[2] = nNewFinal;
+
+                --set the new reserved
+                pro["reserved"] = nTotalReserved;
+
+                --set the new avaiable
+                pro["available"] = nNewAvailable;
+
+                pro._nCycle = pro["cycle_flat"][2] + pro["cycle_percent"][2] * nNewFinal;
+
+                --check current and adjust if needed
+                if (pro["current"] > nNewAvailable) then
+                    Pool.setCurrent(other, tValues, nNewAvailable);
+                else
+                    Pool.updateStatus(other, tValues, true);
+                end
+
+            else
+                tMax[nModifier] = nOldValue;
+                nOverage = math.max(0, tMax.min - nNewFinal, -nNewAvailable);
+            end
+
+            return bRet, nOverage
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.attemptSettingReserved
+        @desc Validates and commits reservations, capacity, current clamping and notifications.
+        !]]
+        private static attemptSettingReserved(other, tValues, sAspect, nValue, nModifier) {
+            local pro           = tValues;
+            local bRet          = false;
+            local nOverage      = 0;
+
+            --_nReverseHardMax
+
+            local bIsFlat       = sAspect == "reserved_flat";
+            local bIsPercent    = not bIsFlat;
+
+            --get the max, current and total reserved final values
+            local nMax              = pro["max"][2];
+            local nCurrent          = pro["current"];
+            local nOldTotalReserved = pro["reserved"];
+
+            --reserve tables and final values
+            local tResPercent   = pro["reserved_percent"];
+            local tResFlat      = pro["reserved_flat"];
+            local tActive       = bIsPercent and tResPercent or tResFlat;
+
+            --store the old value
+            local nOldValue     = tActive[nModifier];
+            --set the new value
+            tActive[nModifier]  = nValue;
+
+            --get the final values of the reserve aspects
+            local nResFlat      = bIsPercent and tResFlat[2] or Pool.calculateFinal(other, tValues, sAspect);
+            local nResPercent   = bIsFlat and tResPercent[2] or Pool.calculateFinal(other, tValues, sAspect);
+
+            --get the total reserved
+            local nTotalReserved = nResFlat + (nMax * nResPercent);
+
+            --determine if the reservation is permitted
+            bRet = (nResFlat >= 0 and nResPercent >= 0 and
+                        nTotalReserved < nMax and
+                        (nTotalReserved / nMax) <= math.min(tResPercent[3], 0.9999999999999));
+
+            --if the reservation is allowed, process it
+            if (bRet) then
+                --set the new final value
+                tActive[2]        = bIsPercent and nResPercent or nResFlat;
+                --update the reserved total
+                pro["reserved"]   = nTotalReserved;
+                --update the available value
+                local nAvailable = nMax - nTotalReserved;
+                pro["available"] = nAvailable;
+
+                --update the current value
+                local nNewCurrent       = nCurrent > nAvailable and nAvailable or nCurrent;
+                local bChangeInCurrent  = nCurrent ~= nNewCurrent;
+
+                if (bChangeInCurrent) then
+                    local bSuccess, nNew = Pool.setCurrent(other, tValues, nNewCurrent);
+                else
+                    Pool.updateStatus(other, tValues, true);
+                end
+
+                --check for and fire reserve event
+                local bOnReserve   = nOldTotalReserved < nTotalReserved;
+                local bOnUnReserve = nOldTotalReserved > nTotalReserved;
+
+                if (bOnReserve and pro.activeEvents["OnReserve"]) then
+                    Pool.dispatchEvent(pro.events["OnReserve"], other, nOldTotalReserved, nTotalReserved, bChangeInCurrent, nNewCurrent, nAvailable, nMax);
+                elseif (bOnUnReserve and pro.activeEvents["onUnreserve"]) then
+                    Pool.dispatchEvent(pro.events["onUnreserve"], other, nOldTotalReserved, nTotalReserved, bChangeInCurrent, nNewCurrent, nAvailable, nMax);
+                end
+
+            else
+                --set the old value
+                tActive[nModifier] = nOldValue;
+                --indicate the overage
+                nOverage = math.max(0, nTotalReserved - nMax * math.min(tResPercent[3], 0.9999999999999));
+            end
+
+
+            return bRet, nOverage;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.operandValue
+        @desc Reads a right-hand Pool operand or validates a numeric operand.
+        !]]
+        private static operandValue(oPool, other, bMaximum) {
+            type.assert.custom(oPool, "Pool");
+            local nValue;
+
+            if (type(other) == "Pool") then
+                nValue = other.get(bMaximum and Pool.ASPECT.MAX or Pool.ASPECT.CURRENT);
+            else
+                Pool.validateNumber(other);
+                nValue = other;
+            end
+
+            return nValue;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Helpers.setValue
+        @desc Validates aspect/modifier selection and routes the requested mutation.
+        !]]
+        private static setValue(other, tValues, nValue, eAspectOrNil, eModifierOrNil) {
+            Pool.validateNumber(nValue, eModifierOrNil == Pool.MODIFIER.MAX);
+
+            if (eModifierOrNil == Pool.MODIFIER.MAX) then
+                assert(nValue >= 0, "Modifier caps must be nonnegative.");
+            end
+
+            if (eAspectOrNil ~= nil) then
+                assert(lxe.isMember(eAspectOrNil, Pool.ASPECT), "Expected a Pool.ASPECT member.");
+            end
+
+            if (eModifierOrNil ~= nil) then
+                assert(lxe.isMember(eModifierOrNil, Pool.MODIFIER), "Expected a Pool.MODIFIER member.");
+            end
+
+            local pro           = tValues;
+            local bSuccess      = false;
+            local nOverage      = 0;
+            local eAspect       = (lxe.isMember(eAspectOrNil, Pool.ASPECT))   and eAspectOrNil    or Pool.ASPECT.CURRENT;
+            local sAspect       =  eAspect.Value;
+            local eModifier     = (lxe.isMember(eModifierOrNil, Pool.MODIFIER)) and eModifierOrNil  or Pool.MODIFIER.BASE;
+            local nModifier     = eModifier.Value;
+            local sEvent        = "NONE";
+            local nNew;
+
+            if (type(nValue) ~= "number") then
+                error("Error setting value in Pool class.\nExpected type number; got type: "..type(nValue)..'.');
+            end
+
+            if (nModifier == 2) then
+                error("Error setting value in Pool class.\nFinal values are calculated internally and may not be set manually.");
+            end
+
+            if (sAspect == "available" or sAspect == "cycle" or sAspect == "reserved") then
+                error("Error setting value in Pool class.\nAttempt to set calculated, read-only '"..sAspect:upper().."', value.");
+            end
+
+            --process CURRENT aspect
+            if (sAspect == "current") then --since current doesn't have a table
+
+                if (nValue ~= pro["current"]) then
+                    bSuccess, nNew = Pool.setCurrent(other, tValues, nValue);
+                end
+
+            --process all other aspects
+            elseif pro[sAspect][nModifier] then
+
+                --process MAX aspect
+                if (sAspect == "max") then
+                    bSuccess, nOverage = Pool.attemptSettingMax(other, tValues, nValue, nModifier);
+
+                --process CYCLE_FLAT and CYCLE_PERCENT aspect
+                elseif (sAspect == "cycle_flat" or sAspect == "cycle_percent") then
+                    bSuccess, nOverage = Pool.setCycle(other, tValues, sAspect, nValue, nModifier);
+
+                --process RESERVED_FLAT and RESERVED_PERCENT aspect
+                elseif (sAspect == "reserved_flat" or sAspect == "reserved_percent") then
+                    bSuccess, nOverage = Pool.attemptSettingReserved(other, tValues, sAspect, nValue, nModifier);
+                end
+
+
+            else --for tables like reserved which have only certain modifiers
+                error(  "Error setting value in Pool class.\nNo '${modifier}' modifier exists for aspect, '${aspect}'." %
+                        {modifier = eModifier.Name, aspect = eAspect.Name});
+            end
+
+            return other, bSuccess, nOverage;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Static Methods.withDeferredEvents
+        @pulsarlua function Pool.withDeferredEvents
+        @desc Runs a synchronous action, deferring Pool callbacks until it finishes. Values and status update immediately; callbacks then run in order and all queued callbacks are attempted. Nested calls share the outer queue. This is not a rollback transaction: action or callback errors leave committed values intact and the first error is rethrown after notifications. The action must not yield.
+        @param function fAction The action to run.
+        @ret any ... The action's return values.
+        @ex
+        local oFirst = Pool(100, 40);
+        local oSecond = Pool(100, 40);
+        oFirst.setEventCallback(Pool.EVENT.ON_DECREASE, function()
+            assert(oFirst.get() == 30 and oSecond.get() == 30);
+        end);
+        Pool.withDeferredEvents(function()
+            oFirst.adjust(-10);
+            oSecond.adjust(-10);
+        end);
+        !]]
+        public static withDeferredEvents(fAction) {
+            type.assert.custom(fAction, "function");
+            local bOwnQueue = not Pool._bDeferringEvents;
+
+            if (bOwnQueue) then
+                Pool._tDeferredEvents = {};
+                    Pool._bDeferringEvents = true;
+            end
+
+            local tResult = table.pack(pcall(fAction));
+            local sError = not tResult[1] and tResult[2] or nil;
+
+            if (bOwnQueue) then
+                local tEvents = Pool._tDeferredEvents;
+                Pool._tDeferredEvents = {};
+                    Pool._bDeferringEvents = false;
+
+                for _, tEvent in ipairs(tEvents) do
+                    local bCalled, sCallbackError = pcall(tEvent.callback, table.unpack(tEvent.args, 1, tEvent.args.n));
+
+                    if (not bCalled and sError == nil) then
+                        sError = sCallbackError;
+                    end
+                end
+            end
+
+            if (sError ~= nil) then
+                error(sError, 0);
+            end
+
+            return table.unpack(tResult, 2, tResult.n);
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Metamethods.__add
+        @desc Adds a number or another Pool's current value to this Pool, clamped to available capacity.
+        @param Pool left The Pool updated in place; numbers on the left are rejected.
+            @param Pool|number right Numeric operand or another Pool.
+        @ret Pool oPool This Pool.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool = oPool + 10;
+        assert(oPool.get() == 50);
+        oPool = oPool + Pool(100, 20);
+        assert(oPool.get() == 70);
+        !]]
+        public operator +(left, right) {
+            local nValue = Pool.operandValue(left, right, false);
+            left.adjust(nValue);
+            return left;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Metamethods.__sub
+        @desc Subtracts a number or another Pool's current value from this Pool, clamped at zero.
+        @param Pool left The Pool updated in place; numbers on the left are rejected.
+            @param Pool|number right Numeric operand or another Pool.
+        @ret Pool oPool This Pool.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool = oPool - 10;
+        assert(oPool.get() == 30);
+        !]]
+        public operator -(left, right) {
+            local nValue = Pool.operandValue(left, right, false);
+            left.adjust(-nValue);
+            return left;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Metamethods.__mul
+        @desc Multiplies current by a number or another Pool's current value, applying current bounds.
+        @param Pool left The Pool updated in place; numbers on the left are rejected.
+            @param Pool|number right Numeric operand or another Pool.
+        @ret Pool oPool This Pool.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool = oPool * 2;
+        assert(oPool.get() == 80);
+        !]]
+        public operator *(left, right) {
+            local nValue = Pool.operandValue(left, right, false);
+            left.set(left.get() * nValue);
+            return left;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Metamethods.__div
+        @desc Divides current by a number or another Pool's current value and floors the result. Zero divisors are rejected.
+        @param Pool left The Pool updated in place; numbers on the left are rejected.
+            @param Pool|number right Numeric operand or another Pool.
+        @ret Pool oPool This Pool.
+        @ex
+        local oPool = Pool(100, 41);
+        oPool = oPool / 2;
+        assert(oPool.get() == 20); --division is floored
+        !]]
+        public operator /(left, right) {
+            local nValue = Pool.operandValue(left, right, false);
+            assert(nValue ~= 0, "Cannot divide a Pool by zero.");
+            left.set(math.floor(left.get() / nValue));
+            return left;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Metamethods.__mod
+        @desc Sets maximum base from a number or another Pool's calculated maximum, using normal capacity validation.
+        @param Pool left The Pool updated in place; numbers on the left are rejected.
+            @param Pool|number right Numeric operand or another Pool.
+        @ret Pool oPool This Pool.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool = oPool % 200; --sets maximum base, rather than calculating a remainder
+        assert(oPool.get(Pool.ASPECT.MAX) == 200);
+        !]]
+        public operator %(left, right) {
+            local nValue = Pool.operandValue(left, right, true);
+            left.set(nValue, Pool.ASPECT.MAX);
+            return left;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Metamethods.__unm
+        @desc Empties this Pool in place.
+        @ret Pool oPool This Pool.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool = -oPool;
+        assert(oPool.get() == 0);
+        !]]
+        public operator -() {
+            this.setEmpty();
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Metamethods.__len
+        @desc Fills available capacity and returns the new current value.
+        @ret number nCurrent The filled current value.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool.set(20, Pool.ASPECT.RESERVED_FLAT);
+        assert(#oPool == 80); --also fills the Pool
+        assert(oPool.isFull());
+        !]]
+        public operator #() {
+            this.setFull();
+            return this.get();
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Metamethods.__clone
+        @desc Creates an independent Pool with the same values, thresholds and event activation. Callback function references are retained.
+        @ret Pool oCopy The cloned Pool.
+        @ex
+        local oPool = Pool(100, 40);
+        local oCopy = clone(oPool);
+        oCopy.adjust(10);
+        assert(oCopy.get() == 50 and oPool.get() == 40);
+        !]]
+        public operator clone() {
+            local pro       = this;
+            local oNew      = Pool(1, 1);
+            local newpro    = oNew;
+
+            local tTables = {
+                "activeEvents",
+                "events",
+                "max",
+                "cycle_flat",
+                "cycle_percent",
+                "reserved_flat",
+                "reserved_percent",
+            };
+
+            for _, sIndex in pairs(tTables) do
+
+                for k, v in pairs(pro[sIndex]) do
+                    newpro[sIndex][k] = v;
+                end
+
+            end
+
+            newpro.lowMarker            = pro.lowMarker;
+            newpro.highMarker           = pro.highMarker;
+            newpro._bEmpty              = pro._bEmpty;
+            newpro._bHigh               = pro._bHigh;
+            newpro._bFull               = pro._bFull;
+            newpro._bLow                = pro._bLow;
+            newpro["available"]   = pro["available"];
+            newpro["current"]     = pro["current"];
+            newpro._nCycle       = pro._nCycle;
+            newpro["reserved"]    = pro["reserved"];
+
+            return oNew;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.set
+        @pulsarlua function Pool.set
+        @desc Sets a writable aspect or modifier. CURRENT is clamped to available capacity; invalid capacity or reservation changes are rejected without changing the prior settings.
+        @param number nValue The value to which the item should be set.
+        @param Pool.ASPECT|nil eAspect If provided, this refers to the aspect of the pool to set such as MAX or CYCLE.
+        <br>If not provided it will default to <b>CURRENT</b>.
+        @param Pool.MODIFIER|nil eModifier If provided, this indicates which modifier to set such as BASE, BASE_BONUS, etc.
+        <br>If not provided, it will default to BASE.
+        <br><strong>Note</strong>: not all aspects have all modifiers. E.g., Pool.ASPECT.CURRENT has no modifiers whatsoever.
+        @ret Pool oPool This pool.
+        @ret boolean bSuccess Whether the setting was accepted or changed CURRENT.
+        @ret number nOverage The rejected capacity or reservation overage; zero for CURRENT changes.
+        @ex
+        local oPool = Pool(100, 40);
+        local oResult, bSuccess, nOverage = oPool.set(120);
+        assert(oResult == oPool and bSuccess and nOverage == 0);
+        assert(oPool.get() == 100);
+        oPool.set(10, Pool.ASPECT.CYCLE_FLAT); --BASE is the default modifier
+        !]]
+        public set(nValue, eAspectOrNil, eModifierOrNil) {
+            return Pool.setValue(this, this, nValue, eAspectOrNil, eModifierOrNil);
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.Pool
+        @pulsarlua function Pool
+        @desc The constructor for the <b>Pool</b> class.
+        @param number|nil nMax The maximum value of the Pool (minimum 1).
+        @param number|nil nCurrent The current value of the Pool (minimum 0, maximum nMax).
+        @ex
+        local oPool = Pool(100, 40); --maximum, current
+        assert(oPool.get(Pool.ASPECT.MAX) == 100 and oPool.get() == 40);
+        !]]
+        public Pool(nMax, nCurrent) {
+            local pro   = this;
+            nMax        = type(nMax) 		== "number"	and nMax	    or 1;
+            nCurrent	= type(nCurrent) 	== "number" and nCurrent    or 1;
+            Pool.validateNumber(nMax);
+            Pool.validateNumber(nCurrent);
+
+            if (nMax < 1) then
+                error("Error creating Pool object.\nMax value must be positive number greater than or equal to 1.");
+            end
+
+            if (nCurrent < 0) then
+                error("Error creating Pool object.\nCurrent value must be non-negative.");
+            end
+
+            --set the values
+            pro["max"][1]        = nMax;
+            pro["max"][2]       = nMax;
+            pro["available"]          = nMax;
+
+            local bSuccess, nNew = Pool.setCurrent(this, this, nCurrent);
+
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.adjust
+        @pulsarlua function Pool.adjust
+        @desc Adjusts the selected value by an amount. Defaults to CURRENT; modifier-bearing aspects default to their BASE value. Uses the same bounds and events as set.
+        @param number nAmount The amount to add or subtract.
+        @param Pool.ASPECT|nil eAspect The aspect to adjust.
+        @param Pool.MODIFIER|nil eModifier The modifier to adjust.
+        @ret Pool oPool This pool.
+        @ret boolean bSuccess Whether the adjustment was accepted or changed CURRENT.
+        @ret number nOverage The rejected capacity or reservation overage; zero for CURRENT changes.
+        @ex
+        local oPool = Pool(100, 40);
+        local oResult, bSuccess, nOverage = oPool.adjust(-10);
+        assert(oResult == oPool and bSuccess and nOverage == 0);
+        assert(oPool.get() == 30);
+        !]]
+        public adjust(nAmount, eAspect, eModifier) {
+            Pool.validateNumber(nAmount);
+            local nCurrent = this.get(eAspect, eModifier or Pool.MODIFIER.BASE);
+            return this.set(nCurrent + nAmount, eAspect, eModifier);
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.cycle
+        @pulsarlua function Pool.cycle
+        @desc Causes the Pool to cycle based on the cycle value (after all modifiers have been applied).
+        <br>This is used for things like regeneration of mana, regen and/or poisoning of life, consumption of fuel, etc.
+        @param number|nil nMultiplier If a number is provided, it will cycle the number of times input, otherwise, once.
+        <br>Note: regardless of the multiple provided (if any), the <strong>onCycle</strong> event will fire only once per cycle.
+        @ret Pool oPool The Pool object.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool.set(10, Pool.ASPECT.CYCLE_FLAT);
+        oPool.cycle(2); --two regeneration amounts in one call
+        assert(oPool.get() == 60);
+        !]]
+        public cycle(nMultiplier) {
+            nMultiplier = nMultiplier == nil and 1 or nMultiplier;
+            Pool.validateNumber(nMultiplier);
+            local pro           = this;
+            local nCurrent      = pro["current"];
+            --local nMax          = pro[_sAspectMax][_nFinal];
+            local nAvailable    = pro["available"];
+            local nCycle        = pro._nCycle;
+            local nDelta        = nCycle * nMultiplier;
+            local bIsNegative   = nDelta < 0;
+            local bIsPositive   = nDelta > 0;
+            local bCanGoDown    = nCurrent > 0;
+            local bCanGoUp      = nCurrent < nAvailable;
+
+            if ( (bIsNegative and bCanGoDown) or (bIsPositive and bCanGoUp) ) then
+                --process the cycle
+                local nTotalChange = pro["current"] + (nCycle * nMultiplier);
+
+                --clamp the current value
+                local bSuccess, nNew = Pool.setCurrent(this, this, nTotalChange);
+
+                --run the cycle event if active (and something changed)
+                if (bSuccess and pro.activeEvents["onCycle"]) then
+                    Pool.dispatchEvent(pro.events["onCycle"], this, nCurrent, nNew, nCycle, nMultiplier, nDelta, bIsPositive, nCurrent ~= nNew);
+                end
+
+            end
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.isEmpty
+        @pulsarlua function Pool.isEmpty
+        @desc Determines whether the Pool is empty.
+        <br>This is true when the current value is less than or equal to 0.
+        @ret boolean bEmpty True if the Pool is empty, false otherwise.
+        @ex
+        local oPool = Pool(100, 0);
+        assert(oPool.isEmpty());
+        !]]
+        public isEmpty() {
+            return this._bEmpty;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.isFull
+        @pulsarlua function Pool.isFull
+        @desc Determines whether the Pool is full.
+        <br>This is true when current fills available capacity (maximum minus reserved), independently of low/high status.
+        @ret boolean bFull True if the Pool is full, false otherwise.
+        @ex
+        local oPool = Pool(100, 80);
+        oPool.set(20, Pool.ASPECT.RESERVED_FLAT);
+        assert(oPool.isFull()); --80 fills the available capacity
+        !]]
+        public isFull() {
+            return this._bFull;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.isHigh
+        @pulsarlua function Pool.isHigh
+        @desc Determines whether current reaches the configurable high marker times total maximum. Reservations do not count toward this threshold.
+        @ret boolean bHigh Whether the Pool is high.
+        @ex
+        local oPool = Pool(100, 80);
+        oPool.setHighMarker(0.8);
+        assert(oPool.isHigh());
+        !]]
+        public isHigh() {
+            return this._bHigh;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.isLow
+        @pulsarlua function Pool.isLow
+        @desc Determines whether the Pool is low.
+        <br>This is true when a nonempty Pool has a status value at or below maximum times the low marker.
+        @ret boolean bLow True if the Pool is low, false otherwise.
+        @ex
+        local oPool = Pool(100, 20);
+        assert(oPool.isLow()); --default low marker is 30% of total maximum
+        !]]
+        public isLow() {
+            return this._bLow;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.get
+        @pulsarlua function Pool.get
+        @desc Gets a Pool aspect or one of its modifiers.
+        @param Pool.ASPECT|nil eAspect If provided, this refers to the aspect of the pool to get such as MAX or CYCLE.
+        <br>If not provided it will default to CURRENT.
+        @param Pool.MODIFIER|nil eModifier If provided, this indicates which modifier to get such as BASE, BASE_BONUS, etc.
+        <br>If not provided, it will default to FINAL.
+        <br><strong>Note</strong>: not all aspects have all modifiers. E.g., Pool.ASPECT.RESERVED, Pool.ASPECT.CURRENT Pool.ASPECT.AVAILABLE have no modifiers whatsoever and only accessor methods.
+        @ret number nRet The value requested in either a flat value or a percentage between 0 and 1.
+        @ex
+        local oPool = Pool(100, 40);
+        assert(oPool.get() == 40);
+        assert(oPool.get(Pool.ASPECT.MAX, Pool.MODIFIER.BASE) == 100);
+        !]]
+        public get(eAspectOrNil, eModifierOrNil) {
+
+            if (eAspectOrNil ~= nil) then
+                assert(lxe.isMember(eAspectOrNil, Pool.ASPECT), "Expected a Pool.ASPECT member.");
+            end
+
+            if (eModifierOrNil ~= nil) then
+                assert(lxe.isMember(eModifierOrNil, Pool.MODIFIER), "Expected a Pool.MODIFIER member.");
+            end
+
+            local nRet;
+            local pro       = this;
+            local eAspect   = (lxe.isMember(eAspectOrNil, Pool.ASPECT))   and eAspectOrNil    or Pool.ASPECT.CURRENT;
+            local sAspect   =  eAspect.Value;
+            local eModifier = (lxe.isMember(eModifierOrNil, Pool.MODIFIER)) and eModifierOrNil  or Pool.MODIFIER.FINAL;
+            local nModifier = eModifier.Value;
+
+            if (sAspect == "current") then --since current doesn't have a table
+                nRet = pro["current"];
+
+            elseif (sAspect == "available") then
+                nRet = pro["available"];
+
+            elseif (sAspect == "reserved") then --for reserved total
+                nRet = pro["reserved"];
+
+            elseif (sAspect == "cycle") then --for cycle total
+                nRet = pro._nCycle;
+
+            elseif pro[sAspect][nModifier] then
+                nRet = pro[sAspect][nModifier];
+
+            else --for tables like reserved which have only certain modifiers
+                error(  "Error accessing value in Pool class.\nNo '${modifier}' modifier exists for aspect, '${aspect}'." %
+                        {modifier = eModifier.Name, aspect = eAspect.Name});
+            end
+
+            return nRet;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.setEmpty
+        @pulsarlua function Pool.setEmpty
+        @desc Set the Pool to empty (if not already empty).
+        @ret Pool oPool The Pool object.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool.setEmpty();
+        assert(oPool.isEmpty());
+        !]]
+        public setEmpty() {
+
+            --process only if the Pool isn't already empty
+            if (this["current"] > 0) then
+                Pool.setCurrent(this, this, 0);
+            end
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.setEventActive
+        @pulsarlua function Pool.setEventActive
+        @desc Enables\disables an event from triggering.
+        <br>Note: this does not affect any current callback function for this event, it simply makes<br>
+        the event dormant until manually reactivated.
+        @param Pool.EVENT eEvent The event to enable or disable.
+        @param boolean bFlag Enables the event if true, disables it otherwise.
+        @ret Pool oPool The Pool object.
+        @ex
+        local oPool = Pool(100, 40);
+        local nCalls = 0;
+        oPool.setEventCallback(Pool.EVENT.ON_INCREASE, function() nCalls = nCalls + 1; end);
+        oPool.setEventActive(Pool.EVENT.ON_INCREASE, false);
+        oPool.adjust(10);
+        assert(nCalls == 0);
+        oPool.setEventActive(Pool.EVENT.ON_INCREASE, true);
+        oPool.adjust(10);
+        assert(nCalls == 1);
+        !]]
+        public setEventActive(eEvent, bFlag) {
+            local pro = this;
+
+            if (not lxe.isMember(eEvent, Pool.EVENT)) then
+                error("Error setting event callback in Pool class.\nExpected Pool.EVENT.Got type, "..type(eEvent)..'.');
+            end
+
+            local sEvent = eEvent.Value;
+            type.assert.custom(bFlag, "boolean");
+            pro.activeEvents[sEvent] = bFlag and pro.events[sEvent] ~= Pool.eventPlaceholder;
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.setEventCallback
+        @pulsarlua function Pool.setEventCallback
+        @desc Sets a callback function for the specified event. The function will fire whenever the event is triggered.
+        @param Pool.EVENT eEvent The event for which the function should be called.
+        @param function|nil fCallback The callback function.
+        <br>Note: If a function is not input, it will delete any previous callback function and disable the event trigger.
+        @param boolean|nil bDoNotAutoActivate If a true value is input, it will prevent the event from being activated by this call.
+        <br>If nothing is provided, the event is active by default and the callback function will fire on event trigger.
+        @ret Pool oPool The Pool object.
+        @ex
+        local oPool = Pool(100, 40);
+        local nCalls = 0;
+        oPool.setEventCallback(Pool.EVENT.ON_INCREASE, function() nCalls = nCalls + 1; end);
+        oPool.adjust(10);
+        assert(nCalls == 1);
+        oPool.setEventCallback(Pool.EVENT.ON_INCREASE, nil); --clears and disables the callback
+        !]]
+        public setEventCallback(eEvent, fCallback, bDoNotAutoActivate) {
+            local pro = this;
+
+            if (not lxe.isMember(eEvent, Pool.EVENT)) then
+                error("Error setting event callback in Pool class.\nExpected Pool.EVENT.Got type, "..type(eEvent)..'.');
+            end
+
+            bDoNotAutoActivate = type(bDoNotAutoActivate) == "boolean" and bDoNotAutoActivate or false;
+
+            local sEvent = eEvent.Value;
+
+            if (rawtype(fCallback) == "function") then
+                pro.events[sEvent]          = fCallback;
+                pro.activeEvents[sEvent]    = not bDoNotAutoActivate;
+
+            else
+                pro.events[sEvent]          = Pool.eventPlaceholder;
+                pro.activeEvents[sEvent]    = false;
+            end
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.setFull
+        @pulsarlua function Pool.setFull
+        @desc Sets Pool's current value to the maximum available (if not already that high).
+        <br>Note: this is not the same as the maximum value.
+        <br>For instance, if 20% of a Pool (whose max is 100) is reserved, the value would be set to 80.
+        @ret Pool oPool The Pool object.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool.set(20, Pool.ASPECT.RESERVED_FLAT);
+        oPool.setFull();
+        assert(oPool.get() == 80);
+        !]]
+        public setFull() {
+            local pro           = this;
+            local nMax          = pro["max"][2];
+            local nAvailable    = nMax - pro["reserved"];
+            local nCurrent      = pro["current"];
+
+            --process only if the Pool isn't already full
+            if (nCurrent < nAvailable) then
+                Pool.setCurrent(this, this, nAvailable);
+            end
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.setHighMarker
+        @pulsarlua function Pool.setHighMarker
+        @desc Sets the high threshold as a fraction of total maximum. Must be greater than the low marker and no greater than 1. Recalculates status immediately.
+        @param number nValue The high marker.
+        @ret Pool oPool This pool.
+        @ex
+        local oPool = Pool(100, 80);
+        oPool.setHighMarker(0.8);
+        assert(oPool.isHigh());
+        !]]
+        public setHighMarker(nValue) {
+            Pool.validateNumber(nValue);
+            assert(nValue > this.lowMarker and nValue <= 1, "High marker must exceed low marker and be at most 1.");
+            this.highMarker = nValue;
+            Pool.updateStatus(this, this, true);
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.setLowMarker
+        @pulsarlua function Pool.setLowMarker
+        @desc Sets the low threshold as a fraction of total maximum. Must be greater than 0 and less than the high marker. Recalculates status immediately.
+        @param number nValue The low marker.
+        @ret Pool oPool This pool.
+        @ex
+        local oPool = Pool(100, 20);
+        oPool.setLowMarker(0.2);
+        assert(oPool.isLow());
+        !]]
+        public setLowMarker(nValue) {
+            Pool.validateNumber(nValue);
+            assert(nValue > 0 and nValue < this.highMarker, "Low marker must be positive and below full marker.");
+            this.lowMarker = nValue;
+            Pool.updateStatus(this, this, true);
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.getHighMarker
+        @pulsarlua function Pool.getHighMarker
+        @desc Gets the high-status fraction of total maximum.
+        @ret number nMarker The configured value.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool.setHighMarker(0.8);
+        assert(oPool.getHighMarker() == 0.8);
+        !]]
+        public getHighMarker() {
+            return this.highMarker;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.Methods.getLowMarker
+        @pulsarlua function Pool.getLowMarker
+        @desc Gets the low-status fraction of total maximum.
+        @ret number nMarker The configured value.
+        @ex
+        local oPool = Pool(100, 40);
+        oPool.setLowMarker(0.2);
+        assert(oPool.getLowMarker() == 0.2);
+        !]]
+        public getLowMarker() {
+            return this.lowMarker;
+        }
+
+        --[[!
+        @fqxn CoG.Pool.prepareSnapshot
+        @desc Replaces outgoing callbacks and activation maps without editing live state.
+        !]]
+        private prepareSnapshot(tState) {
+            local pro = tState.pro;
+            local tInactive = {};
+
+            for sEvent in pairs(pro.activeEvents) do
+                tInactive[sEvent] = false;
+            end
+
+            -- Callbacks belong to the live owner. Restore fresh placeholder events
+            -- from class defaults rather than serialized closures and their upvalues.
+            pro.activeEvents = tInactive;
+            pro.events = {};
+        }
+
+        --[[!
+        @fqxn CoG.Pool.validateSnapshot
+        @desc Validates modifiers, reservations, current and markers, rebuilds derived
+            caches, and restores inactive no-op events without invoking callbacks.
+        !]]
+        private validateSnapshot(tState) {
+            local pro = tState.pro;
+            type.assert.table(pro);
+            type.assert.table(pro.activeEvents);
+            type.assert.table(pro.events);
+
+            for _, eEvent in Pool.EVENT() do
+                assert(rawtype(pro.activeEvents[eEvent.Value]) == "boolean", "Invalid Pool snapshot activation.");
+                pro.activeEvents[eEvent.Value] = false;
+            end
+
+            -- Runtime callbacks are never restored from a save.
+            pro.events = Pool.newEvents();
+
+            for _, sAspect in ipairs({"max", "cycle_flat", "cycle_percent",
+                    "reserved_flat", "reserved_percent"}) do
+                local tValue = pro[sAspect];
+                type.assert.table(tValue);
+
+                for _, nModifier in ipairs({1, 2, 4, 5,
+                        6, 7, 8, 9}) do
+                    Pool.validateNumber(tValue[nModifier]);
+                end
+
+                Pool.validateNumber(tValue[3], true);
+                -- Cached values are derived from the validated modifiers.
+                -- Recompute from validated modifiers rather than trusting the cache.
+                tValue[2] = Pool.calculateFinal(nil, pro, sAspect);
+                Pool.validateNumber(tValue[2]);
+            end
+
+            local nMax = pro["max"][2];
+            local nFlat = pro["reserved_flat"][2];
+            local nPercent = pro["reserved_percent"][2];
+            assert(nMax >= 1, "Invalid Pool snapshot maximum.");
+            assert(nFlat >= 0 and nPercent >= 0 and nPercent < 1, "Invalid Pool snapshot reservations.");
+            local nReserved = nFlat + nPercent * nMax;
+            local nAvailable = nMax - nReserved;
+            assert(nReserved < nMax, "Pool snapshot reservations exhaust capacity.");
+            Pool.validateNumber(pro["current"]);
+            assert(pro["current"] >= 0 and pro["current"] <= nAvailable,
+                   "Invalid Pool snapshot current value.");
+            Pool.validateNumber(pro.lowMarker);
+            Pool.validateNumber(pro.highMarker);
+            assert(pro.lowMarker > 0 and pro.lowMarker < pro.highMarker and pro.highMarker <= 1,
+                   "Invalid Pool snapshot markers.");
+
+            pro["reserved"] = nReserved;
+            pro["available"] = nAvailable;
+            pro._nCycle = pro["cycle_flat"][2] +
+                                pro["cycle_percent"][2] * nMax;
+            Pool.validateNumber(pro._nCycle);
+            Pool.updateStatus(nil, pro, false);
+        }
+    }
+}

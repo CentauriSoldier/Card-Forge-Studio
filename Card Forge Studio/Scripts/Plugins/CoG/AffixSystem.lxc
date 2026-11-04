@@ -1,0 +1,505 @@
+--[[!
+@fqxn CoG.AffixSystem
+@pulsarlua class AffixSystem
+@desc Owned prefix/suffix component. LXC enforces its private state, final public
+    methods and CoG inheritance. Entries.lua handles definitions and foreign-value
+    persistence; Operations.lua handles lifecycle, limits, naming and snapshots.
+    Owners are runtime references; loading never replays gameplay callbacks.
+!]]
+namespace CoG {
+    class AffixSystem : CoGBase {
+        --[[!
+        @fqxn CoG.AffixSystem.TYPE
+        @desc Canonical affix classifications shared by every definition and entry.
+        !]]
+        public enum TYPE within CoG.AffixSystem { PREFIX; SUFFIX; }
+        -- All component records are private application data, not dynamic members.
+        private _tState = {};
+        private static _tRuntime = null;
+
+        --[[!
+        @fqxn CoG.AffixSystem.Helpers.runtime
+        @desc Builds private services after CoG configuration is available.
+            Module factories create isolated state; their service is retained here.
+        !]]
+        private static runtime() {
+            if (type.isnull(AffixSystem._tRuntime)) then
+                local Entries = require("cog.AffixSystem.Entries")(CoGBase, Rarity, AffixSystem);
+                AffixSystem._tRuntime = require("cog.AffixSystem.Operations")(Entries, Rarity);
+                AffixSystem._tRuntime.entries = Entries;
+            end
+
+            return AffixSystem._tRuntime;
+        }
+
+        --[[!
+        @fqxn CoG.AffixSystem.Enums.TYPE
+        @desc Immutable PREFIX/SUFFIX classification shared by all entries.
+        !]]
+        -- TYPE is the inline enum declared above.
+
+        --[[!
+        @fqxn CoG.AffixSystem.Constants.MAX_TIER
+        @desc Configured maximum affix tier, captured after cog.load selects overlays.
+        !]]
+        public static MAX_TIER {
+            get { return AffixSystem.runtime().entries.MAX_TIER; }
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.registerDefinition
+            @pulsarlua function AffixSystem.registerDefinition
+            @desc Copies a validated definition into the static registry. Rejects
+            duplicate IDs regardless of case; registration never replaces a definition.
+            @param string sID Opaque ID containing non-whitespace text.
+            @param table tPattern Required type, name, classes and tiers. tiers maps
+            configured tier enum members to generic plain-data tables. Optional
+            priority defaults to zero; description defaults to name.
+            @ret class cSystem AffixSystem for chaining.
+            @throws Invalid pattern or duplicate ID; registry remains unchanged.
+        !]]
+        public static registerDefinition(sID, tPattern) {
+            return AffixSystem.runtime().entries.registerDefinition(sID, tPattern);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.registerDefinitions
+            @pulsarlua function AffixSystem.registerDefinitions
+            @desc Atomically imports an ID-keyed table of patterns. Validates every
+            pattern and case-insensitive collision before committing any definition.
+            @param table tPatterns Definition ID to pattern map, e.g. require output.
+            @ret class cSystem AffixSystem for chaining.
+            @throws Invalid input or duplicate ID; no partial registration occurs.
+        !]]
+        public static registerDefinitions(tPatterns) {
+            return AffixSystem.runtime().entries.registerDefinitions(tPatterns);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.hasDefinition
+            @pulsarlua function AffixSystem.hasDefinition
+            @desc Tests whether an opaque ID is registered, ignoring its case.
+            @param string sID Definition ID.
+            @ret boolean bRegistered Whether the ID exists.
+        !]]
+        public static hasDefinition(sID) {
+            return AffixSystem.runtime().entries.hasDefinition(sID);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getDefinition
+            @pulsarlua function AffixSystem.getDefinition
+            @desc Returns a detached pattern copy, preserving canonical class/enum
+            references. Modifying it cannot change the registered definition.
+            @param string sID Case-insensitive definition ID.
+            @ret table|nil tPattern Pattern copy, or nil when unregistered.
+        !]]
+        public static getDefinition(sID) {
+            return AffixSystem.runtime().entries.getDefinition(sID);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.createAffix
+            @pulsarlua function AffixSystem.createAffix
+            @desc Creates an independent detached entry from a registered definition
+            and an explicitly selected enum tier. IDs carry no tier/gameplay meaning.
+            Entries privately share validated immutable metadata; owner/journal state
+            remains independent. Saves contain selected metadata/values, not a live
+            registry lookup, so restoring never substitutes current definition data.
+            @param string sID Registered ID, matched case-insensitively.
+            @param TIER eTier Configured enum member present in this definition.
+            @ret AffixSystemEntry oAffix New entry with getValues and existing getters.
+            @throws Unknown ID, invalid/unavailable tier or wrong argument count.
+        !]]
+        public static createAffix(...) {
+            return AffixSystem.runtime().entries.createAffix(...);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.AffixSystem
+            @pulsarlua function AffixSystem
+            @desc Creates an independent component with local dummy callbacks. Owner
+            must be a CoGObject; nil creates a detached system. Defaults use owner rarity
+            or the first configured rarity. The dispatcher uses the optional environment.
+            @param CoGObject|nil oOwner External host, or nil to detach.
+            @param CoG.LEVEL|nil eRarity Initial rarity; defaults to owner rarity or the first level.
+            @param string|nil sEnvironment Registered environment name for the owned eventrix.
+            @param boolean|nil bOwnerLocked True for an owned CoGObject component.
+        !]]
+        public AffixSystem(oOwner, eRarity, sEnvironment, bOwnerLocked) {
+            base();
+            this._tState = AffixSystem.runtime().create(this,
+                oOwner, eRarity, sEnvironment, bOwnerLocked);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getOwner
+            @pulsarlua function AffixSystem.getOwner
+            @desc Returns the external CoGObject owner, or nil for a detached component.
+            @ret CoGObject|nil oOwner Live external owner.
+        !]]
+        public final getOwner() {
+            return AffixSystem.runtime().methods.getOwner(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.setOwner
+            @pulsarlua function AffixSystem.setOwner
+            @desc Reconnects a detached/restored system after validating every entry.
+            An owned component accepts only its exact owning CoGObject. An unlocked
+            standalone system may transfer only after all effects have been removed.
+            Returns this, success, owner or nil, reason.
+            @param CoGObject|nil oOwner External host, or nil to detach.
+            @ret AffixSystem this This system.
+            @ret boolean bSuccess True when the change is accepted.
+            @ret CoGObject|nil oOwner Accepted external owner.
+            @ret string|nil sReason Rejection reason; nil on success.
+        !]]
+        public final setOwner(oOwner) {
+            return AffixSystem.runtime().methods.setOwner(this, this._tState, oOwner);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getOnAddCallback
+            @pulsarlua function AffixSystem.getOnAddCallback
+            @desc Returns the callback used for future applications.
+            @ret function fCallback Add callback used for future applications.
+        !]]
+        public final getOnAddCallback() {
+            return AffixSystem.runtime().methods.getOnAddCallback(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.setOnAddCallback
+            @pulsarlua function AffixSystem.setOnAddCallback
+            @desc Sets onAdd(affix, journal, ...); nil resets the file-local dummy.
+            Return nil or enum-keyed hook lists. Throw an error to signal failure.
+            @param function|nil fCallback Replacement callback, or nil to restore dummy.
+            @ret AffixSystem this This system.
+        !]]
+        public final setOnAddCallback(fCallback) {
+            return AffixSystem.runtime().methods.setOnAddCallback(this, this._tState, fCallback);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getOnRemoveCallback
+            @pulsarlua function AffixSystem.getOnRemoveCallback
+            @desc Returns the undo callback captured by future applications.
+            @ret function fCallback Removal callback captured by future applications.
+        !]]
+        public final getOnRemoveCallback() {
+            return AffixSystem.runtime().methods.getOnRemoveCallback(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.setOnRemoveCallback
+            @pulsarlua function AffixSystem.setOnRemoveCallback
+            @desc Sets onRemove(affix, journal, ...); nil resets dummy. Existing entries
+            retain their original callback pair. Callback return values are ignored.
+            @param function|nil fCallback Replacement callback, or nil to restore dummy.
+            @ret AffixSystem this This system.
+        !]]
+        public final setOnRemoveCallback(fCallback) {
+            return AffixSystem.runtime().methods.setOnRemoveCallback(this, this._tState, fCallback);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getRarity
+            @pulsarlua function AffixSystem.getRarity
+            @desc Uses live owner rarity, or saved/configured rarity while detached.
+            @ret CoG.LEVEL eRarity Live owner rarity or detached fallback.
+        !]]
+        public final getRarity() {
+            return AffixSystem.runtime().methods.getRarity(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.canSetRarity
+            @pulsarlua function AffixSystem.canSetRarity
+            @desc Checks maximum tier and independent prefix/suffix limits. Minimum
+            generation tiers/counts do not prohibit incremental application or removal.
+            @param CoG.LEVEL eRarity Proposed or initial rarity member.
+            @ret boolean bAllowed True when the operation is eligible.
+            @ret string|nil sReason Rejection reason; nil when eligible.
+        !]]
+        public final canSetRarity(eRarity) {
+            return AffixSystem.runtime().methods.canSetRarity(this, this._tState, eRarity);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.setRarity
+            @pulsarlua function AffixSystem.setRarity
+            @desc Validates limits and delegates an attached change to the owner.
+            Returns this, success, rarity or nil, reason. Rejection changes no state.
+            @param CoG.LEVEL eRarity Proposed or initial rarity member.
+            @ret AffixSystem this This system.
+            @ret boolean bSuccess True when the change is accepted.
+            @ret CoG.LEVEL|nil eRarity Accepted rarity; nil on rejection.
+            @ret string|nil sReason Rejection reason; nil on success.
+        !]]
+        public final setRarity(eRarity) {
+            return AffixSystem.runtime().methods.setRarity(this, this._tState, eRarity);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.canApplyAffix
+            @pulsarlua function AffixSystem.canApplyAffix
+            @desc Checks ownership, duplicate ID, compatibility, tier and group capacity.
+            Optional outgoing instance is used internally by replacement checks.
+            @param AffixSystemEntry oAffix Affix instance.
+            @param AffixSystemEntry|nil oExcluded Outgoing instance excluded from duplicate/count checks.
+            @ret boolean bAllowed True when the operation is eligible.
+            @ret string|nil sReason Rejection reason; nil when eligible.
+        !]]
+        public final canApplyAffix(oAffix, oExcluded) {
+            return AffixSystem.runtime().methods.canApplyAffix(this, this._tState, oAffix, oExcluded);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.canReplaceAffix
+            @pulsarlua function AffixSystem.canReplaceAffix
+            @desc Checks replacement eligibility with the outgoing definition/count excluded.
+            @param AffixSystemEntry oOld Applied instance to replace.
+            @param AffixSystemEntry oNew Detached replacement instance.
+            @ret boolean bAllowed True when the operation is eligible.
+            @ret string|nil sReason Rejection reason; nil when eligible.
+        !]]
+        public final canReplaceAffix(oOld, oNew) {
+            return AffixSystem.runtime().methods.canReplaceAffix(this, this._tState, oOld, oNew);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.applyAffix
+            @pulsarlua function AffixSystem.applyAffix
+            @desc Returns this, success, affix or nil, reason. Eligibility rejection
+            leaves state unchanged. A failed compensation returns the retained affix.
+            @param AffixSystemEntry oAffix Affix instance.
+            @param varargs ... Developer-defined arguments forwarded to lifecycle callbacks or event hooks.
+            @ret AffixSystem this This system.
+            @ret boolean bSuccess True when the operation succeeds.
+            @ret AffixSystemEntry|nil oResult Affected or retained recovery affix.
+            @ret string|nil sReason Failure/recovery explanation; nil on success.
+        !]]
+        public final applyAffix(oAffix, ...) {
+            return AffixSystem.runtime().methods.applyAffix(this, this._tState, oAffix, ...);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.removeAffix
+            @pulsarlua function AffixSystem.removeAffix
+            @desc Returns this, success, removed affix or nil, reason. Absent entries
+            never invoke callbacks. A throwing undo preserves ownership, journal and hooks.
+            @param AffixSystemEntry oAffix Affix instance.
+            @param varargs ... Developer-defined arguments forwarded to lifecycle callbacks or event hooks.
+            @ret AffixSystem this This system.
+            @ret boolean bSuccess True when the operation succeeds.
+            @ret AffixSystemEntry|nil oResult Affected or retained recovery affix.
+            @ret string|nil sReason Failure/recovery explanation; nil on success.
+        !]]
+        public final removeAffix(oAffix, ...) {
+            return AffixSystem.runtime().methods.removeAffix(this, this._tState, oAffix, ...);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.replaceAffix
+            @pulsarlua function AffixSystem.replaceAffix
+            @desc Preflights, removes, then applies. A failed new add with successful
+            compensation attempts the original callback pair using its original arguments.
+            Recovery is reapplication, not exact rollback of arbitrary effects or journal
+            history. A retained failed replacement leaves the original detached.
+            @param AffixSystemEntry oOld Applied instance to replace.
+            @param AffixSystemEntry oNew Detached replacement instance.
+            @param varargs ... Developer-defined arguments forwarded to lifecycle callbacks or event hooks.
+            @ret AffixSystem this This system.
+            @ret boolean bSuccess True when the operation succeeds.
+            @ret AffixSystemEntry|nil oResult Affected or retained recovery affix.
+            @ret string|nil sReason Failure/recovery explanation; nil on success.
+        !]]
+        public final replaceAffix(oOld, oNew, ...) {
+            return AffixSystem.runtime().methods.replaceAffix(this, this._tState, oOld, oNew, ...);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.hasAffix
+            @pulsarlua function AffixSystem.hasAffix
+            @desc Tests instance identity without exposing application records.
+            @param AffixSystemEntry oAffix Affix instance.
+            @ret boolean bResult True when the documented condition holds.
+        !]]
+        public final hasAffix(oAffix) {
+            return AffixSystem.runtime().methods.hasAffix(this, this._tState, oAffix);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getAffixByDefinitionID
+            @pulsarlua function AffixSystem.getAffixByDefinitionID
+            @desc Returns the unique applied definition instance, ignoring ID case, or nil.
+            @param string sID Stable definition identity to find.
+            @ret AffixSystemEntry|nil oAffix Matching applied definition, or nil.
+        !]]
+        public final getAffixByDefinitionID(sID) {
+            return AffixSystem.runtime().methods.getAffixByDefinitionID(this, this._tState, sID);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.eachAffix
+            @pulsarlua function AffixSystem.eachAffix
+            @desc Iterates index/affix pairs from a copied application-order list.
+            @ret function fIterator Iterator function.
+            @ret table tValues Copied values used as iterator state.
+            @ret number nIndex Initial iterator index.
+        !]]
+        public final eachAffix() {
+            return AffixSystem.runtime().methods.eachAffix(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.eachPrefix
+            @pulsarlua function AffixSystem.eachPrefix
+            @desc Iterates index/affix pairs for applied prefixes from a copy.
+            @ret function fIterator Iterator function.
+            @ret table tValues Copied values used as iterator state.
+            @ret number nIndex Initial iterator index.
+        !]]
+        public final eachPrefix() {
+            return AffixSystem.runtime().methods.eachPrefix(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.eachSuffix
+            @pulsarlua function AffixSystem.eachSuffix
+            @desc Iterates index/affix pairs for applied suffixes from a copy.
+            @ret function fIterator Iterator function.
+            @ret table tValues Copied values used as iterator state.
+            @ret number nIndex Initial iterator index.
+        !]]
+        public final eachSuffix() {
+            return AffixSystem.runtime().methods.eachSuffix(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getAffixCount
+            @pulsarlua function AffixSystem.getAffixCount
+            @desc Returns the total number of applied affixes.
+            @ret number nCount Applied affix count.
+        !]]
+        public final getAffixCount() {
+            return AffixSystem.runtime().methods.getAffixCount(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getPrefixCount
+            @pulsarlua function AffixSystem.getPrefixCount
+            @desc Returns the applied prefix count.
+            @ret number nCount Applied prefix count.
+        !]]
+        public final getPrefixCount() {
+            return AffixSystem.runtime().methods.getPrefixCount(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getSuffixCount
+            @pulsarlua function AffixSystem.getSuffixCount
+            @desc Returns the applied suffix count.
+            @ret number nCount Applied suffix count.
+        !]]
+        public final getSuffixCount() {
+            return AffixSystem.runtime().methods.getSuffixCount(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getMaxPrefixes
+            @pulsarlua function AffixSystem.getMaxPrefixes
+            @desc Returns the current rarity's maximum prefix count.
+            @ret number nMaximum Current rarity prefix limit.
+        !]]
+        public final getMaxPrefixes() {
+            return AffixSystem.runtime().methods.getMaxPrefixes(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getMaxSuffixes
+            @pulsarlua function AffixSystem.getMaxSuffixes
+            @desc Returns the current rarity's maximum suffix count.
+            @ret number nMaximum Current rarity suffix limit.
+        !]]
+        public final getMaxSuffixes() {
+            return AffixSystem.runtime().methods.getMaxSuffixes(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getName
+            @pulsarlua function AffixSystem.getName
+            @desc Composes selected prefix/base/suffix without changing host metadata.
+            All affixes retain effects regardless of which text wins naming selection.
+            An optional base name supports detached systems; otherwise uses owner name.
+            @param string|nil sBaseName Base name; omission uses the live owner name.
+            @ret string sName Display name.
+        !]]
+        public final getName(sBaseName) {
+            return AffixSystem.runtime().methods.getName(this, this._tState, sBaseName);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.getExplicitName
+            @pulsarlua function AffixSystem.getExplicitName
+            @desc Returns the stored SINGULAR override, or nil when unset.
+            @ret string|nil sName Stored SINGULAR override, or nil.
+        !]]
+        public final getExplicitName() {
+            return AffixSystem.runtime().methods.getExplicitName(this, this._tState);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.setExplicitName
+            @pulsarlua function AffixSystem.setExplicitName
+            @desc Stores a nonblank SINGULAR display override; nil clears it.
+            @param string|nil sName Nonblank display text; nil clears an optional override.
+            @ret AffixSystem this This system.
+        !]]
+        public final setExplicitName(sName) {
+            return AffixSystem.runtime().methods.setExplicitName(this, this._tState, sName);
+        }
+
+        --[[!
+            @fqxn CoG.AffixSystem.Methods.fireEvent
+            @pulsarlua function AffixSystem.fireEvent
+            @desc Fires the component's affix hooks. Hosts choose which gameplay events
+            to forward; no event forwarding behavior is imposed on CoGObject.
+            @param enumitem eEvent Event identifier.
+            @param varargs ... Developer-defined arguments forwarded to lifecycle callbacks or event hooks.
+            @ret table tResults Ordered eventrix hook results and errors.
+        !]]
+        public final fireEvent(eEvent, ...) {
+            return AffixSystem.runtime().methods.fireEvent(this, this._tState, eEvent, ...);
+        }
+
+        --[[!
+        @fqxn CoG.AffixSystem.prepareSnapshot
+        @desc Replaces the shallow outgoing state projection before clearing its
+            naming cache or capturing live owner rarity. The live state is unchanged.
+        @param table state Outgoing LXC projection.
+        !]]
+        private prepareSnapshot(state) {
+            local tCopy = {};
+
+            for sField, vValue in pairs(state.pri._tState) do
+                tCopy[sField] = vValue;
+            end
+
+            AffixSystem.runtime().prepareSnapshot(this, tCopy);
+            state.pri._tState = tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.AffixSystem.validateSnapshot
+        @desc Validates restored component state and restores runtime system lookup
+            without replaying callbacks. CoGObject reconnects its owned component.
+        @param table state Restored LXC projection.
+        !]]
+        private validateSnapshot(state) {
+            AffixSystem.runtime().validateSnapshot(this, state.pri._tState);
+        }
+    }
+}
+

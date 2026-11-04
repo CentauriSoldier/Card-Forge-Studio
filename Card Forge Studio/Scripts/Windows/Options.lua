@@ -373,7 +373,7 @@ function Options.create(dParent, tContext)
                 TOMORROW_NIGHT = {text = "#cccccc", background = "#2d2d2d", comment = "#999999", keyword = "#cc99cd", string = "#7ec699"},
                 TWILIGHT = {text = "#ffffff", background = "#141414", comment = "#787878", keyword = "#f9ee9a", string = "#919e6b"},
             };
-            local tPageThemes = require("Plugins.LuaEx.inc.classes.util.Dox.Builders.HTML.Themes");
+            local tPageThemes = require("dox.Builders.HTML.Themes");
             local oPreview = wx.wxHtmlWindow(dDocs, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(-1, 170));
             oPreview:SetMinSize(wx.wxSize(320, 170));
             oDocs:Add(oPreview, 0, wx.wxEXPAND + wx.wxTOP + wx.wxBOTTOM, 8);
@@ -384,7 +384,7 @@ function Options.create(dParent, tContext)
             @vis private
             !]]
             local function previewDocs()
-                local sTheme = Dox.THEME[tInfo.docsTheme:GetStringSelection()].value;
+                local sTheme = Dox.THEME[tInfo.docsTheme:GetStringSelection()].Value;
                 local tColors = {};
                 for sKey, sValue in tPageThemes[sTheme].css:gmatch("%-%-([%w%-]+):%s*(#[%x]+)") do tColors[sKey] = sValue; end
                 local tCode = tPrismColors[tInfo.docsPrism:GetStringSelection()];
@@ -524,7 +524,7 @@ function Options.create(dParent, tContext)
         GridStyle.save(tGridColors);
 
         if (tContext.changed) then tContext.changed(bAutomatic, tControls.game and tControls.game.name:GetValue():match("^%s*(.-)%s*$")); end
-        require("Log").Note("Options saved.");
+        CFS.Log.Note("Options saved.");
         oStatus:Hide(); dDialog:Layout();
         return true;
     end

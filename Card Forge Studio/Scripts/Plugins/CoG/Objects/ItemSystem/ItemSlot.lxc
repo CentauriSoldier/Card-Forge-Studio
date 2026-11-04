@@ -1,0 +1,343 @@
+--[[!
+    @fqxn CoG.ItemSlot
+    @desc A final leaf container for individual items, with a mutable CoGRegistry eligibility filter. Default capacity is one; stacking counts instances rather than quantities. Standalone slots do not require inventory storage eligibility. Containment/footprint rules apply when adopted into a system.
+!]]
+namespace CoG {
+    final class ItemSlot {
+        private static _tRules = require("cog.Objects.ItemSystem.ItemRules");
+        private state = {};
+        protected Name = "";
+        public getName() { return this.Name; }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.__len
+        @desc Returns the collection count used by the length operator; see the delegated count method.
+        !]]
+        public operator __len() {
+            return this.getItemCount();
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.__clone
+        @desc Requires callers to choose how concrete items are cloned before populating another container.
+        !]]
+        public operator clone() {
+            error("Clone concrete items explicitly, then insert them into a new ItemSlot.");
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.validateSnapshot
+        @desc Checks saved fields during native graph restoration.
+        !]]
+        private validateSnapshot(tState) {
+            ItemSlot._tRules.validateSnapshot(tState.pri.state, "slot");
+            this.restoreRuntime();
+            ItemSlot._tRules.validateRestored(this);
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.prepareSnapshot
+        @desc Prepares a copied class snapshot without changing the live inventory.
+        !]]
+        private prepareSnapshot(tState) {
+            -- Native projections are shallow; copy the state record before omitting links.
+            local tCopy = {};
+            for k, v in pairs(tState.pri.state) do tCopy[k] = v; end
+            ItemSlot._tRules.prepareSnapshot(tCopy);
+            tState.pri.state = tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.restoreRuntime
+        @desc Internal reconnection after native deserialization; retains saved
+        membership and restores runtime lookups without permission callbacks.
+        !]]
+        public final restoreRuntime(tToken) {
+            ItemSlot._tRules.restore(this, this.state, tToken);
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.ItemSlot
+        @desc Creates a leaf slot with an eligibility registry, capacity, optional owner and name. Omitted
+        eligibility allows CoGItem instances.
+        !]]
+        public ItemSlot(vAllowedItems, nCapacity, oOwner, sName) {
+            nCapacity = nCapacity == nil and 1 or nCapacity;
+            ItemSlot._tRules.integer(nCapacity, 1);
+            assert(sName == nil or rawtype(sName) == "string", "Name must be a string.");
+            local oRegistry;
+
+            -- Omission creates a permissive CoGItem registry. A supplied registry is retained;
+            -- a supplied entry array is validated and used to construct a new registry.
+            if (vAllowedItems == nil) then
+                oRegistry = CoG.CoGRegistry({CoG.CoGItem});
+            elseif (class.isinstance(vAllowedItems)) then
+                assert(class.isa(vAllowedItems, CoG.CoGRegistry), "Expected an CoGRegistry.");
+                oRegistry = vAllowedItems;
+            else
+                oRegistry = CoG.CoGRegistry(ItemSlot._tRules.array(vAllowedItems));
+            end
+
+            this.state = ItemSlot._tRules.create(this, "slot", nCapacity, oOwner, oRegistry);
+            this.Name = sName or "";
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.getAllowedItemsRegistry
+        @desc Returns the slot's mutable eligibility registry by reference.
+        !]]
+        public getAllowedItemsRegistry() {
+            return ItemSlot._tRules.state(this).registry;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.getCapacity
+        @desc Returns the maximum number of individual item instances this slot can hold.
+        !]]
+        public getCapacity() {
+            return ItemSlot._tRules.state(this).capacity;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.setOwner
+        @desc Reconnects the caller-owned owner after loading. The owner is not saved.
+        @param object|null oOwner A class instance, or null to clear the owner.
+        @ret ItemSlot this This container.
+        !]]
+        public setOwner(oOwner) {
+            ItemSlot._tRules.setOwner(this, oOwner);
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.getOwner
+        @desc Resolves the owner through the container hierarchy; an outer owner takes precedence.
+        !]]
+        public getOwner() {
+            return ItemSlot._tRules.owner(this);
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.getItemSlotSystem
+        @desc Returns the containing slot system, or null for an independent slot.
+        !]]
+        public getItemSlotSystem() {
+            return ItemSlot._tRules.state(this).parent or null;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.isEnabled
+        @desc Returns this container's own enabled flag; mutations also check its ancestors.
+        !]]
+        public isEnabled() {
+            return ItemSlot._tRules.state(this).enabled;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.isLocked
+        @desc Returns this container's own lock flag; mutations also check its ancestors.
+        !]]
+        public isLocked() {
+            return ItemSlot._tRules.state(this).locked;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.setEnabled
+        @desc Sets the local enabled flag and returns this container. Ancestor restrictions still apply.
+        !]]
+        public setEnabled(bValue) {
+            ItemSlot._tRules.setFlag(this, "enabled", bValue);
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.setLocked
+        @desc Sets the local lock flag and returns this container. Locked ancestors still prevent edits.
+        !]]
+        public setLocked(bValue) {
+            ItemSlot._tRules.setFlag(this, "locked", bValue);
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.isOccupied
+        @desc Reports whether this slot holds at least one item.
+        !]]
+        public isOccupied() {
+            return #ItemSlot._tRules.state(this).items > 0;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.getItemCount
+        @desc Returns the number of individual items currently in this slot.
+        !]]
+        public getItemCount() {
+            return #ItemSlot._tRules.state(this).items;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.setCapacity
+        @desc Commits a positive capacity only when the existing contents still fit.
+        !]]
+        public setCapacity(nCapacity) {
+            ItemSlot._tRules.integer(nCapacity, 1);
+
+            -- Validate against current contents before committing the proposed capacity.
+            local bOK, sReason = ItemSlot._tRules.transaction({this}, function()
+                ItemSlot._tRules.state(this).capacity = nCapacity;
+            end);
+
+            return this, bOK, nil, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.get
+        @desc Returns the item at a positive one-based index, defaulting to the first item; an empty position
+        yields nil.
+        !]]
+        public get(nIndex) {
+            nIndex = nIndex == nil and 1 or ItemSlot._tRules.integer(nIndex, 1);
+
+            return ItemSlot._tRules.state(this).items[nIndex];
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.getItem
+        @desc Aliases get and preserves its default index and empty-position behavior.
+        !]]
+        public getItem(nIndex) {
+            return this.get(nIndex);
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.eachItem
+        @desc Iterates a copied list of item references, keeping callers away from the live membership array.
+        !]]
+        public eachItem() {
+            return ipairs(ItemSlot._tRules.items(this));
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.containsItem
+        @desc Looks for the exact item instance, returning its position when found and -1 when absent.
+        !]]
+        public containsItem(oItem) {
+            ItemSlot._tRules.item(oItem);
+            local nIndex = ItemSlot._tRules.indexOf(this, oItem);
+
+            return nIndex ~= nil, nIndex or -1;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.canAccept
+        @desc Runs the complete proposed insertion as a preview, then restores membership without changing item
+        locations.
+        !]]
+        public canAccept(oItem, bReplace) {
+            ItemSlot._tRules.item(oItem);
+
+            -- Preview on projected membership, without changing real location.
+            return ItemSlot._tRules.preview(this, oItem, bReplace);
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.set
+        @desc Inserts an unlocated item; optional replacement displaces the first item when full. Returns this,
+        success, displaced item and reason.
+        !]]
+        public set(oItem, bReplace) {
+            local bOK, vResult = ItemSlot._tRules.add(this, oItem, bReplace);
+
+            return this, bOK, bOK and vResult or nil, not bOK and vResult or nil;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.setItem
+        @desc Aliases set, including its replacement policy and result tuple.
+        !]]
+        public setItem(oItem, bReplace) {
+            return this.set(oItem, bReplace);
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.remove
+        @desc Removes the first item, a positive index or an exact instance. Returns this, success, removed item
+        and reason.
+        !]]
+        public remove(vItem, oActor) {
+            local bOK, vResult = ItemSlot._tRules.remove(this, vItem, oActor);
+
+            return this, bOK, bOK and vResult or nil, not bOK and vResult or nil;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.clear
+        @desc Removes items throughout this subtree in one transaction; returns this, success, removed items or
+        a failure reason.
+        !]]
+        public clear() {
+            local bOK, vResult = ItemSlot._tRules.clear(this);
+
+            return this, bOK, bOK and vResult or nil, not bOK and vResult or nil;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.transferItemTo
+        @desc Moves the exact item between leaf containers atomically; failures retain the original membership.
+        !]]
+        public transferItemTo(oDestination, oItem, bReplace) {
+            local bOK, vResult = ItemSlot._tRules.transfer(this, oDestination, oItem, bReplace);
+
+            return this, bOK, bOK and vResult or nil, not bOK and vResult or nil;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.consumeItem
+        @desc Checks the actor's consumption permission and removes the item. Gameplay effects remain the
+        caller's responsibility.
+        !]]
+        public consumeItem(oItem, oActor) {
+            assert(oActor ~= nil, "Consumption requires an actor.");
+            local bOK, vResult = ItemSlot._tRules.remove(this, oItem, oActor, "canConsumeBy");
+
+            return this, bOK, bOK and vResult or nil, not bOK and vResult or nil;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.tradeItemTo
+        @desc Checks both trading permissions before moving the item atomically; pricing and payment belong to
+        the caller.
+        !]]
+        public tradeItemTo(oDestination, oItem, oTrader, oRecipient) {
+            local bOK, vResult = ItemSlot._tRules.transfer(this, oDestination, oItem, false, function()
+                return oItem.canTradeBy(oTrader) and oItem.canTradeTo(oRecipient);
+            end);
+
+            return this, bOK, bOK and vResult or nil, not bOK and vResult or nil;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.swapWith
+        @desc Exchanges complete slot contents atomically; both slots must accept the resulting contents.
+        !]]
+        public swapWith(oOther) {
+            assert(class.isinstance(oOther) and class.getname(oOther) == class.getname(CoG.ItemSlot), "Expected an ItemSlot.");
+            local bOK, sReason = ItemSlot._tRules.swap(this, oOther);
+
+            return this, bOK, nil, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.ItemSlot.Methods.validate
+        @desc Previews validation of the current hierarchy and rolls back projected state; returns success and
+        an optional reason.
+        !]]
+        public validate() {
+            return ItemSlot._tRules.check(this);
+        }
+
+    }
+}

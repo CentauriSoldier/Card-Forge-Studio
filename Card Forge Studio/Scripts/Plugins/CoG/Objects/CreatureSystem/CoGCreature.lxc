@@ -1,0 +1,143 @@
+--[[!
+    @fqxn CoG.CoGCreature
+    @desc Generic CoGObject subclass owning independent XP, HP, inventory, equipment,
+    status and targeting components. Components are created in the constructor and
+    exposed through final getters without replacement setters. Their own APIs remain
+    mutable. XPSystem owns level calculation; subclasses define gameplay behavior.
+    No species, faction, age, mana, stamina, damage, death or resource-cycling policy
+    is imposed. Required XP/HP values and a configured status category come from the caller.
+!]]
+namespace CoG {
+    class CoGCreature : CoG.CoGObject requires(CoG.XPSystem, CoG.Pool, CoG.ItemSystem, CoG.ItemSlotSystem, CoG.StatusTracker) {
+        private static TargetorFactory = require("cog.Targetor");
+        protected XP = null;
+        protected HP = null;
+        protected Inventory = null;
+        protected Equipment = null;
+        protected StatusTracker = null;
+        protected Targetor = null;
+
+        -- Validate the original required option shape before parent construction.
+        private static checkedName(sName, tOptions) {
+            type.assert.table(tOptions);
+            type.assert.table(tOptions.XP);
+            type.assert.table(tOptions.HP);
+            type.assert.number(tOptions.HP.Max);
+            type.assert.number(tOptions.HP.Current);
+            return sName;
+        }
+
+        --[[!
+        @fqxn CoG.CoGCreature.Methods.getStatusTracker
+        @desc Final getter for the caller-selected status scope and its mutable state.
+        !]]
+        public final getStatusTracker() { return this.StatusTracker; }
+
+        --[[!
+        @fqxn CoG.CoGCreature.Methods.getTargetor
+        @desc Final getter for the independent mutable targeting component.
+        !]]
+        public final getTargetor() { return this.Targetor; }
+
+        --[[!
+        @fqxn CoG.CoGCreature.Methods.__clone
+        @desc Requires concrete subclasses to define copying of creature state,
+        component ownership, inherited metadata and runtime callbacks.
+        @throws Always unless a subclass supplies its own __clone.
+        !]]
+        public operator clone() {
+            error("CoGCreature subclasses must define __clone for their creature state.");
+        }
+
+        --[[!
+        @fqxn CoG.CoGCreature.Methods.getXPSystem
+        @desc Final getter for this creature's owned XPSystem; no replacement setter.
+        @ret XPSystem oComponent Mutable owned component.
+        !]]
+        public final getXPSystem() {
+            return this.XP;
+        }
+
+        --[[!
+        @fqxn CoG.CoGCreature.Methods.getItemSystem
+        @desc Final getter for this creature's owned ItemSystem; no replacement setter.
+        @ret ItemSystem oComponent Mutable owned component.
+        !]]
+        public final getItemSystem() {
+            return this.Inventory;
+        }
+
+        --[[!
+        @fqxn CoG.CoGCreature.Methods.getItemSlotSystem
+        @desc Final getter for this creature's owned ItemSlotSystem; no replacement setter.
+        @ret ItemSlotSystem oComponent Mutable owned component.
+        !]]
+        public final getItemSlotSystem() {
+            return this.Equipment;
+        }
+
+        --[[!
+        @fqxn CoG.CoGCreature.Methods.getHP
+        @desc Returns the owned HP Pool by default, or a selected Pool value. No replacement setter.
+        @param Pool.ASPECT|nil eAspect Requested aspect; omission returns the Pool.
+        @param Pool.MODIFIER|nil eModifier Optional modifier passed to Pool.get.
+        @ret Pool|number vValue Owned Pool or selected value.
+        !]]
+        public final getHP(eAspect, eModifier) {
+            local oHP = this.HP;
+
+            -- Delegate value defaults and validation to the Pool component.
+            if (eAspect ~= nil or eModifier ~= nil) then
+                return oHP.get(eAspect, eModifier);
+            end
+
+            return oHP;
+        }
+
+        --[[!
+        @fqxn CoG.CoGCreature.Methods.CoGCreature
+        @pulsarlua function CoGCreature
+        @desc Initializes inherited metadata and constructs fresh components using existing system APIs.
+        The options table supplies configuration, never replacement component instances.
+        <ul>
+        <li>XP: table containing Type, LevelOneXP, MaxLevel and Progression, all required by XPSystem. Optional StepSize uses XPSystem's default of 2.</li>
+        <li>HP: table containing explicit numeric Max and Current, validated/clamped by Pool.</li>
+        <li>StatusScope: actual configured StatusTracker category enum. No default category is invented; subclasses supply their own scope.</li>
+        </ul>
+        Inventory and equipment use their existing empty defaults and associate this creature as owner.
+        @param string sName Nonblank name passed to CoGObject.
+        @param string sDescription Nonblank description passed to CoGObject.
+        @param CoG.LEVEL|nil eRarity Rarity passed to CoGObject.
+        @param string|nil wEventrix Registered event environment name passed to CoGObject.
+        @param table tOptions Required XP, HP and StatusScope configuration described above.
+        @throws Missing/invalid options, a nonconfigured status scope, or an inherited/component constructor error.
+        !]]
+        public CoGCreature(sName, sDescription, eRarity, wEventrix, tOptions) {
+            base(CoGCreature.checkedName(sName, tOptions), sDescription, eRarity, wEventrix);
+            local tXP, tHP = tOptions.XP, tOptions.HP;
+            this.XP = CoG.XPSystem(tXP.Type, tXP.LevelOneXP, tXP.MaxLevel, tXP.Progression, tXP.StepSize);
+            this.HP = CoG.Pool(tHP.Max, tHP.Current);
+            this.Inventory = CoG.ItemSystem(nil, nil, this);
+            this.Equipment = CoG.ItemSlotSystem(nil, this);
+            this.StatusTracker = CoG.StatusTracker(tOptions.StatusScope);
+            this.Targetor = CoGCreature.TargetorFactory();
+        }
+
+        --[[!
+        @fqxn CoG.CoGCreature.validateSnapshot
+        @desc Checks restored component identities and reconnects the creature as
+            inventory/equipment owner without replacing the components.
+        !]]
+        private validateSnapshot(tState) {
+            local pro = tState.pro;
+            assert(class.isa(pro.XP, CoG.XPSystem), "Invalid creature XP component.");
+            assert(class.isa(pro.HP, CoG.Pool), "Invalid creature HP component.");
+            assert(class.isa(pro.Inventory, CoG.ItemSystem), "Invalid creature inventory component.");
+            assert(class.isa(pro.Equipment, CoG.ItemSlotSystem), "Invalid creature equipment component.");
+            assert(class.isa(pro.StatusTracker, CoG.StatusTracker), "Invalid creature status component.");
+            assert(type(pro.Targetor) == "Targetor", "Invalid creature targeting component.");
+            pro.Inventory.setOwner(this);
+            pro.Equipment.setOwner(this);
+        }
+    }
+}

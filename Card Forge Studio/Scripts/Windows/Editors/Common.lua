@@ -360,7 +360,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
             tFile.text = tFileEditors[nIndex] and EditorSettings.cleanControl(tFileEditors[nIndex]) or EditorSettings.prepareSave(tFile.text);
         end
         tModel.save(); refresh();
-        Log.Note(tOptions.savedMessage or "Card-set source saved. Live file monitoring will apply the changes.");
+        CFS.Log.Note(tOptions.savedMessage or "Card-set source saved. Live file monitoring will apply the changes.");
     end
     --[[!
     @fqxn CFS.Windows.Editors.Common.Private.Functions.allowClose

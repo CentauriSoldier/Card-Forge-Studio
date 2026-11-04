@@ -46,7 +46,7 @@ local _tDialogStates = {
 };
 for sName, tOptions in pairs(_tDialogStates) do WindowState.register(sName, tOptions); end
 local dLog = require("Windows.Log");
-local Log = require("Log");
+local Log = CFS.Log;
 local Welcome = require("Windows.Main.Welcome");
 local DataSession = require("Windows.DataSession");
 local dBaseData = require("Windows.BaseData");
@@ -191,7 +191,7 @@ function Main.create(tOptions)
     oGuides:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(function()
         require("Windows.Options").show(dFrame, {
             category = "Forge", state = tState,
-            game = Game.GetActive(), cardSet = ProcSys.GetActiveCardSet(),
+            game = CFS.Game.GetActive(), cardSet = ProcSys.GetActiveCardSet(),
             --[[!
             @fqxn CFS.Windows.Main.Private.Functions.changed
             @desc Refreshes relevant preview or loading preferences after accepted option changes.
@@ -562,10 +562,10 @@ function Main.create(tOptions)
         -- if (dManualWindow and not dManualWindow.close()) then return; end
         if (dWikiWindow and not dWikiWindow.close()) then return; end
 
-        local oGame = require("Windows.NewGame").Show(dFrame, Game.New);
+        local oGame = require("Windows.NewGame").Show(dFrame, CFS.Game.New);
         if (not oGame) then return; end
 
-        Game.Activate(oGame);
+        CFS.Game.Activate(oGame);
         bDataLoaded = false;
         tDataSession.setData({}, {}, {}, {});
         showPage("Welcome");
@@ -580,8 +580,8 @@ function Main.create(tOptions)
     @vis private
     !]]
     local function selectGame()
-        Game.Refresh();
-        local tGames    = Game.GetAll();
+        CFS.Game.Refresh();
+        local tGames    = CFS.Game.GetAll();
         local tNames    = {};
 
         for nIndex, oGame in ipairs(tGames) do
@@ -604,7 +604,7 @@ function Main.create(tOptions)
             local oGame = tGames[nSelection + 1];
             -- if (dManualWindow and not dManualWindow.close()) then return; end
             if (dWikiWindow and not dWikiWindow.close()) then return; end
-            Game.Activate(oGame);
+            CFS.Game.Activate(oGame);
             bDataLoaded = false;
             tDataSession.setData({}, {}, {}, {});
             showPage("Welcome");
@@ -660,13 +660,13 @@ function Main.create(tOptions)
     @desc Checks drafts before creation, refreshes game discovery and loads the new card set through the existing processing path.
     !]]
     local function newCardSet()
-        local oGame = Game.GetActive();
+        local oGame = CFS.Game.GetActive();
         if (not oGame) then error("Load a game before creating a card set.", 2); end
         if (not allowDiscard()) then return; end
         if (dSourceWindow and not dSourceWindow.close()) then return; end
 
         local oCardSet = require("Windows.NewCardSet").Show(dFrame, function(sName, nWidth, nHeight)
-            return require("CardSet").New(oGame.GetUUID(), sName, nWidth, nHeight);
+            return CFS.CardSet.New(oGame.GetUUID(), sName, nWidth, nHeight);
         end);
         if (not oCardSet) then return; end
 
@@ -681,7 +681,7 @@ function Main.create(tOptions)
     @vis private
     !]]
     local function selectCardSet()
-        local oGame = assert(Game.GetActive(), "Load a game first.");
+        local oGame = assert(CFS.Game.GetActive(), "Load a game first.");
         local tSets = oGame.GetAllCardSets();
         local tNames = {};
         for nIndex, oCardSet in ipairs(tSets) do tNames[nIndex] = oCardSet.GetName(); end
@@ -712,7 +712,7 @@ function Main.create(tOptions)
     @vis private
     !]]
     local function info(sCategory)
-        local oGame = Game.GetActive();
+        local oGame = CFS.Game.GetActive();
 
         require("Windows.Options").show(dFrame, {
             category = sCategory,
@@ -769,7 +769,7 @@ function Main.create(tOptions)
         if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
         -- if (dManualWindow and not dManualWindow.close()) then return; end
         if (dWikiWindow and not dWikiWindow.close()) then return; end
-        Game.Deactivate();
+        CFS.Game.Deactivate();
         bDataLoaded, sActiveCardSetName = false, "";
         tState.face = "front";
         if (dBaseWindow) then dBaseWindow.frame:Hide(); end
@@ -791,7 +791,7 @@ function Main.create(tOptions)
         if (sAction == "Export") then
             assert(not tDataSession.dirty, "Save the current card-set data before exporting a project package.");
         end
-        local oGame = Game.GetActive();
+        local oGame = CFS.Game.GetActive();
         local oProject = sKind == "Game" and oGame or ProcSys.GetActiveCardSet();
         if (sAction == "Export") then assert(oProject, "Load the project before exporting it."); end
         if (sKind == "CardSet" and sAction == "Import") then assert(oGame, "Load the destination game first."); end
@@ -838,7 +838,7 @@ function Main.create(tOptions)
         {"Info...", function() info("Game"); end},
         {false},
         {"Wiki", function()
-        assert(Game.GetActive(), "Load a game first.");
+        assert(CFS.Game.GetActive(), "Load a game first.");
         if (dWikiWindow) then dWikiWindow.show(); return; end
         dWikiWindow = require("Windows.Wiki").create(dFrame, FS.Game.Wiki, {
             gameRoot = FS.Game.Root,
@@ -862,7 +862,7 @@ function Main.create(tOptions)
     end},
         --]]
         {"Style Editor", function()
-        assert(Game.GetActive(), "Load a game first.");
+        assert(CFS.Game.GetActive(), "Load a game first.");
         if (dStyleWindow) then dStyleWindow.show(); return; end
         dStyleWindow = require("Windows.StyleEditor").create(dFrame, FS.Game.Styles, {
             --[[!
@@ -874,7 +874,7 @@ function Main.create(tOptions)
         });
     end},
         {"Edit Source...", function()
-        assert(Game.GetActive(), "Load a game first.");
+        assert(CFS.Game.GetActive(), "Load a game first.");
         if (dGameEditorWindow) then dGameEditorWindow.show(); return; end
         dGameEditorWindow = require("Windows.GameEditor").create(dFrame, FS.Game.Scripts, FS.Game.ENV, FS.Game.CFG, {
             navigationFile = FS.Game.Info,
@@ -889,7 +889,7 @@ function Main.create(tOptions)
         {"Mechanics Viewer"},
         {false},
         {"Docs", function()
-            assert(Game.GetActive(), "Load a game first.");
+            assert(CFS.Game.GetActive(), "Load a game first.");
             openDocument(FS.Game.Docs.."/"..DOX_EXPORT_FILENAME..".html");
         end,},
         {"Rebuild Docs", function() require("Globals.ProcessDox")(); end},
@@ -931,7 +931,7 @@ function Main.create(tOptions)
     @vis private
     !]]
     local function openOptions()
-        local oGame = Game.GetActive();
+        local oGame = CFS.Game.GetActive();
         require("Windows.Options").show(dFrame, {
             game = oGame, cardSet = ProcSys.GetActiveCardSet(), state = tState,
             --[[!
@@ -1043,15 +1043,15 @@ function Main.create(tOptions)
         for sPath, tMenuItem in pairs(tMenuItems) do
             local bAvailable = type(tMenuItem.action) == "function";
 
-            if (sPath == "Card Set:Load" or sPath == "Game:Docs" or sPath == "Game:Rebuild Docs" or sPath == "Game:Style Editor" or sPath == "Game:Wiki") then bAvailable = not not Game.GetActive(); end
+            if (sPath == "Card Set:Load" or sPath == "Game:Docs" or sPath == "Game:Rebuild Docs" or sPath == "Game:Style Editor" or sPath == "Game:Wiki") then bAvailable = not not CFS.Game.GetActive(); end
             if (sPath == "Card Set:Info..." or sPath == "Card Set:Edit Source...") then bAvailable = bDataLoaded; end
-            if (sPath == "Card Set:New") then bAvailable = not not Game.GetActive(); end
-            if (sPath == "Game:Info..." or sPath == "Game:Browse" or sPath == "Game:Edit Source...") then bAvailable = not not Game.GetActive(); end
+            if (sPath == "Card Set:New") then bAvailable = not not CFS.Game.GetActive(); end
+            if (sPath == "Game:Info..." or sPath == "Game:Browse" or sPath == "Game:Edit Source...") then bAvailable = not not CFS.Game.GetActive(); end
             if (sPath == "Card Set:Browse") then bAvailable = bDataLoaded; end
-            if (sPath == "Game:Export Game..." or sPath == "Card Set:Import Card Set...") then bAvailable = not not Game.GetActive() and not tDataSession.exporting; end
+            if (sPath == "Game:Export Game..." or sPath == "Card Set:Import Card Set...") then bAvailable = not not CFS.Game.GetActive() and not tDataSession.exporting; end
             if (sPath == "Card Set:Export Card Set...") then bAvailable = bDataLoaded and not tDataSession.exporting; end
             if (sPath == "Game:Import Game...") then bAvailable = not tDataSession.exporting; end
-            if (sPath == "Game:Close Game") then bAvailable = not not Game.GetActive() and not tDataSession.exporting; end
+            if (sPath == "Game:Close Game") then bAvailable = not not CFS.Game.GetActive() and not tDataSession.exporting; end
             if (sPath == "Card Set:Close Card Set") then bAvailable = bDataLoaded and not tDataSession.exporting; end
 
             if (sPath == "Window:Base Data" or sPath == "Window:Final Data") then

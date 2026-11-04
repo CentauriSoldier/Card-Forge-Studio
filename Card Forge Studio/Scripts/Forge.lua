@@ -27,7 +27,7 @@ local DrawingFont   = DrawingFont;
 local DrawingImage  = DrawingImage;
     local DrawingImageNew       = DrawingImage.New;
     local DrawingImageGetID     = DrawingImage.GetID
-local FontStyle     = FontStyle
+local FontStyle     = CFS.FontStyle
     local GetFontStyle          = FontStyle.Get;
 local INIFile       = INIFile;
 local Paragraph     = Paragraph;
@@ -1351,7 +1351,7 @@ end
 -- The retained AMS implementation below documents the original UI and export paths.
 -- TODO Port export targets and ruler settings from the retained implementation.
 local wx            = require("wx");
-local FontStyle     = require("FontStyle");
+local FontStyle     = CFS.FontStyle;
 local GetFontStyle  = FontStyle.Get;
 local floor         = math.floor;
 local Forge         = {};
@@ -1506,6 +1506,20 @@ local function drawingContext(oGC, oDC)
         tContext.DrawRectangle(-nPadding, -nPadding, nWidth + 2 * nPadding, nHeight + 2 * nPadding, oFill);
         oGC:PopState();
     end
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_WithScale
+    @desc Draws one fitted line in a temporary graphics transform and restores it after errors.
+    @vis private
+    !]]
+    function tContext.WithScale(nX, nY, nScale, fDraw)
+        oGC:PushState();
+        oGC:Translate(nX, nY);
+        oGC:Scale(nScale, nScale);
+        local bOK, vError = pcall(fDraw);
+        oGC:PopState();
+        if (not bOK) then error(vError, 0); end
+    end
+
     --[[!
     @fqxn CFS.Modules.Forge.Private.Functions.tContext_GetOutputInfo
     @desc Returns native card width and height to drawing scripts.
@@ -1958,56 +1972,11 @@ Forge.DrawText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngl
     return nLastX, nLastY, nLastWidth, nLastHeight;
 end
 --[[!
-@fqxn CFS.Modules.Forge.Functions.DrawStyledText
-@pulsarlua function Forge.DrawStyledText
-@desc Draws text containing inline style markup onto the active card render target.
-
-<p>
-  Renders text that includes inline style tags (e.g. <code>&lt;BOLD&gt;</code>,
-  <code>&lt;ITALIC&gt;</code>) using multiple FontStyles in a single draw call.
-  This function is intended for CardSet <code>Draw</code> scripts that require
-  rich text composition.
-</p>
-
-<h3>Behavior</h3>
-<ul>
-  <li>Parses inline style tags and resolves them against <code>Forge.STYLE</code>.</li>
-  <li>Preserves style runs across wrapped lines.</li>
-  <li>Uses ink-box layout to neutralize negative bearings and kerning artifacts.</li>
-  <li>Supports centering, rotation, and custom wrapping behavior.</li>
-</ul>
-
-<h3>Notes</h3>
-<ul>
-  <li>Must be called from within an active card draw pass.</li>
-  <li>Tags that do not resolve to a known style fall back to the base style.</li>
-  <li>Returns the top-left position and total size of the rendered text block.</li>
-</ul>
-
-@param string  sStyle   Base FontStyle name.
-@param number  nRawX    Base X position in card-space coordinates.
-@param number  nRawY    Base Y position in card-space coordinates.
-@param string  sText    Text with inline style markup.
-@param boolean vCenterX Optional horizontal centering flag.
-@param boolean vCenterY Optional vertical centering flag.
-@param number  vAngle   Optional rotation angle (degrees).
-@param function|nil vWrap Optional wrapping function.
-@return number nX       Top-left X position of the rendered block.
-@return number nY       Top-left Y position of the rendered block.
-@return number nWidth   Total width of the rendered block.
-@return number nHeight  Total height of the rendered block.
-
-@ex
--- Draw a description line with inline emphasis
--- Note: there must exist a Style named "BOLD"
-Forge.DrawStyledText(
-    "BODY",
-    60, 820,
-    "Deal <BOLD>3 damage</BOLD> to all enemy units.",
-    false, false
-);
-        !]]
-Forge.DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)--TODO BUG FIX USe HTML parser, not this
+@fqxn CFS.Modules.Forge.Private.Functions.drawStyledText
+@desc Shared styled-run parsing, measurement and drawing for both styled-text calls.
+@vis private
+!]]
+local function drawStyledText(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, tArguments, nWidth, tModes)
     local fWrap         = rawtype(vWrap)        == "function"   and vWrap       or false;
     local bCenterX      = rawtype(vCenterX)     == "boolean"    and vCenterX    or false;
     local bCenterY      = rawtype(vCenterY)     == "boolean"    and vCenterY    or false;
@@ -2099,76 +2068,10 @@ Forge.DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY,
         end
     end
 
-    --------------------------------------------------------------------
-    -- WRAP (wrapper contract is plain string)
-    --------------------------------------------------------------------
-    local tLines        = {};
-    local nStartOffsetX = 0;
-    local nStartOffsetY = 0;
+    local nPadX = 1; -- preserve the existing spacing between style runs
 
-    if (fWrap) then
-        local oDef = GetFontStyle(sStyle);
-        local nW, nH = oDef.Prep(_D, sPlain);
-        tLines, nStartOffsetX, nStartOffsetY = fWrap(nW, nH, sPlain, vAngle, {...});
-    else
-        tLines[1] = sPlain;
-    end
-
-    --------------------------------------------------------------------
-    -- BUILD PER-LINE SEGMENTS (preserves style runs across wrapped lines)
-    --------------------------------------------------------------------
-    local tLineSegs = {};
-    do
-        local nRun = 1;
-        local nPos = 1;
-
-        for iLine, sLine in ipairs(tLines) do
-            local tSegs = {};
-            local nRemain = #sLine;
-
-            while (nRemain > 0) do
-                local r = tRunsSrc[nRun];
-                if not r then
-                    tSegs[#tSegs + 1] = { Style = sStyle, Text = sLine:sub(#sLine - nRemain + 1) };
-                    break;
-                end
-
-                local sRunText = r.Text;
-                local nRunRemain = (#sRunText - nPos) + 1;
-
-                if (nRunRemain <= 0) then
-                    nRun = nRun + 1;
-                    nPos = 1;
-                else
-                    local nTake = math.min(nRunRemain, nRemain);
-                    local sPart = sRunText:sub(nPos, nPos + nTake - 1);
-
-                    tSegs[#tSegs + 1] = { Style = r.Style, Text = sPart };
-
-                    nPos = nPos + nTake;
-                    nRemain = nRemain - nTake;
-
-                    if (nPos > #sRunText) then
-                        nRun = nRun + 1;
-                        nPos = 1;
-                    end
-                end
-            end
-
-            tLineSegs[iLine] = tSegs;
-        end
-    end
-
-    --------------------------------------------------------------------
-    -- MEASURE BLOCK (INK-BOX LAYOUT: neutralize negative bearings)
-    --------------------------------------------------------------------
-    local tLineInfo = {};
-    local nBlockW   = 0;
-    local nBlockH   = 0;
-
-    local nPadX = 1; -- keep your safety pad
-
-    for iLine, tSegs in ipairs(tLineSegs) do
+    -- Both public calls measure the same styled runs, including effect bounds.
+    local function MeasureLine(tSegs)
         local nX = 0;
 
         local nLineMinX = 0;
@@ -2204,16 +2107,164 @@ Forge.DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY,
 
         local nLineW = nLineMaxX - nLineMinX;
         local nLineH = nLineMaxY - nLineMinY;
+        return {MinX = nLineMinX, MinY = nLineMinY, W = nLineW, H = nLineH};
+    end
 
-        tLineInfo[iLine] = {
-            MinX = nLineMinX,
-            MinY = nLineMinY,
-            W    = nLineW,
-            H    = nLineH,
-        };
+    -- Byte ranges come from UTF-8 character boundaries and retain style ownership.
+    local function SliceRuns(nFirst, nLast)
+        local tSegs = {};
+        local nOffset = 1;
+        for _, tRun in ipairs(tRunsSrc) do
+            local nEnd = nOffset + #tRun.Text - 1;
+            local nStart = math.max(nFirst, nOffset);
+            local nStop = math.min(nLast, nEnd);
+            if (nStart <= nStop) then
+                tSegs[#tSegs + 1] = {Style = tRun.Style, Text = tRun.Text:sub(nStart - nOffset + 1, nStop - nOffset + 1)};
+            end
+            nOffset = nEnd + 1;
+            if (nOffset > nLast) then break; end
+        end
+        return tSegs;
+    end
 
-        if (nBlockW < nLineW) then nBlockW = nLineW end
-        nBlockH = nBlockH + nLineH;
+    --------------------------------------------------------------------
+    -- WRAP (wrapper contract is plain string)
+    --------------------------------------------------------------------
+    local tLines        = {};
+    local nStartOffsetX = 0;
+    local nStartOffsetY = 0;
+
+    if (fWrap) then
+        local oDef = GetFontStyle(sStyle);
+        local nW, nH = oDef.Prep(_D, sPlain);
+        tLines, nStartOffsetX, nStartOffsetY = fWrap(nW, nH, sPlain, vAngle, tArguments);
+    elseif (not nWidth) then
+        tLines[1] = sPlain;
+    end
+
+    --------------------------------------------------------------------
+    -- BUILD PER-LINE SEGMENTS (preserves style runs across wrapped lines)
+    --------------------------------------------------------------------
+    local tLineSegs = {};
+    local tLineScales = {};
+    local tEmptyHeights = {};
+    if (nWidth) then
+        local tEntries = {};
+        local nFirst = 1;
+        repeat
+            local nBreak = sPlain:find("\n", nFirst, true);
+            tEntries[#tEntries + 1] = {First = nFirst, Last = nBreak and nBreak - 1 or #sPlain};
+            if (not nBreak) then break; end
+            nFirst = nBreak + 1;
+        until false;
+        assert(#tModes == #tEntries, "DrawStyledTextFit requires one mode per newline-separated entry.");
+        for nEntry in ipairs(tEntries) do
+            assert(tModes[nEntry] == "Wrap" or tModes[nEntry] == "Shrink", "DrawStyledTextFit modes must be Wrap or Shrink.");
+        end
+
+        local function AddLine(nStart, nEnd, bShrink)
+            local tSegs = SliceRuns(nStart, nEnd);
+            local tInfo = MeasureLine(tSegs);
+            local nLine = #tLineSegs + 1;
+            tLineSegs[nLine] = tSegs;
+            tLineScales[nLine] = bShrink and tInfo.W > nWidth and nWidth / tInfo.W or 1;
+            if (#tSegs == 0) then
+                local _, nHeight = GetFontStyle(sStyle).Prep(_D, " ");
+                tEmptyHeights[nLine] = nHeight;
+            end
+        end
+
+        for nEntry, tEntry in ipairs(tEntries) do
+            if (tModes[nEntry] == "Shrink" or tEntry.First > tEntry.Last) then
+                AddLine(tEntry.First, tEntry.Last, tModes[nEntry] == "Shrink");
+            else
+                local tCharacters = {};
+                for nByte, nCodePoint in utf8.codes(sPlain:sub(tEntry.First, tEntry.Last)) do
+                    local nStart = tEntry.First + nByte - 1;
+                    tCharacters[#tCharacters + 1] = {First = nStart, Last = nStart + #utf8.char(nCodePoint) - 1,
+                        Space = nCodePoint == 32 or nCodePoint == 9};
+                end
+                local nStart = 1;
+                while (nStart <= #tCharacters) do
+                    local nFit = nStart - 1;
+                    local nSpace;
+                    for nCharacter = nStart, #tCharacters do
+                        local tInfo = MeasureLine(SliceRuns(tCharacters[nStart].First, tCharacters[nCharacter].Last));
+                        if (tInfo.W > nWidth) then break; end
+                        nFit = nCharacter;
+                        if (tCharacters[nCharacter].Space and nCharacter > nStart) then nSpace = nCharacter; end
+                    end
+                    -- A character wider than the limit remains at its original size in Wrap mode.
+                    if (nFit < nStart) then nFit = nStart; end
+                    local nEnd = nFit;
+                    if (nFit < #tCharacters and nSpace) then
+                        nEnd = nSpace - 1;
+                        while (nEnd > nStart and tCharacters[nEnd].Space) do nEnd = nEnd - 1; end
+                    end
+                    AddLine(tCharacters[nStart].First, tCharacters[nEnd].Last, false);
+                    nStart = nEnd + 1;
+                    if (nStart <= #tCharacters) then
+                        while (nStart <= #tCharacters and tCharacters[nStart].Space) do nStart = nStart + 1; end
+                    end
+                end
+            end
+        end
+    else
+        do
+            local nRun = 1;
+            local nPos = 1;
+
+            for iLine, sLine in ipairs(tLines) do
+                local tSegs = {};
+                local nRemain = #sLine;
+
+                while (nRemain > 0) do
+                    local r = tRunsSrc[nRun];
+                    if not r then
+                        tSegs[#tSegs + 1] = { Style = sStyle, Text = sLine:sub(#sLine - nRemain + 1) };
+                        break;
+                    end
+
+                    local sRunText = r.Text;
+                    local nRunRemain = (#sRunText - nPos) + 1;
+
+                    if (nRunRemain <= 0) then
+                        nRun = nRun + 1;
+                        nPos = 1;
+                    else
+                        local nTake = math.min(nRunRemain, nRemain);
+                        local sPart = sRunText:sub(nPos, nPos + nTake - 1);
+
+                        tSegs[#tSegs + 1] = { Style = r.Style, Text = sPart };
+
+                        nPos = nPos + nTake;
+                        nRemain = nRemain - nTake;
+
+                        if (nPos > #sRunText) then
+                            nRun = nRun + 1;
+                            nPos = 1;
+                        end
+                    end
+                end
+
+                tLineSegs[iLine] = tSegs;
+            end
+        end
+    end
+
+    --------------------------------------------------------------------
+    -- MEASURE BLOCK (INK-BOX LAYOUT: neutralize negative bearings)
+    --------------------------------------------------------------------
+    local tLineInfo = {};
+    local nBlockW = 0;
+    local nBlockH = 0;
+    for iLine, tSegs in ipairs(tLineSegs) do
+        local tInfo = MeasureLine(tSegs);
+        tInfo.H = tEmptyHeights[iLine] or tInfo.H;
+        tLineInfo[iLine] = tInfo;
+        local nScale = tLineScales[iLine] or 1;
+        nBlockW = math.max(nBlockW, tInfo.W * nScale);
+        nBlockH = nBlockH + tInfo.H * nScale;
     end
 
     --------------------------------------------------------------------
@@ -2230,12 +2281,7 @@ Forge.DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY,
     --------------------------------------------------------------------
     local nY = nBaseY;
 
-    for iLine, tSegs in ipairs(tLineSegs) do
-        local tInfo = tLineInfo[iLine] or { MinX = 0, MinY = 0, H = 0 };
-
-        local nX = nBaseX;                    -- pen x = ink-box start
-        local nLineY = nY - (tInfo.MinY or 0); -- align to real top
-
+    local function DrawLine(tSegs, nX, nLineY)
         for _, seg in ipairs(tSegs) do
             local oStyle = GetFontStyle(seg.Style) or GetFontStyle(sStyle);
             local sPart  = seg.Text;
@@ -2258,10 +2304,121 @@ Forge.DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY,
 
             nX = nX + nTotalW + nPadX;
         end
+    end
 
-        nY = nY + (tInfo.H or 0);
+    for iLine, tSegs in ipairs(tLineSegs) do
+        local tInfo = tLineInfo[iLine];
+        local nScale = tLineScales[iLine] or 1;
+        if (nScale < 1) then
+            _D.WithScale(nBaseX, nY, nScale, function()
+                DrawLine(tSegs, 0, -(tInfo.MinY or 0));
+            end);
+        else
+            DrawLine(tSegs, nBaseX, nY - (tInfo.MinY or 0));
+        end
+        nY = nY + tInfo.H * nScale;
     end
 
     return nBaseX, nBaseY, nBlockW, nBlockH;
 end
+--[[!
+@fqxn CFS.Modules.Forge.Functions.DrawStyledText
+@pulsarlua function Forge.DrawStyledText
+@desc Draws text containing inline style markup onto the active card render target.
+
+<p>
+  Renders text that includes inline style tags (e.g. <code>&lt;BOLD&gt;</code>,
+  <code>&lt;ITALIC&gt;</code>) using multiple FontStyles in a single draw call.
+  This function is intended for CardSet <code>Draw</code> scripts that require
+  rich text composition.
+</p>
+
+<h3>Behavior</h3>
+<ul>
+  <li>Parses inline style tags and resolves them against <code>Forge.STYLE</code>.</li>
+  <li>Preserves style runs across wrapped lines.</li>
+  <li>Uses ink-box layout to neutralize negative bearings and kerning artifacts.</li>
+  <li>Supports centering, rotation, and custom wrapping behavior.</li>
+</ul>
+
+<h3>Notes</h3>
+<ul>
+  <li>Must be called from within an active card draw pass.</li>
+  <li>Tags that do not resolve to a known style fall back to the base style.</li>
+  <li>Returns the top-left position and total size of the rendered text block.</li>
+</ul>
+
+@param string  sStyle   Base FontStyle name.
+@param number  nRawX    Base X position in card-space coordinates.
+@param number  nRawY    Base Y position in card-space coordinates.
+@param string  sText    Text with inline style markup.
+@param boolean vCenterX Optional horizontal centering flag.
+@param boolean vCenterY Optional vertical centering flag.
+@param number  vAngle   Optional rotation angle (degrees).
+@param function|nil vWrap Optional wrapping function.
+@return number nX       Top-left X position of the rendered block.
+@return number nY       Top-left Y position of the rendered block.
+@return number nWidth   Total width of the rendered block.
+@return number nHeight  Total height of the rendered block.
+
+@ex
+-- Draw a description line with inline emphasis
+-- Note: there must exist a Style named "BOLD"
+Forge.DrawStyledText(
+    "BODY",
+    60, 820,
+    "Deal <BOLD>3 damage</BOLD> to all enemy units.",
+    false, false
+);
+        !]]
+Forge.DrawStyledText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, ...)
+    return drawStyledText(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngle, vWrap, {...});
+end
+
+--[[!
+@fqxn CFS.Modules.Forge.Functions.DrawStyledTextFit
+@pulsarlua function Forge.DrawStyledTextFit
+@desc Draws styled text to a pixel width, with one Wrap or Shrink mode per newline-separated entry.
+    Wrap retains font sizes and breaks long words at UTF-8 character boundaries. A single character
+    wider than the limit remains at its original size. Shrink uniformly scales an entry and its
+    effects onto one line when needed; it never enlarges text or changes saved styles. Wrapped
+    continuations inherit their entry's mode. Entries stack vertically without a height limit.
+    Blank entries reserve a base-style line. Existing inline-style parsing is shared with DrawStyledText.
+@param string sStyle Base FontStyle name.
+@param number nX Left position in card pixels.
+@param number nY Top position in card pixels.
+@param string sText Styled text with newline-separated entries.
+@param number nWidth Positive finite maximum line width in pixels.
+@param table tModes One "Wrap" or "Shrink" string for each entry, including blank entries.
+@return number nX Left position of the rendered block.
+@return number nY Top position of the rendered block.
+@return number nWidth Measured block width.
+@return number nHeight Measured block height, including wrapped lines.
+@ex -- Requires an existing style named BODY.
+local sAbilities =
+    "Deal 3 damage to each enemy within range.\n" ..
+    "Draw two cards, then discard one card.\n" ..
+    "Gain 1 armor until your next turn.";
+
+Forge.DrawStyledTextFit(
+    "BODY",
+    60, 100,
+    sAbilities,
+    240,
+    {
+        "Wrap",   -- First ability wraps at its original size.
+        "Shrink", -- Second stays on one line, shrinking if needed.
+        "Wrap",   -- Third wraps at its original size.
+    }
+);
+!]]
+Forge.DrawStyledTextFit = function(sStyle, nX, nY, sText, nWidth, tModes)
+    assert(rawtype(sText) == "string", "DrawStyledTextFit requires a text string.");
+    assert(rawtype(nWidth) == "number" and nWidth > 0 and nWidth < math.huge, "DrawStyledTextFit requires a positive finite pixel width.");
+    assert(rawtype(tModes) == "table", "DrawStyledTextFit requires a table of entry modes.");
+    assert(GetFontStyle(sStyle), "DrawStyledTextFit requires an existing base style.");
+    sText = sText:gsub("\r\n", "\n"):gsub("\r", "\n");
+    return drawStyledText(sStyle, nX, nY, sText, false, false, nil, nil, {}, nWidth, tModes);
+end
+
 return Forge;

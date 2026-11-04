@@ -1,0 +1,555 @@
+--[[
+    Deferred considerations:
+    * The loader exports scaler although the class is named Scaler.
+    * The coordinate policies of adjust and adjustPos require separate review.
+]]
+--[[!
+@fqxn CoG.Scaler
+@pulsarlua class Scaler
+@desc Fits build geometry to a screen viewport and calculates adjusted rectangles,
+    sizes and positions. Move/resize callback bursts use optional host scheduling;
+    geometry is returned immediately. Existing coordinate policies are preserved.
+!]]
+namespace CoG {
+    class Scaler requires(CoG.CoGBase) {
+
+
+        private debounce = null;
+
+
+        private movePending = null;
+
+
+        private resizePending = null;
+
+        --[[!
+        @fqxn CoG.Scaler.Properties.OnResizeStart
+        @desc Application-owned resize-start callback, initialized to a no-op function.
+            The auto directive generates final getOnResizeStart. The manual final
+            setter accepts a function or nil to restore dummy. Setting the property
+            does not invoke it. There is no combined resize dispatcher.
+        !]]
+        private OnResizeStart = null;
+
+        public final getOnResizeStart() {
+            return this.OnResizeStart;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Properties.OnResizeEnd
+        @desc Application-owned resize-end callback, initialized to a no-op function.
+            The auto directive generates final getOnResizeEnd. The manual final
+            setter accepts a function or nil to restore dummy. Adjustment methods
+            invoke it immediately or after the configured quiet period.
+        !]]
+        private OnResizeEnd = null;
+
+        public final getOnResizeEnd() {
+            return this.OnResizeEnd;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Properties.OnMoveStart
+        @desc Application-owned move-start callback, initialized to dummy. The auto
+            directive generates a final getter; the manual final setter accepts a
+            function or nil to restore dummy. Setting it does not invoke it.
+        !]]
+        private OnMoveStart = null;
+
+        public final getOnMoveStart() {
+            return this.OnMoveStart;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Properties.OnMoveEnd
+        @desc Application-owned move-end callback, initialized to dummy. The auto
+            directive generates a final getter; the manual final setter accepts a
+            function or nil to restore dummy. Position adjustments invoke it
+            immediately or after the configured quiet period.
+        !]]
+        private OnMoveEnd = null;
+
+        public final getOnMoveEnd() {
+            return this.OnMoveEnd;
+        }
+
+
+        protected buildWidth = 0;
+
+
+        protected buildHeight = 0;
+
+
+        protected screenWidth = 0;
+
+
+        protected screenHeight = 0;
+
+
+        protected viewportWidth = 0;
+
+        --this will be scaled and centered
+        protected viewportHeight = 0;
+
+        --this will be scaled and centered
+        protected viewportX = 0;
+
+        --this will be scaled and centered
+        protected viewportY = 0;
+
+        --this will be scaled and centered
+        protected covXW = 0;
+
+
+        protected covYH = 0;
+
+
+        protected coordOffsetX = 0;
+
+
+        protected coordOffsetY = 0;
+
+        --[[!
+        @fqxn CoG.Scaler.Helpers.dummy
+        @desc Supplies the default no-op callback without invoking application behavior.
+        !]]
+        private static const dummy = function() end;
+
+        --[[!
+        @fqxn CoG.Scaler.Helpers.copyFields
+        @desc Returns detached geometry/settings fields without cloning host functions.
+        !]]
+        private static copyFields(tSource) {
+            local tCopy = {};
+            for sKey, vValue in pairs(tSource) do tCopy[sKey] = vValue; end
+            return tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Helpers.resolveDebounce
+        @desc Copies global defaults and applies one instance's overrides. False disables
+            scheduling; nil inherits defaults. Runtime handles never enter configuration.
+        !]]
+        private static resolveDebounce(vOptions) {
+            local tResult = Scaler.copyFields(CoGBase.config.Scaler.Debounce);
+            assert(vOptions == nil or vOptions == false or rawtype(vOptions) == "table", "Debounce must be a table, false or nil.");
+
+            if (vOptions == false) then
+                tResult.DelayMS, tResult.Schedule, tResult.Cancel = 0, null, null;
+            elseif (vOptions ~= nil) then
+                for sKey, vValue in pairs(vOptions) do
+                    assert(sKey == "DelayMS" or sKey == "Schedule" or sKey == "Cancel", "Unknown debounce option: "..tostring(sKey));
+                    tResult[sKey] = vValue;
+                end
+            end
+
+            assert(rawtype(tResult.DelayMS) == "number" and tResult.DelayMS == tResult.DelayMS
+                and tResult.DelayMS >= 0 and tResult.DelayMS < math.huge, "Debounce.DelayMS must be finite and nonnegative.");
+            local bSchedule = rawtype(tResult.Schedule) == "function";
+            local bCancel = rawtype(tResult.Cancel) == "function";
+            local bScheduleUnset = tResult.Schedule == nil or type.isnull(tResult.Schedule);
+            local bCancelUnset = tResult.Cancel == nil or type.isnull(tResult.Cancel);
+            assert((bSchedule and bCancel) or (bScheduleUnset and bCancelUnset),
+                "Debounce requires both Schedule and Cancel functions, or neither.");
+
+            return tResult;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Helpers.pending
+        @desc Creates independent state for one instance's move or resize burst.
+        !]]
+        private static pending() {
+            return {Active = false, Version = 0, HasHandle = false, Handle = null,
+                Latest = null, InitialInput = null, Delivering = false};
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Helpers.invalidate
+        @desc Invalidates stale wakeups before external cancellation. Returns the previous
+            handle and presence flag, including valid false-valued handles.
+        !]]
+        private static invalidate(tPending) {
+            local vHandle, bHadHandle = tPending.Handle, tPending.HasHandle;
+            tPending.Version = tPending.Version + 1;
+            tPending.Active, tPending.HasHandle = false, false;
+            tPending.Handle, tPending.Latest, tPending.InitialInput = null, null, null;
+            return vHandle, bHadHandle;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Helpers.eventData
+        @desc Builds a callback-local event snapshot. Start omits Output; End contains
+            the latest adjusted result and the burst's first input geometry.
+        !]]
+        private static eventData(tPending, sPhase) {
+            local tLatest = tPending.Latest;
+            return {Operation = tLatest.Operation, Method = tLatest.Method, Phase = sPhase,
+                Input = Scaler.copyFields(tLatest.Input), InitialInput = Scaler.copyFields(tPending.InitialInput),
+                Output = sPhase == "end" and Scaler.copyFields(tLatest.Output) or nil,
+                Screen = Scaler.copyFields(tLatest.Screen), Viewport = Scaler.copyFields(tLatest.Viewport)};
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Helpers.deliver
+        @desc Restores delivery state even when application code raises. Nested geometry
+            calculations are allowed but do not recursively notify the same channel.
+        !]]
+        private deliver(tPending, fCallback, tEvent) {
+            tPending.Delivering = true;
+            local bOK, sError = pcall(fCallback, this, tEvent);
+            tPending.Delivering = false;
+            if (not bOK) then error(sError, 0); end
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Helpers.finish
+        @desc Ends only the current generation and clears its state before invoking user code.
+        !]]
+        private finish(sOperation, nVersion) {
+            local tPending = this[sOperation.."Pending"];
+            if (not tPending.Active or tPending.Version ~= nVersion) then return; end
+            local tEvent = Scaler.eventData(tPending, "end");
+            Scaler.invalidate(tPending);
+            local fCallback = sOperation == "move" and this.OnMoveEnd or this.OnResizeEnd;
+            this.deliver( tPending, fCallback, tEvent);
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Helpers.notify
+        @desc Notifies adjustment activity without delaying geometry results. A configured
+            adapter groups successive updates into one Start/End burst per operation.
+            Timer generations reject cancelled, duplicate and late wakeups.
+        !]]
+        private notify(sOperation, sMethod, tInput, tOutput) {
+            local tPending = this[sOperation.."Pending"];
+            if (tPending.Delivering) then return; end
+            local fStart = sOperation == "move" and this.OnMoveStart or this.OnResizeStart;
+            local fEnd = sOperation == "move" and this.OnMoveEnd or this.OnResizeEnd;
+            if (not tPending.Active and fStart == Scaler.dummy and fEnd == Scaler.dummy) then return; end
+
+            tPending.Latest = {Operation = sOperation, Method = sMethod, Input = Scaler.copyFields(tInput),
+                Output = Scaler.copyFields(tOutput), Screen = this.getScreenSize(), Viewport = this.getViewportDimensions()};
+            if (not tPending.Active) then
+                tPending.Active = true;
+                tPending.InitialInput = Scaler.copyFields(tInput);
+                local nVersion = tPending.Version;
+                local bOK, sError = pcall(this.deliver, tPending, fStart, Scaler.eventData(tPending, "start"));
+                if (not bOK) then Scaler.invalidate(tPending); error(sError, 0); end
+                if (not tPending.Active or tPending.Version ~= nVersion) then return; end
+            end
+
+            local tSettings = this.debounce;
+            local vOldHandle, bHadHandle = tPending.Handle, tPending.HasHandle;
+            tPending.Version = tPending.Version + 1;
+            local nVersion = tPending.Version;
+            tPending.Handle, tPending.HasHandle = null, false;
+            if (bHadHandle) then
+                local bOK, sError = pcall(tSettings.Cancel, vOldHandle);
+                if (not bOK) then Scaler.invalidate(tPending); error(sError, 0); end
+                if (not tPending.Active or tPending.Version ~= nVersion) then return; end
+            end
+
+            if (tSettings.DelayMS == 0 or rawtype(tSettings.Schedule) ~= "function") then
+                this.finish( sOperation, nVersion);
+                return;
+            end
+
+            local bScheduling, bInline = true, false;
+            local bOK, vHandle = pcall(tSettings.Schedule, tSettings.DelayMS, function()
+                if (bScheduling) then bInline = true; return; end
+                this.finish( sOperation, nVersion);
+            end);
+            bScheduling = false;
+            local bValidHandle = vHandle ~= nil and not type.isnull(vHandle);
+            if (not bOK or not bValidHandle or bInline) then
+                Scaler.invalidate(tPending);
+                if (bOK and bValidHandle) then pcall(tSettings.Cancel, vHandle); end
+                error(not bOK and vHandle or "Schedule must defer its callback and return a non-nil handle.", 0);
+            end
+
+            if (tPending.Active and tPending.Version == nVersion) then
+                tPending.Handle, tPending.HasHandle = vHandle, true;
+            else
+                -- Configuration or cancellation may have changed inside Schedule.
+                tSettings.Cancel(vHandle);
+            end
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.Scaler
+        @desc Creates a scaler with independent callback scheduling. Optional sixth
+            argument is {Debounce = false} to disable, or {Debounce = {DelayMS = 100}}
+            to override configured defaults. Omission inherits CoGBase.config.Scaler.
+        !]]
+        public Scaler(nBuildWidth, nBuildHeight, nScreenWidth, nScreenHeight, bFullscreen, tOptions) {
+            assert(rawtype(nBuildWidth)     == "number", "Build width must be of type number. Type given was '${w}'"      % {w = rawtype(nBuildWidth)});
+            assert(rawtype(nBuildHeight)    == "number", "Build height must be of type number. Type given was '${h}'"     % {h = rawtype(nBuildHeight)});
+            assert(rawtype(nScreenWidth)    == "number", "Screen width must be of type number. Type given was '${w}'"     % {w = rawtype(nScreenWidth)});
+            assert(rawtype(nScreenHeight)   == "number", "Screen height must be of type number. Type given was '${h}'"    % {h = rawtype(nScreenHeight)});
+            assert(nBuildWidth      > 0, "Build Width must be a positive number");
+            assert(nBuildHeight     > 0, "Build Height must be a positive number");
+            assert(nScreenWidth     > 0, "Screen Width must be a positive number");
+            assert(nScreenHeight    > 0, "Screen Height must be a positive number");
+
+            assert(tOptions == nil or rawtype(tOptions) == "table", "Scaler options must be a table or nil.");
+            for sKey in pairs(tOptions or {}) do assert(sKey == "Debounce", "Unknown scaler option: "..tostring(sKey)); end
+            this.debounce = Scaler.resolveDebounce(tOptions and tOptions.Debounce);
+            this.movePending, this.resizePending = Scaler.pending(), Scaler.pending();
+
+            -- Establish function-typed private fields for the callback properties.
+            -- Private storage permits replacing functions without treating them as
+            -- protected method overrides; the public property methods remain final.
+            this.setOnResizeStart(nil);
+            this.setOnResizeEnd(nil);
+            this.setOnMoveStart(nil);
+            this.setOnMoveEnd(nil);
+
+            this.buildWidth   = nBuildWidth;
+            this.buildHeight  = nBuildHeight;
+            this.screenWidth  = nScreenWidth;
+            this.screenHeight = nScreenHeight;
+
+            --TODO app asserts
+            --configure the app window
+            --tScaler.app.width   = tApp.width;
+            --tScaler.app.height  = tApp.height;
+            --tScaler.app.x       = tApp.x;
+            --tScaler.app.y       = tApp.y;
+
+            --configure the viewport
+            local tViewport = math.geometry.fitrect({width = nScreenWidth, height = nScreenHeight, x = 0, y = 0}, {width = nBuildWidth, height = nBuildHeight}, true);
+
+            local nViewportWidth    = tViewport.width;
+            local nViewportHeight   = tViewport.height;
+            local nViewportX        = tViewport.x;
+            local nViewportY        = tViewport.y;
+
+            this.viewportWidth   = nViewportWidth;
+            this.viewportHeight  = nViewportHeight;
+            this.viewportX       = nViewportX;
+            this.viewportY       = nViewportY;
+
+            this.covXW = nViewportWidth  / nBuildWidth;
+            this.covYH = nViewportHeight / nBuildHeight;
+
+            if (bFullscreen) then
+                this.coordOffsetX = nViewportX;-- + math.abs(tScaler.viewport.width - nBuildWidth) + (nAdditionalXOffset or 0);
+                this.coordOffsetY = nViewportY;-- + math.abs(tScaler.viewport.height - nBuildHeight) + (nAdditionalYOffset or 0);
+            end
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.setOnResizeStart
+        @desc Replaces the resize-start callback; nil restores the shared dummy.
+            Invalid values leave the callback unchanged. Does not invoke callbacks.
+        @param function|nil fCallback Replacement callback or nil.
+        @ret Scaler this This scaler.
+        !]]
+        public final setOnResizeStart(fCallback) {
+            assert(fCallback == nil or rawtype(fCallback) == "function", "OnResizeStart must be a function or nil.");
+
+            -- Always store a function, including when resetting the callback.
+            this.OnResizeStart = fCallback == nil and Scaler.dummy or fCallback;
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.setOnResizeEnd
+        @desc Replaces the resize-end callback; nil restores the shared dummy.
+            Invalid values leave the callback unchanged. Does not invoke callbacks.
+        @param function|nil fCallback Replacement callback or nil.
+        @ret Scaler this This scaler.
+        !]]
+        public final setOnResizeEnd(fCallback) {
+            assert(fCallback == nil or rawtype(fCallback) == "function", "OnResizeEnd must be a function or nil.");
+
+            -- Validate before changing the private callback reference.
+            this.OnResizeEnd = fCallback == nil and Scaler.dummy or fCallback;
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.setOnMoveStart
+        @desc Replaces the move-start callback; nil restores the shared dummy.
+            Invalid values leave the callback unchanged. Does not invoke callbacks.
+        @param function|nil fCallback Replacement callback or nil.
+        @ret Scaler this This scaler.
+        !]]
+        public final setOnMoveStart(fCallback) {
+            assert(fCallback == nil or rawtype(fCallback) == "function", "OnMoveStart must be a function or nil.");
+
+            -- Keep callbacks instance-owned while sharing only the no-op default.
+            this.OnMoveStart = fCallback == nil and Scaler.dummy or fCallback;
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.setOnMoveEnd
+        @desc Replaces the move-end callback; nil restores the shared dummy.
+            Invalid values leave the callback unchanged. Does not invoke callbacks.
+        @param function|nil fCallback Replacement callback or nil.
+        @ret Scaler this This scaler.
+        !]]
+        public final setOnMoveEnd(fCallback) {
+            assert(fCallback == nil or rawtype(fCallback) == "function", "OnMoveEnd must be a function or nil.");
+
+            -- Nil resets behavior without changing the backing field's function type.
+            this.OnMoveEnd = fCallback == nil and Scaler.dummy or fCallback;
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.getDebounce
+        @desc Returns a detached snapshot of this instance's resolved debounce settings.
+        !]]
+        public final getDebounce() {
+            return Scaler.copyFields(this.debounce);
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.isDebounceEnabled
+        @desc Reports whether this instance has both scheduler functions and a positive delay.
+        !]]
+        public final isDebounceEnabled() {
+            local tSettings = this.debounce;
+            return tSettings.DelayMS > 0 and rawtype(tSettings.Schedule) == "function" and rawtype(tSettings.Cancel) == "function";
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.cancelPendingCallbacks
+        @desc Invalidates both move/resize jobs before asking the host to cancel them.
+            Does not fire End. Call before discarding a scaler with pending jobs.
+            Both cancellations are attempted even if the host raises an error.
+        @ret Scaler this This scaler.
+        !]]
+        public final cancelPendingCallbacks() {
+            local vMove, bMove = Scaler.invalidate(this.movePending);
+            local vResize, bResize = Scaler.invalidate(this.resizePending);
+            local bMoveOK, sMoveError = true, nil;
+            local bResizeOK, sResizeError = true, nil;
+            if (bMove) then bMoveOK, sMoveError = pcall(this.debounce.Cancel, vMove); end
+            if (bResize) then bResizeOK, sResizeError = pcall(this.debounce.Cancel, vResize); end
+            if (not bMoveOK) then error(sMoveError, 0); end
+            if (not bResizeOK) then error(sResizeError, 0); end
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.setDebounce
+        @desc Replaces instance overrides after validation and cancels pending bursts.
+            Nil restores global defaults; false disables. A table overlays global defaults.
+        @ret Scaler this This scaler.
+        !]]
+        public final setDebounce(vOptions) {
+            local tSettings = Scaler.resolveDebounce(vOptions);
+            this.cancelPendingCallbacks();
+            this.debounce = tSettings;
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.adjust
+        @desc Immediately calculates the same adjusted rectangle as before, then
+            notifies move followed by resize activity. Start/End callbacks receive
+            (this, event); event contains Input, Output on End, InitialInput, Screen,
+            Viewport, Operation, Method and Phase. These are calculations, not native
+            window move/resize notifications. Callback errors propagate.
+        !]]
+        public adjust(tRect) {
+            local nCOV_XW = this.covXW;
+            local nCOV_YH = this.covYH;
+
+            local tResult = {width   = tRect.width   * nCOV_XW,
+                    height  = tRect.height  * nCOV_YH,
+                    x       = tRect.x * nCOV_XW + this.coordOffsetX,
+                    y       = tRect.y * nCOV_YH + this.coordOffsetY};
+
+            local tInput = {x = tRect.x, y = tRect.y, width = tRect.width, height = tRect.height};
+            this.notify( "move", "adjust", tInput, tResult);
+            this.notify( "resize", "adjust", tInput, tResult);
+            return tResult;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.adjustSize
+        @desc Immediately adjusts size and notifies the independent resize callback channel.
+        !]]
+        public adjustSize(width, height) {
+            local tResult = {width   = width *   this.covXW,
+                    height  = height *  this.covYH};
+            this.notify( "resize", "adjustSize", {width = width, height = height}, tResult);
+            return tResult;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.adjustPos
+        @desc Immediately adjusts position and notifies the independent move callback channel.
+        !]]
+        public adjustPos(x, y) {
+            local tResult = {x   = x * this.covXW + this.viewportX,
+                    y   = y * this.covYH + this.viewportY};
+            this.notify( "move", "adjustPos", {x = x, y = y}, tResult);
+            return tResult;
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.getBuildSize
+        @desc Returns a detached snapshot of the original build width and height.
+        @ret table tSize Build dimensions.
+        !]]
+        public getBuildSize() {
+            return {width = this.buildWidth, height = this.buildHeight};
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.getCOV
+        @desc Returns a detached snapshot of the horizontal and vertical scale factors.
+        @ret table tFactors Horizontal xw and vertical yh scale factors.
+        !]]
+        public getCOV() {
+            return {xw = this.covXW, yh = this.covYH};
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.getScreenSize
+        @desc Returns an independent table containing the stored screen width and
+            height, including space outside the fitted viewport.
+        @ret table tSize Screen width and height.
+        !]]
+        public getScreenSize() {
+            return {width = this.screenWidth, height = this.screenHeight};
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.getViewportDimensions
+        @desc Returns an independent table describing the fitted viewport bounds.
+        @ret table tDimensions Viewport width, height, x and y.
+        !]]
+        public getViewportDimensions() {
+            return {width = this.viewportWidth, height = this.viewportHeight, x = this.viewportX, y = this.viewportY};
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.getViewportSize
+        @desc Returns an independent table containing the fitted viewport size.
+        @ret table tSize Viewport width and height.
+        !]]
+        public getViewportSize() {
+            return {width = this.viewportWidth, height = this.viewportHeight};
+        }
+
+        --[[!
+        @fqxn CoG.Scaler.Methods.getViewportPosition
+        @desc Returns an independent table containing the fitted viewport origin.
+        @ret table tPosition Viewport x and y.
+        !]]
+        public getViewportPosition() {
+            return {x = this.viewportX, y = this.viewportY};
+        }
+    }
+}

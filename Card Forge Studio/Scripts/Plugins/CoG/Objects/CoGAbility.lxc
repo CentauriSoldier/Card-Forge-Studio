@@ -1,0 +1,126 @@
+--[[!
+@fqxn CoG.CoGAbility
+@pulsarlua class CoGAbility
+@desc Generic CoGObject ability with an independent cost Protean and a configurable
+    use callback. Applications define targeting, requirements, payment and gameplay
+    effects in that callback or in subclasses. Use does not spend cost automatically.
+!]]
+using LuaEx.Classes;
+
+namespace CoG {
+    class CoGAbility : CoGObject {
+        -- A plain function value supplies the shared default without binding this.
+        private static dummy = function()
+        end;
+
+        -- Boxing keeps application callbacks as values rather than class methods.
+        private onUse = {CoGAbility.dummy};
+        protected Cost = null;
+
+        --[[!
+        @fqxn CoG.CoGAbility.Methods.CoGAbility
+        @pulsarlua function CoGAbility
+        @desc Initializes inherited metadata, a fresh cost Protean and the optional
+            use callback. Each ability owns independent cost state.
+        @param string sName Nonblank ability name.
+        @param string sDescription Nonblank ability description.
+        @param CoG.LEVEL|nil eRarity Initial inherited rarity.
+        @param string|nil wEventrix Registered event environment name.
+        @param function|nil fOnUseCallback Use callback; nil selects the default no-op.
+        !]]
+        public CoGAbility(sName, sDescription, eRarity, wEventrix, fOnUseCallback) {
+            base(sName, sDescription, eRarity, wEventrix);
+            type.assert.custom(fOnUseCallback == nil and CoGAbility.dummy or
+                fOnUseCallback, "function");
+
+            this.Cost = Protean();
+            this.setOnUseCallback(fOnUseCallback);
+        }
+
+        --[[!
+        @fqxn CoG.CoGAbility.Methods.getCost
+        @pulsarlua function CoGAbility.getCost
+        @desc Returns the owned cost component or delegates a value-category query
+            to Protean. This final getter provides no replacement setter.
+        @param number|nil nType Protean value category; nil returns the component.
+        @ret Protean|number vValue Cost component or selected value.
+        !]]
+        public final getCost(nType) {
+            local oCost = this.Cost;
+
+            return nType == nil and oCost or oCost.getValue(nType);
+        }
+
+        --[[!
+        @fqxn CoG.CoGAbility.Methods.getOnUseCallback
+        @pulsarlua function CoGAbility.getOnUseCallback
+        @desc Returns the current callback, including the default no-op after reset.
+        @ret function fOnUseCallback Current use callback.
+        !]]
+        public getOnUseCallback() {
+            return this.onUse[1];
+        }
+
+        --[[!
+        @fqxn CoG.CoGAbility.Methods.setOnUseCallback
+        @pulsarlua function CoGAbility.setOnUseCallback
+        @desc Replaces the callback after validation. Nil restores the shared no-op;
+            invalid input leaves the current callback unchanged.
+        @param function|nil fOnUseCallback Replacement callback or nil to reset.
+        @ret CoGAbility this This ability.
+        !]]
+        public setOnUseCallback(fOnUseCallback) {
+            local fCallback = fOnUseCallback == nil and CoGAbility.dummy or fOnUseCallback;
+            type.assert.custom(fCallback, "function");
+            this.onUse[1] = fCallback;
+
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGAbility.Methods.use
+        @pulsarlua function CoGAbility.use
+        @desc Calls the current callback with this ability followed by every caller
+            argument. Preserves nil arguments and all results; errors propagate.
+        @param varargs ... Application-defined use context.
+        @ret varargs ... Unchanged callback results.
+        !]]
+        public use(...) {
+            return this.onUse[1](this, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGAbility.prepareSnapshot
+        @desc Represents the shared default callback with an empty outgoing box.
+            Replaces the projection entry instead of editing the live callback box.
+            Custom application callbacks use the host serializer's function support.
+        @param table state Outgoing LXC field projection.
+        !]]
+        private prepareSnapshot(state) {
+            if (rawequal(this.onUse[1], CoGAbility.dummy)) then
+                state.pri.onUse = {};
+            end
+        }
+
+        --[[!
+        @fqxn CoG.CoGAbility.validateSnapshot
+        @desc Validates the restored cost and callback box without rerunning the
+            constructor. Restores the default no-op when its outgoing box was empty.
+        @param table state Restored LXC field projection.
+        @throws Invalid cost component or callback storage.
+        !]]
+        private validateSnapshot(state) {
+            assert(class.isa(state.pro.Cost, Protean), "Invalid saved ability cost.");
+            type.assert.table(state.pri.onUse);
+
+            for nIndex, fCallback in pairs(state.pri.onUse) do
+                assert(nIndex == 1 and rawtype(fCallback) == "function",
+                    "Ability callback storage must contain only one function.");
+            end
+
+            if (state.pri.onUse[1] == nil) then
+                state.pri.onUse = {CoGAbility.dummy};
+            end
+        }
+    }
+}

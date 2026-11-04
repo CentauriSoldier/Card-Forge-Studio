@@ -1,0 +1,331 @@
+--[[!
+@fqxn CoG.CoGZone
+@desc Explicit membership of CoGObject instances, optional synchronized zone hierarchy,
+    and entry/exit notifications. Inherits metadata, tags, events and affixes. Objects
+    may belong to multiple zones; membership does not transfer ownership or propagate
+    to parent/child zones. Coordinates, containment geometry and gameplay effects belong
+    to external services, which call this same membership API when detection changes.
+!]]
+namespace CoG {
+    class CoGZone : CoG.CoGObject {
+        --[[!
+        @fqxn CoG.CoGZone.EVENT
+        @desc ENTER and EXIT notifications receive (zone, member) after membership commits.
+            Eventrix isolates callback errors; returned hook results report those failures.
+            Notifications are not veto hooks and do not roll back committed membership.
+        !]]
+        public enum EVENT within CoG.CoGZone { ENTER; EXIT; }
+        -- Parent is boxed to support repeated object-to-null transitions.
+        private state = {members = {}, parent = null, children = {}, busy = false};
+
+        --[[!
+        @fqxn CoG.CoGZone.CoGZone
+        @desc Creates an empty, unparented zone. Register callbacks and add members explicitly.
+        @param string sName Nonblank zone name.
+        @param string sDescription Nonblank description.
+        @param CoG.LEVEL|nil eRarity Inherited rarity.
+        @param string|nil sEnvironment Registered event environment name.
+        !]]
+        public CoGZone(sName, sDescription, eRarity, sEnvironment) {
+            base(sName, sDescription, eRarity, sEnvironment);
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.Helpers.memberIndex
+        @desc Finds an exact identity in the ordered immediate membership list.
+        @param CoGObject oMember Object to locate.
+        @ret number|nil nIndex Present index, or nil.
+        !]]
+        private memberIndex(oMember) {
+            for nIndex, oExisting in ipairs(this.state.members) do
+                if (rawequal(oExisting, oMember)) then return nIndex; end
+            end
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.Helpers.notify
+        @desc Fires a committed membership notification under a per-zone mutation guard.
+            Read queries remain available. Always clears the guard, including raised errors.
+        @param CoGZone.EVENT eEvent ENTER or EXIT.
+        @param CoGObject oMember Object whose membership changed.
+        @ret table tResults Eventrix hook outcomes.
+        !]]
+        private notify(eEvent, oMember) {
+            this.state.busy = true;
+            local bOK, vResult = pcall(this.eventrix.fire, eEvent, this, oMember);
+            this.state.busy = false;
+            if (not bOK) then error(vResult, 0); end
+            return vResult;
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.addHook
+        @desc Registers an Eventrix callback for ENTER or EXIT. Callbacks receive (zone, member).
+            Registration/removal during this zone's notification is rejected to preserve dispatch order.
+        @param CoGZone.EVENT eEvent Exact zone event member.
+        @param function fHook Callback identity.
+        @param string|nil sEnvironment Optional registered callback environment.
+        @ret CoGZone this Zone for chaining.
+        !]]
+        public final addHook(eEvent, fHook, sEnvironment) {
+            assert(not this.state.busy, "Cannot change zone hooks during notification.");
+            assert(lxe.isMember(eEvent, CoGZone.EVENT), "Expected CoGZone.EVENT member.");
+            this.eventrix.addHook(eEvent, fHook, sEnvironment);
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.removeHook
+        @desc Removes a registered zone callback through Eventrix. Unknown hook behavior
+            follows Eventrix; this does not change membership or emit notifications.
+        @param CoGZone.EVENT eEvent Exact zone event member.
+        @param function fHook Callback identity previously registered.
+        @ret CoGZone this Zone for chaining.
+        !]]
+        public final removeHook(eEvent, fHook) {
+            assert(not this.state.busy, "Cannot change zone hooks during notification.");
+            assert(lxe.isMember(eEvent, CoGZone.EVENT), "Expected CoGZone.EVENT member.");
+            this.eventrix.removeHook(eEvent, fHook);
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.addMember
+        @desc Adds a CoGObject identity once, then notifies ENTER hooks. Rejects this zone
+            as its own member. Members can independently belong to other zones. Callbacks
+            observe committed state and cannot reenter this zone's mutation operations.
+        @param CoGObject oMember Object or descendant instance.
+        @ret CoGZone this Zone for chaining.
+        @ret boolean bAdded Whether a new membership was committed.
+        @ret table tResults Hook outcomes, or empty for an already-present member.
+        !]]
+        public final addMember(oMember) {
+            assert(not this.state.busy, "Cannot change zone membership during notification.");
+            assert(class.isa(oMember, CoG.CoGObject) and not rawequal(oMember, this),
+                "Zone members must be other CoGObject instances.");
+            if (this.memberIndex(oMember)) then return this, false, {}; end
+            this.state.members[#this.state.members + 1] = oMember;
+            return this, true, this.notify(CoGZone.EVENT.ENTER, oMember);
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.removeMember
+        @desc Removes an exact immediate member before notifying EXIT hooks. An absent
+            object leaves membership unchanged and produces no event. No ownership changes occur.
+        @param CoGObject oMember Exact object identity.
+        @ret CoGZone this Zone for chaining.
+        @ret boolean bRemoved Whether membership was committed.
+        @ret table tResults Hook outcomes, or empty when absent.
+        !]]
+        public final removeMember(oMember) {
+            assert(not this.state.busy, "Cannot change zone membership during notification.");
+            assert(class.isa(oMember, CoG.CoGObject), "Expected a CoGObject member.");
+            local nIndex = this.memberIndex(oMember);
+            if (not nIndex) then return this, false, {}; end
+            table.remove(this.state.members, nIndex);
+            return this, true, this.notify(CoGZone.EVENT.EXIT, oMember);
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.contains
+        @desc Tests exact immediate membership, without searching ancestors or descendants.
+        @param any vMember Candidate identity.
+        @ret boolean bPresent Whether directly registered here.
+        !]]
+        public final contains(vMember) { return this.memberIndex(vMember) ~= nil; }
+
+        --[[!
+        @fqxn CoG.CoGZone.getMemberCount
+        @desc Returns the number of explicit immediate members.
+        @ret number nCount Nonnegative member count.
+        !]]
+        public final getMemberCount() { return #this.state.members; }
+
+        --[[!
+        @fqxn CoG.CoGZone.getMembers
+        @desc Returns an insertion-order array snapshot. Objects retain identity;
+            editing the returned array cannot alter this zone's private membership.
+        @ret table tMembers Independent array of immediate members.
+        !]]
+        public final getMembers() {
+            local tCopy = {};
+            for nIndex, oMember in ipairs(this.state.members) do tCopy[nIndex] = oMember; end
+            return tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.eachMember
+        @desc Iterates an independent membership snapshot, yielding index and object.
+            Later membership changes do not alter an already-created iterator.
+        @ret function fIterator Snapshot iterator for a generic for loop.
+        !]]
+        public final eachMember() {
+            local tMembers = this.getMembers();
+            local nIndex = 0;
+            return function()
+                nIndex = nIndex + 1;
+                if (tMembers[nIndex]) then return nIndex, tMembers[nIndex]; end
+            end;
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.Helpers.changeParent
+        @desc Validates ancestry and affected notification guards before directly updating
+            both sides. Same-class private instance access avoids recursive public setters.
+            Zone hierarchy is independent of explicit object membership.
+        @param CoGZone|null|nil oParent New parent, or detach request.
+        @ret CoGZone this Reparented zone.
+        !]]
+        private changeParent(oParent) {
+            oParent = oParent == nil and null or oParent;
+            assert(type.isnull(oParent) or class.isa(oParent, CoGZone), "Expected CoGZone parent or null.");
+            assert(not this.state.busy, "Cannot reparent a notifying zone.");
+            local oPrevious = this.state.parent;
+            assert(type.isnull(oPrevious) or not oPrevious.state.busy, "Previous parent is notifying.");
+            local oCursor, tSeen = oParent, {};
+
+            while (not type.isnull(oCursor)) do
+                assert(not rawequal(oCursor, this) and not tSeen[oCursor], "Zone hierarchy cannot contain cycles.");
+                tSeen[oCursor] = true;
+                oCursor = oCursor.state.parent;
+            end
+            assert(type.isnull(oParent) or not oParent.state.busy, "New parent is notifying.");
+            if (rawequal(oPrevious, oParent)) then return this; end
+
+            if (not type.isnull(oPrevious)) then
+                for nIndex, oChild in ipairs(oPrevious.state.children) do
+                    if (rawequal(oChild, this)) then
+                        table.remove(oPrevious.state.children, nIndex);
+                        break;
+                    end
+                end
+            end
+            this.state.parent = oParent;
+            if (not type.isnull(oParent)) then oParent.state.children[#oParent.state.children + 1] = this; end
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.getParentZone
+        @desc Returns the immediate parent zone or LuaEx null for a root zone.
+        @ret CoGZone|null oParent Current parent.
+        !]]
+        public final getParentZone() { return this.state.parent; }
+
+        --[[!
+        @fqxn CoG.CoGZone.setParentZone
+        @desc Reparents or detaches this zone through synchronized cycle-checked mutation.
+        @param CoGZone|null|nil oParent New parent or detach request.
+        @ret CoGZone this Zone for chaining.
+        !]]
+        public final setParentZone(oParent) { return this.changeParent(oParent); }
+
+        --[[!
+        @fqxn CoG.CoGZone.getChildZones
+        @desc Returns an insertion-order array snapshot of immediate child zones.
+        @ret table tZones Independent array retaining child identities.
+        !]]
+        public final getChildZones() {
+            local tCopy = {};
+            for nIndex, oChild in ipairs(this.state.children) do tCopy[nIndex] = oChild; end
+            return tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.addChildZone
+        @desc Assigns this as another zone's parent through the same internal operation.
+        @param CoGZone oOther Zone to adopt.
+        @ret CoGZone this Parent for chaining.
+        !]]
+        public final addChildZone(oOther) {
+            assert(class.isa(oOther, CoGZone), "Expected a CoGZone child.");
+            oOther.changeParent(this);
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.removeChildZone
+        @desc Detaches only a current immediate child. Unrelated zones are unchanged.
+        @param CoGZone oOther Child candidate.
+        @ret CoGZone this Parent for chaining.
+        @ret boolean bRemoved Whether a relationship was removed.
+        !]]
+        public final removeChildZone(oOther) {
+            assert(class.isa(oOther, CoGZone), "Expected a CoGZone child.");
+            if (not rawequal(oOther.state.parent, this)) then return this, false; end
+            oOther.changeParent(null);
+            return this, true;
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.clone
+        @desc Requires an explicit subclass copy policy for member identities, callbacks
+            and zone hierarchy. The base does not silently copy or detach an entire graph.
+        @throws Always unless an override implements the desired copy policy.
+        !]]
+        public operator clone() { error("CoGZone subclasses must define their membership and hierarchy clone policy."); }
+
+        --[[!
+        @fqxn CoG.CoGZone.prepareSnapshot
+        @desc Copies transient state metadata and clears the notification guard only in
+            the saved projection. Saving does not unlock the live notifying zone.
+        @param table tState Private field projection.
+        !]]
+        private prepareSnapshot(tState) {
+            local tCopy = {};
+            for sKey, vValue in pairs(tState.pri.state) do tCopy[sKey] = vValue; end
+            tCopy.busy = false;
+            tState.pri.state = tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.Helpers.validateList
+        @desc Validates a dense duplicate-free array of the required native instance kind.
+        @param table tList Saved ordered identity array.
+        @param class cExpected Required class or base class.
+        !]]
+        private static validateList(tList, cExpected) {
+            assert(rawtype(tList) == "table" and getmetatable(tList) == nil, "Expected a plain saved zone list.");
+            local tSeen, nCount = {}, 0;
+            for nIndex, oObject in pairs(tList) do
+                assert(type(nIndex) == "number" and nIndex % 1 == 0 and nIndex >= 1 and nIndex <= #tList,
+                    "Saved zone list must have dense positive integer keys.");
+                assert(class.isa(oObject, cExpected) and not tSeen[oObject], "Invalid or duplicate saved zone object.");
+                tSeen[oObject] = true;
+                nCount = nCount + 1;
+            end
+            assert(nCount == #tList, "Saved zone list must be dense.");
+        }
+
+        --[[!
+        @fqxn CoG.CoGZone.validateSnapshot
+        @desc Validates membership, ancestry and both parent/child link directions.
+            Restoration emits no entry/exit events. Native graph identity preserves shared
+            members and zone links; callbacks follow Eventrix's existing save limitations.
+        @param table tState Restored private-field projection.
+        !]]
+        private validateSnapshot(tState) {
+            local tSaved = tState.pri.state;
+            assert(rawtype(tSaved) == "table" and tSaved.busy == false, "Invalid saved zone state.");
+            CoGZone.validateList(tSaved.members, CoG.CoGObject);
+            for _, oMember in ipairs(tSaved.members) do assert(not rawequal(oMember, this), "Zone cannot contain itself."); end
+            CoGZone.validateList(tSaved.children, CoGZone);
+            for _, oChild in ipairs(tSaved.children) do
+                assert(rawequal(oChild.state.parent, this), "Saved child must refer to its zone parent.");
+            end
+            local oCursor, tSeen = tSaved.parent, {[this] = true};
+            while (not type.isnull(oCursor)) do
+                assert(class.isa(oCursor, CoGZone) and not tSeen[oCursor], "Invalid saved zone ancestry.");
+                tSeen[oCursor] = true;
+                oCursor = oCursor.state.parent;
+            end
+            if (not type.isnull(tSaved.parent)) then
+                local nMatches = 0;
+                for _, oChild in ipairs(tSaved.parent.state.children) do
+                    if (rawequal(oChild, this)) then nMatches = nMatches + 1; end
+                end
+                assert(nMatches == 1, "Saved parent must list its child exactly once.");
+            end
+        }
+    }
+}

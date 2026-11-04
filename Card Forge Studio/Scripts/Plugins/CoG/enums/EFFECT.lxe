@@ -1,0 +1,156 @@
+--[[!
+@fqxn CoG.EFFECT
+@desc Default status identities grouped into CREATURE, STRUCTURE and VEHICLE
+    collections. These names identify states; applications supply their gameplay
+    behavior. Replace the whole CoG.EFFECT declaration in the same loading batch
+    to provide an application-specific hierarchy. The three embedded collections
+    are replaced together with their parent.
+!]]
+namespace CoG {
+    ---@default
+    public enum EFFECT {
+        -- Preserve the original creature effects and their declaration order.
+        CREATURE {
+            ARMOURED;
+            BERSERK;
+            BLESSED;
+            BLIND;
+            BURNED;
+            CHARMED;
+            CHILLED;
+            CONFUSED;
+            CURSED;
+            DEBILITATED;
+            DEAFENED;
+            DISARMED;
+            DISORIENTED;
+            DISEASED;
+            DOMINATED;
+            EMPOWERED;
+            ENFEEBLED;
+            ENAMORED;
+            ENERGIZED;
+            ENRAGED;
+            ENTANGLED;
+            ENTHRALLED;
+            EXHAUSTED;
+            FRIGHTENED;
+            FROZEN;
+            GUARDED;
+            GUARDING;
+            HASTENED;
+            IMMOBILIZED;
+            INCAPACITATED;
+            INTIMIDATED;
+            INVIGORATED;
+            INVISIBLE;
+            MEDITATING;
+            MARKED;
+            NERVOUS;
+            PANICKED;
+            PACIFIED;
+            PARALYZED;
+            PETRIFIED;
+            PHASED;
+            POISONED;
+            REFLECTED;
+            REGENERATING;
+            REJUVENATED;
+            ROOTED;
+            RUSHED;
+            SAPPED;
+            SCORCHED;
+            SHATTERED;
+            SHIELDED;
+            SHIELDING;
+            SHOCKED;
+            SILENCED;
+            STUNNED;
+            SLEEP;
+            SLOWED;
+            SURPRISED;
+            TERRIFIED;
+            TRANQUILIZED;
+            UNCONSCIOUS;
+            VEXED;
+            VULNERABLE;
+            WEAKENED;
+        }
+
+        -- Conditions for buildings, fortifications and other structures.
+        STRUCTURE {
+            ARMOURED;
+            BURNED;
+            COLLAPSED;
+            CORRODED;
+            DAMAGED;
+            DESTROYED;
+            FORTIFIED;
+            FROZEN;
+            REINFORCED;
+            REPAIRING;
+            SHIELDED;
+            VULNERABLE;
+            WEAKENED;
+            ABANDONED;
+            BESIEGED;
+            BREACHED;
+            COLLAPSING;
+            CONTAMINATED;
+            CURSED;
+            DESECRATED;
+            ELECTRIFIED;
+            FLOODED;
+            INFESTED;
+            LOCKED;
+            OCCUPIED;
+            ON_FIRE;
+            OVERLOADED;
+            SEALED;
+            UNDER_CONSTRUCTION;
+            UNPOWERED;
+            UNSTABLE;
+        }
+
+        -- Conditions for vehicles and their operation; no behavior is implied.
+        VEHICLE {
+            ARMOURED;
+            BURNED;
+            CORRODED;
+            DAMAGED;
+            DISABLED;
+            ENGINE_FAILURE;
+            FROZEN;
+            IMMOBILIZED;
+            LEAKING;
+            OVERHEATED;
+            REPAIRING;
+            SHIELDED;
+            SLOWED;
+            STALLED;
+            VULNERABLE;
+            ADRIFT;
+            BRAKE_FAILURE;
+            CAPSIZED;
+            CLOAKED;
+            COMMUNICATIONS_JAMMED;
+            CONTAMINATED;
+            DEPRESSURIZED;
+            ELECTRIFIED;
+            FLOODED;
+            FUEL_DEPLETED;
+            GROUNDED;
+            HIJACKED;
+            HULL_BREACH;
+            NAVIGATION_FAILURE;
+            ON_FIRE;
+            OVERLOADED;
+            SENSOR_FAILURE;
+            SINKING;
+            STEERING_FAILURE;
+            SUBMERGED;
+            TRACTION_LOSS;
+            UNPOWERED;
+        }
+    }
+}

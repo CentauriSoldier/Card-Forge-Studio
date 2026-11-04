@@ -1,0 +1,159 @@
+--[[!
+@fqxn CoG.CoGObject
+@pulsarlua class CoGObject
+@desc Shared metadata, tags, event dispatch and owned affixes for concrete CoG
+    objects. The protected constructor prevents direct instances. Derived classes
+    can update protected metadata; public getters never replace owned components.
+!]]
+namespace CoG {
+    class CoGObject : CoGBase {
+        protected Name        = "";
+        protected Description = "";
+        protected Rarity      = null;
+        protected TagSystem   = null;
+
+        -- Each component binding is assigned by this constructor and then fixed.
+        protected final eventrix    = null;
+        protected final AffixSystem = null;
+
+        --[[!
+        @fqxn CoG.CoGObject.Methods.CoGObject
+        @desc Initializes nonblank metadata, one dispatcher, tags and owned affixes.
+            Invalid rarity inputs fall back to the first configured rarity.
+        @param string sName Nonblank object name.
+        @param string sDescription Nonblank object description.
+        @param CoG.LEVEL|nil eRarity Initial rarity.
+        @param string|nil wEventrix Registered event environment name.
+        !]]
+        protected CoGObject(sName, sDescription, eRarity, wEventrix) {
+            base();
+            type.assert.string(sName, "%S+");
+            type.assert.string(sDescription, "%S+");
+
+            this.Name        = sName;
+            this.Description = sDescription;
+            this.Rarity = lxe.isMember(eRarity, CoG.LEVEL) and
+                eRarity or CoG.LEVEL[1];
+
+            this.eventrix = _G.eventrix(wEventrix);
+            this.TagSystem = require("cog.TagSystem")();
+            this.AffixSystem = CoG.AffixSystem(this,
+                this.Rarity, wEventrix, true);
+        }
+
+        --[[!
+        @fqxn CoG.CoGObject.Methods.getName
+        @desc Returns protected name metadata. Derived classes may override this getter.
+        @ret string sName Stored object name.
+        !]]
+        public getName() {
+            return this.Name;
+        }
+
+        --[[!
+        @fqxn CoG.CoGObject.Methods.getDescription
+        @desc Returns protected description metadata. Derived classes may override this getter.
+        @ret string sDescription Stored object description.
+        !]]
+        public getDescription() {
+            return this.Description;
+        }
+
+        --[[!
+        @fqxn CoG.CoGObject.Methods.getRarity
+        @desc Returns the current rarity. Derived classes may override this getter.
+        @ret CoG.LEVEL eRarity Configured rarity member.
+        !]]
+        public getRarity() {
+            return this.Rarity;
+        }
+
+        --[[!
+        @fqxn CoG.CoGObject.Methods.getTagSystem
+        @desc Returns the mutable per-object tags. This getter cannot be overridden.
+        @ret TagSystem oTags Owned tag component.
+        !]]
+        public final getTagSystem() {
+            return this.TagSystem;
+        }
+
+        --[[!
+        @fqxn CoG.CoGObject.Methods.ownsAffixSystem
+        @desc Tests exact component identity without changing or reconnecting it.
+        @param AffixSystem oSystem Candidate component.
+        @ret boolean bOwned Whether this is the object's owned component.
+        !]]
+        public final ownsAffixSystem(oSystem) {
+            return rawequal(this.AffixSystem, oSystem);
+        }
+
+        --[[!
+        @fqxn CoG.CoGObject.Methods.getAffixSystem
+        @desc Returns owned affixes and reconnects the external owner after loading,
+            without invoking gameplay callbacks. There is no replacement setter.
+        @ret AffixSystem oSystem Owned affix component.
+        !]]
+        public final getAffixSystem() {
+            local oSystem = this.AffixSystem;
+
+            if (not rawequal(oSystem.getOwner(), this)) then
+                local _, bBound, _, sReason = oSystem.setOwner(this);
+                assert(bBound, sReason);
+            end
+
+            return oSystem;
+        }
+
+        --[[!
+        @fqxn CoG.CoGObject.Methods.setRarity
+        @desc Rejects a change if owned affixes exceed its tier or count limits.
+            Rejection changes neither metadata nor applications.
+        @param CoG.LEVEL eRarity Proposed configured rarity member.
+        @ret CoGObject this This object.
+        @ret boolean bAllowed Whether the rarity changed.
+        @ret CoG.LEVEL|nil eRarity Accepted rarity, or nil on rejection.
+        @ret string|nil sReason Rejection reason.
+        !]]
+        public final setRarity(eRarity) {
+            local bAllowed, sReason = this.getAffixSystem().canSetRarity(eRarity);
+
+            if (not bAllowed) then
+                return this, false, nil, sReason;
+            end
+
+            this.Rarity = eRarity;
+
+            return this, true, eRarity, nil;
+        }
+
+        --[[!
+        @fqxn CoG.CoGObject.Methods.fireEvent
+        @desc Forwards all arguments and results through this object's dispatcher.
+        @param enumitem eEventID Event identifier.
+        @param varargs ... Arguments forwarded to hooks.
+        @ret table tResults Hook results/errors returned by eventrix.fire.
+        !]]
+        public final fireEvent(eEventID, ...) {
+            return this.eventrix.fire(eEventID, ...);
+        }
+
+        --[[!
+        @fqxn CoG.CoGObject.validateSnapshot
+        @desc Validates restored metadata and components, then reconnects owned
+            affixes without replaying callbacks. No private component state escapes.
+        @param table state Restored LXC projection.
+        !]]
+        private validateSnapshot(state) {
+            type.assert.string(state.pro.Name, "%S+");
+            type.assert.string(state.pro.Description, "%S+");
+            assert(lxe.isMember(state.pro.Rarity, CoG.LEVEL),
+                "Invalid saved object rarity.");
+            assert(type(state.pro.TagSystem) == "TagSystem", "Invalid saved object tags.");
+            assert(type(state.pro.eventrix) == "eventrix", "Invalid saved object dispatcher.");
+            assert(class.isa(state.pro.AffixSystem, CoG.AffixSystem),
+                "Invalid saved object affix component.");
+            this.getAffixSystem();
+        }
+    }
+}
+

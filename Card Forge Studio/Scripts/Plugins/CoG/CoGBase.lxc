@@ -1,0 +1,220 @@
+--[[!
+@fqxn CoG.CoGBase
+@pulsarlua class CoGBase
+@desc Common base class and static framework utilities for CoG. LuaEx discovers
+    this declaration through package.path. Initialize cog.load afterward to
+    assemble configuration and publish the CoGBase class alias. CoG remains the
+    namespace. The protected constructor permits derived classes while preventing
+    direct construction.
+!]]
+namespace CoG {
+    class CoGBase {
+        -- Configuration is captured once, after cog.load assembles and locks it.
+        -- Discovery must not read configuration or select an application overlay.
+        private static _tConfig = null;
+
+        --[[!
+        @fqxn CoG.CoGBase.Properties.config
+        @pulsarlua table CoGBase.config
+        @desc Returns the configuration assembled by cog.load. The loader captures
+            this reference before exposing the initialized framework. Neither the
+            property nor the configuration's ordinary nested tables can be changed.
+            Later changes to the require cache do not replace this reference.
+        @ret table tConfig The same read-only table returned by require("cog.config").
+        @throws CoGBase configuration has not been initialized through cog.load.
+        !]]
+        public static config {
+            get {
+                if (type.isnull(CoGBase._tConfig)) then
+                    local tConfig = package.loaded["cog.config"];
+                    type.assert.custom(tConfig, "table",
+                        "Initialize CoG through cog.load before reading CoGBase.config.");
+                    CoGBase._tConfig = tConfig;
+                end
+
+                return CoGBase._tConfig;
+            }
+        }
+
+        --[[!
+        @fqxn CoG.CoGBase.Helpers.IsLeapYear
+        @desc Applies the Gregorian divisibility rules used by BuildVersionID.
+        @param number nYear Calendar year.
+        @ret boolean|nil bLeap Whether the year is a leap year; nil for a nonnumber.
+        @ret string|nil sError Validation error when the year is not a number.
+        !]]
+        private static IsLeapYear(nYear) {
+            if (type(nYear) ~= "number") then
+                return nil, "Invalid year";
+            end
+
+            return (nYear % 4 == 0 and nYear % 100 ~= 0) or nYear % 400 == 0;
+        }
+
+        --[[!
+        @fqxn CoG.CoGBase.Helpers.GetDayOfYear
+        @desc Converts date components to their one-based ordinal within the year.
+            February uses the Gregorian leap-year rules. Invalid components return
+            an error for BuildVersionID to report.
+        @param number nYear Calendar year.
+        @param number nMonth One-based month.
+        @param number nDay One-based day within the month.
+        @ret number|nil nOrdinal Day of year, or nil for an invalid date.
+        @ret string|nil sError Validation error for an invalid date.
+        !]]
+        private static GetDayOfYear(nYear, nMonth, nDay) {
+            if (type(nYear) ~= "number" or type(nMonth) ~= "number" or
+                type(nDay) ~= "number") then
+                return nil, "Invalid date components";
+            end
+
+            local bLeap, sError = CoGBase.IsLeapYear(nYear);
+
+            if (bLeap == nil) then
+                return nil, sError;
+            end
+
+            local tDaysInMonth = {
+                31, bLeap and 29 or 28, 31, 30, 31, 30,
+                31, 31, 30, 31, 30, 31,
+            };
+
+            if (nMonth < 1 or nMonth > 12) then
+                return nil, "Invalid month";
+            end
+
+            if (nDay < 1 or nDay > tDaysInMonth[nMonth]) then
+                return nil, "Invalid day";
+            end
+
+            local nTotal = nDay;
+
+            for nMonthIndex = 1, nMonth - 1 do
+                nTotal = nTotal + tDaysInMonth[nMonthIndex];
+            end
+
+            return nTotal;
+        }
+
+        --[[!
+        @fqxn CoG.CoGBase.Helpers.VersionIDToNumber
+        @desc Removes periods and converts a version ID to its comparison number.
+            Preserves the established comparison rule; this is not semantic-version
+            ordering. Prefixes and suffixes are not stripped.
+        @param string sID Version ID containing numeric components and periods.
+        @ret number|nil nID Numeric version ID, or nil when conversion fails.
+        !]]
+        private static VersionIDToNumber(sID) {
+            local sDigits = sID:gsub("%.", "");
+
+            return tonumber(sDigits);
+        }
+
+        --[[!
+        @fqxn CoG.CoGBase.Methods.purge
+        @pulsarlua function CoGBase.purge
+        @desc Marks an ordinary configuration table for complete replacement of
+            the matching default branch. Preserves the table's contents and
+            existing metatable values. A shared metatable receives the same marker.
+            The configuration assembler performs the replacement when loading.
+        @param table tConfig User configuration branch to mark.
+        @ret table tConfig The same table, with __purge = true on its metatable.
+        @throws The input is not an ordinary table.
+        @ex return {app = {path = CoGBase.purge({save = "saves/"})}};
+        !]]
+        public static purge(tConfig) {
+            type.assert.custom(tConfig, "table",
+                "CoGBase.purge requires a configuration table.");
+            local tMeta = debug.getmetatable(tConfig);
+
+            if (tMeta == nil) then
+                tMeta = {};
+                setmetatable(tConfig, tMeta);
+            end
+
+            rawset(tMeta, "__purge", true);
+
+            return tConfig;
+        }
+
+        --[[!
+        @fqxn CoG.CoGBase.Methods.BuildVersionID
+        @pulsarlua function CoGBase.BuildVersionID
+        @desc Builds a local-time version ID as year.day-of-year.hour. The hour
+            has two digits; the ordinal day is not padded. String prefix/suffix
+            arguments are retained; other argument types contribute empty strings.
+        @param string|any vPrefix Optional text before the numeric version.
+        @param string|any vSuffix Optional text after the numeric version.
+        @ret string sVersion Formatted version ID.
+        @throws The system date cannot be obtained or its date components are invalid.
+        !]]
+        public static BuildVersionID(vPrefix, vSuffix) {
+            local tNow = os.date("*t");
+
+            if (type(tNow) ~= "table") then
+                error("Failed to retrieve system time", 2);
+            end
+
+            local nDayOfYear, sError = CoGBase.GetDayOfYear(tNow.year, tNow.month, tNow.day);
+
+            if (not nDayOfYear) then
+                error("BuildVersionID failed: "..sError, 2);
+            end
+
+            local sPrefix = type(vPrefix) == "string" and vPrefix or "";
+            local sSuffix = type(vSuffix) == "string" and vSuffix or "";
+
+            return sPrefix..string.format("%d.%d.%02d",
+                tNow.year, nDayOfYear, tNow.hour)..sSuffix;
+        }
+
+        --[[!
+        @fqxn CoG.CoGBase.Methods.VersionIDIsNewer
+        @pulsarlua function CoGBase.VersionIDIsNewer
+        @desc Compares the numeric IDs obtained by removing periods from both strings.
+        @param string sID1 First numeric version ID.
+        @param string sID2 Second numeric version ID.
+        @ret boolean bNewer Whether the first ID is greater.
+        @throws An argument cannot be interpreted as a numeric version ID.
+        !]]
+        public static VersionIDIsNewer(sID1, sID2) {
+            return CoGBase.VersionIDToNumber(sID1) > CoGBase.VersionIDToNumber(sID2);
+        }
+
+        --[[!
+        @fqxn CoG.CoGBase.Methods.VersionIDIsOlder
+        @pulsarlua function CoGBase.VersionIDIsOlder
+        @desc Compares the numeric IDs obtained by removing periods from both strings.
+        @param string sID1 First numeric version ID.
+        @param string sID2 Second numeric version ID.
+        @ret boolean bOlder Whether the first ID is smaller.
+        @throws An argument cannot be interpreted as a numeric version ID.
+        !]]
+        public static VersionIDIsOlder(sID1, sID2) {
+            return CoGBase.VersionIDToNumber(sID1) < CoGBase.VersionIDToNumber(sID2);
+        }
+
+        --[[!
+        @fqxn CoG.CoGBase.Methods.VersionIDIsSame
+        @pulsarlua function CoGBase.VersionIDIsSame
+        @desc Tests equality after removing periods and converting both strings.
+            As before, two nonnumeric strings both convert to nil and compare equal.
+        @param string sID1 First version ID.
+        @param string sID2 Second version ID.
+        @ret boolean bSame Whether both converted IDs are equal.
+        !]]
+        public static VersionIDIsSame(sID1, sID2) {
+            return CoGBase.VersionIDToNumber(sID1) == CoGBase.VersionIDToNumber(sID2);
+        }
+
+        --[[!
+        @fqxn CoG.CoGBase.Methods.CoGBase
+        @pulsarlua function CoGBase
+        @desc Supplies the empty protected base constructor. Concrete descendants
+            may invoke it explicitly or use LXC's implicit parameterless base call.
+            CoGBase declares no instance fields, so descendants need no base snapshot hook.
+        !]]
+        protected CoGBase() {
+        }
+    }
+}

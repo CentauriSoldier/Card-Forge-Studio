@@ -1,0 +1,300 @@
+--[[!
+@fqxn CoG.Shuffler
+@desc Creates systems for randomized, non-repeating selection from a set of items, with support for resetting once all items have been selected. It maintains two internal tables: the pool, which stores all added items, and the buffer, a shuffled working copy used for pulling items via pop(). By default, when the buffer is emptied through pop(), it automatically resets by refilling from the pool.
+!]]
+namespace CoG {
+    class Shuffler {
+        private AutoReset = true;
+        protected pool = {};
+        protected remaining = {};
+
+        --[[!
+        @fqxn CoG.Shuffler.Helpers.copyPool
+        @desc Validates a dense input array and copies its entries without cloning their values.
+        !]]
+        private static copyPool(tInput) {
+            assert(rawtype(tInput) == "table" and not class.isinstance(tInput), "Shuffler pool must be a dense array.");
+            local tCopy = {};
+            local nCount = 0;
+
+            for nIndex in pairs(tInput) do
+                assert(rawtype(nIndex) == "number" and nIndex >= 1 and nIndex < math.huge and nIndex % 1 == 0,
+                       "Shuffler pool must use positive integer indices.");
+                nCount = nCount + 1;
+            end
+
+            for nIndex = 1, nCount do
+                assert(tInput[nIndex] ~= nil, "Shuffler pool cannot contain holes.");
+                tCopy[nIndex] = tInput[nIndex];
+            end
+
+            return tCopy;
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Helpers.validateSkipReset
+        @desc Rejects non-boolean skip-reset flags before any pool or buffer changes.
+        !]]
+        private static validateSkipReset(bSkipReset) {
+            assert(bSkipReset == nil or rawtype(bSkipReset) == "boolean", "SkipReset must be a boolean or nil.");
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.isAutoReset
+        @desc Reports whether exhausting the buffer automatically resets it.
+        @ret boolean bAutoReset Current automatic-reset setting.
+        !]]
+        public isAutoReset() {
+            return this.AutoReset;
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.setAutoReset
+        @desc Changes automatic reset without replacing the current buffer.
+        @param boolean bAutoReset Whether exhausting the buffer should reset it.
+        @ret Shuffler oShuffler This Shuffler for chaining.
+        !]]
+        public setAutoReset(bAutoReset) {
+            this.AutoReset = bAutoReset;
+            return this;
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.__pairs
+        @desc Consumes at most the current buffer cycle and stops when that buffer is replaced.
+        @ret function fIterator Consumptive index/value iterator.
+        !]]
+        public __pairs() {
+            local tRemaining = this.remaining;
+            local nIndex = 0;
+            local nMax = #tRemaining;
+
+            return function()
+
+                -- Stop at this cycle's boundary, even when pop refills the buffer.
+                -- Replacing the buffer also invalidates an existing iterator.
+                if (nIndex < nMax and rawequal(this.remaining, tRemaining) and #tRemaining > 0) then
+                    nIndex = nIndex + 1;
+                    return nIndex, this.pop();
+                end
+
+            end
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.shuffleRemaining
+        @desc Shuffles the current buffer in place; reset uses this protected hook independently of public shuffle overrides.
+        !]]
+        protected shuffleRemaining() {
+            local tRemaining = this.remaining;
+            local nRemaining = #tRemaining;
+
+            for x = nRemaining, 2, -1 do
+                local y = math.random(x);
+                tRemaining[x], tRemaining[y] = tRemaining[y], tRemaining[x];
+            end
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.Shuffler
+        @pulsarlua function Shuffler
+        @desc The class constructor.
+        @param table|nil Optional argument that is a numerically-indexed table containing items to add to the pool.
+        !]]
+        public Shuffler(tThePool) {
+            if (tThePool ~= nil) then
+                this.set(tThePool);
+            end
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.add
+        @pulsarlua function Shuffler.add
+        @desc Adds any non-nil item to the pool and resets the buffer.
+        @param any vItem Any non-nil item.
+        @param boolean|nil Optional argument that, if set to true, will skip resetting the buffer. This is useful for bulk additions.
+        @ret boolean bAddded True if the item was added, false otherwise.
+        !]]
+        public add(vItem, bSkipReset) {
+            Shuffler.validateSkipReset(bSkipReset);
+            local bRet = false;
+
+            if (vItem ~= nil) then
+                bRet = true;
+
+
+                table.insert(this.pool, vItem);
+
+                if (bRet and not bSkipReset) then
+                    this.reset();
+                end
+
+            end
+
+            return bRet;
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.empty
+        @pulsarlua function Shuffler.empty
+        @desc Empties the buffer so that no items are available for popping. The buffer will refill upon a reset.
+        !]]
+        public empty() {
+            this.remaining = {};
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.getRemaining
+        @pulsarlua function Shuffler.getRemaining
+        @desc Returns the total number items available in the buffer to pop before it requires reset.
+        @ret number bRemaining The total number of items available.
+        !]]
+        public getRemaining() {
+            return #this.remaining;
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.isEmpty
+        @desc Reports whether the current buffer contains no items.
+        @ret boolean bEmpty Whether no items remain.
+        !]]
+        public isEmpty() {
+            return #this.remaining < 1;
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.remove
+        @pulsarlua function Shuffler.remove
+        @desc Removes an item from the pool and resets the buffer.
+        <br>Note: if there is more than one instance of the item, only the first one (arbitrarily) encountered will be removed.
+        @param any vItem Any non-nil item that exists in the pool.
+        @param boolean|nil Optional argument that, if set to true, will skip resetting the buffer. This is useful for bulk removals.
+        @ret number bRemoved True if the item was removed, false otherwise.
+        !]]
+        public remove(vItem, bSkipReset) {
+            Shuffler.validateSkipReset(bSkipReset);
+            local bRet = false;
+
+            local tPool = this.pool;
+            local tRemaining = this.remaining;
+
+            if (vItem ~= nil) then
+                local zItem = type(vItem);
+
+                for nIndex, vMyItem in ipairs(tPool) do
+
+                    if (zItem == type(vMyItem) and vItem == vMyItem) then
+                        table.remove(tPool, nIndex);
+                        bRet = true;
+                        break;
+                    end
+
+                end
+
+                if (bRet) then
+
+                    if (not bSkipReset) then
+                        this.reset();
+                    else
+                        -- Remove one available occurrence without replenishing drawn items.
+                        for nIndex, vMyItem in ipairs(tRemaining) do
+
+                            if (zItem == type(vMyItem) and vItem == vMyItem) then
+                                table.remove(tRemaining, nIndex);
+                                break;
+                            end
+
+                        end
+
+                    end
+
+                end
+
+            end
+
+            return bRet;
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.pop
+        @pulsarlua function Shuffler.pop
+        @desc Removes a random item from the buffer and returns that item to the caller. If it's the last item in the buffer and auto-reset is enabled, the buffer is reset.
+        @ret any vItem The item removed from the buffer.
+        !]]
+        public pop() {
+            local vRet;
+
+            local tRemaining = this.remaining;
+            local nRemaining = #tRemaining;
+
+            if (nRemaining > 0) then
+                vRet = tRemaining[nRemaining];
+                table.remove(tRemaining, nRemaining);
+            end
+
+            if (#this.remaining < 1 and this.AutoReset) then
+                this.reset();
+            end
+
+            return vRet;
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.purge
+        @pulsarlua function Shuffler.purge
+        @desc Removes all the items from the pool and buffer.
+        !]]
+        public purge() {
+            this.pool       = {};
+            this.remaining  = {};
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.reset
+        @pulsarlua function Shuffler.reset
+        @desc Resets the buffer to contain all pool items, shuffles it and makes available all items for popping.
+        !]]
+        public reset() {
+            local tPool         = this.pool;
+            this.remaining       = {};
+            local tRemaining    = this.remaining;
+
+            for nIndex, vItem in ipairs(tPool) do
+                tRemaining[nIndex] = vItem;
+            end
+
+            this.shuffleRemaining();
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.set
+        @pulsarlua function Shuffler.set
+        @desc Replaces the pool with a validated dense array and resets the buffer.
+        @param table tSet Numerically indexed pool entries. Invalid input leaves the existing pool unchanged.
+        !]]
+        public set(tSet) {
+            local tPool = Shuffler.copyPool(tSet);
+            this.pool = tPool;
+            this.reset();
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.size
+        @pulsarlua function Shuffler.size
+        @desc Returns the total number items in the pool (not the buffer).
+        @ret number bRemaining The total number of items in the pool.
+        !]]
+        public size() {
+            return #this.pool;
+        }
+
+        --[[!
+        @fqxn CoG.Shuffler.Methods.shuffle
+        @pulsarlua function Shuffler.shuffle
+        @desc Shuffles the items in the buffer. By default, this is done automatically when all items in the buffer have been popped (unless the AutoReset flag has been set to false).
+        !]]
+        public shuffle() {
+            this.shuffleRemaining();
+        }
+    }
+}

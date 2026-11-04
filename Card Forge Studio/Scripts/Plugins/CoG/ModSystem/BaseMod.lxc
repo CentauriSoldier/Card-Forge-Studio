@@ -1,0 +1,506 @@
+--[[!
+@fqxn CoG.BaseMod.Guide
+@desc <h3>Metadata and definitions, without lifecycle ownership</h3>
+    <p>BaseMod validates and commits metadata only after complete validation. Invalid input
+    logs a warning and leaves declared metadata defaults intact rather than raising a
+    constructor exception. getInfo supplies metadata for Factorium, which owns acceptance,
+    rejection reasons and activation. BaseMod supplies no mod lifecycle hooks.</p>
+    <p>Returned author, dependency and conflict arrays are copies. Raw blueprint entries are
+    retained for Factorium to validate individually. A logger function or dot-call log object
+    may be supplied through setLog; the fallback lazily uses BaseMod.log. Warnings are retained
+    even if external logging fails. Factorium.setLog also supplies this class's logger.</p>
+!]]
+--[[!
+@fqxn CoG.BaseMod
+@desc Base for game-specific mod objects. Metadata is validated before any commit;
+    rejected metadata logs a warning and retains unset defaults. Factorium owns
+    activation and acceptance state. LuaEx discovers this class without loader aliases.
+!]]
+namespace CoG {
+    class BaseMod {
+        -- Permanent identity for base-game/default content. NEVER CHANGE THIS VALUE.
+        public static const DEFAULT_MOD_ID = "27a27ca4-5f85-48ea-a30d-e6ad95d89d84";
+        public static const MAX_VERSION = 999;
+
+        private static _tLog = {};
+        private static _tWarnings = {};
+
+        protected authors = {};
+        protected blueprints = {};
+        protected conflicts = {};
+        protected required = {};
+        protected Path = "";
+
+        -- Final bindings hold private backing records. Their nullable value preserves
+        -- the old read-only field contract: first non-null assignment locks the value,
+        -- while invalid construction may leave it unset. Protected reads stay scalar.
+        protected final Contact {
+            get("read") { return field.value; }
+            set("assign") { BaseMod.assignReadOnly(field, value, "Contact"); }
+        } = {value = null};
+
+        protected final Description {
+            get("read") { return field.value; }
+            set("assign") { BaseMod.assignReadOnly(field, value, "Description"); }
+        } = {value = null};
+
+        protected final ID {
+            get("read") { return field.value; }
+            set("assign") { BaseMod.assignReadOnly(field, value, "ID"); }
+        } = {value = null};
+
+        protected final Name {
+            get("read") { return field.value; }
+            set("assign") { BaseMod.assignReadOnly(field, value, "Name"); }
+        } = {value = null};
+
+        protected final Released {
+            get("read") { return field.value; }
+            set("assign") { BaseMod.assignReadOnly(field, value, "Released"); }
+        } = {value = null};
+
+        protected final Updated {
+            get("read") { return field.value; }
+            set("assign") { BaseMod.assignReadOnly(field, value, "Updated"); }
+        } = {value = null};
+
+        protected final Version {
+            get("read") { return field.value; }
+            set("assign") { BaseMod.assignReadOnly(field, value, "Version"); }
+        } = {value = null};
+
+        protected final Website {
+            get("read") { return field.value; }
+            set("assign") { BaseMod.assignReadOnly(field, value, "Website"); }
+        } = {value = null};
+
+        --[[!
+        @fqxn CoG.BaseMod.assignReadOnly
+        @desc Preserves nullable read-only assignment without changing the final backing
+            record's binding. No constructor deadline is imposed on an unset value.
+        @param table tField Private property backing record.
+        @param any vValue First non-null value, or null while unset.
+        @param string sName Field used in diagnostics.
+        !]]
+        private static assignReadOnly(tField, vValue, sName) {
+            assert(vValue ~= nil, "BaseMod metadata cannot be nil: "..sName);
+            assert(rawequal(tField.value, null), "BaseMod metadata is read-only: "..sName);
+            tField.value = vValue;
+        }
+
+        --[[!
+            @fqxn CoG.BaseMod.Helpers.isPlainTable
+            @desc Checks for ordinary metadata tables without class/instance behavior or metatables.
+            @param any vValue Candidate metadata container.
+            @ret boolean bPlain Whether the value is an ordinary table.
+            @vis private static
+        !]]
+        private static isPlainTable(vValue) {
+            -- Check both raw storage and LuaEx type before accepting a data container.
+            return rawtype(vValue) == "table" and type(vValue) == "table"
+                   and getmetatable(vValue) == nil;
+        }
+
+        --[[!
+            @fqxn CoG.BaseMod.Helpers.isNonblank
+            @desc Checks for a string with at least one visible character.
+            @param any vValue Candidate field value.
+            @ret boolean bNonblank Whether the string contains non-whitespace text.
+            @vis private static
+        !]]
+        private static isNonblank(vValue) {
+            -- Guard the type before searching the string.
+            return rawtype(vValue) == "string" and vValue:find("%S") ~= nil;
+        }
+
+        --[[!
+            @fqxn CoG.BaseMod.Helpers.readStringList
+            @desc Copies a dense numeric list of strings. UUID lists are normalized and deduplicated;
+            author lists retain supplied order. Invalid entries reject the list rather than disappearing.
+            @param table|nil vInput Supplied list; nil is permitted only for optional lists.
+            @param string sField Field name for diagnostics.
+            @param boolean bUUID Whether entries must be UUIDs.
+            @param boolean bRequired Whether at least one entry is required.
+            @ret table|nil tList Validated independent list.
+            @ret string|nil sReason First list failure.
+            @vis private static
+        !]]
+        private static readStringList(vInput, sField, bUUID, bRequired) {
+            -- Step 1: distinguish an omitted optional list from an invalid supplied value.
+            if (vInput == nil and not bRequired) then
+                return {};
+            end
+
+            if (not BaseMod.isPlainTable(vInput)) then
+                return nil, sField.." must be a dense list of strings.";
+            end
+
+            -- Step 2: verify numeric positions without relying on # for a sparse table.
+            local nCount = 0;
+
+            for vKey in pairs(vInput) do
+                if (rawtype(vKey) ~= "number" or vKey < 1 or vKey % 1 ~= 0) then
+                    return nil, sField.." must use positive integer list positions.";
+                end
+
+                nCount = nCount + 1;
+            end
+
+            if (bRequired and nCount == 0) then
+                return nil, sField.." must contain at least one entry.";
+            end
+
+            -- Step 3: copy valid entries, rejecting holes and malformed UUIDs explicitly.
+            local tList = {};
+            local tSeen = {};
+
+            for nIndex = 1, nCount do
+                local sValue = vInput[nIndex];
+
+                if (not BaseMod.isNonblank(sValue)) then
+                    return nil, sField.."["..nIndex.."] must be a nonblank string; holes are not allowed.";
+                end
+
+                if (bUUID) then
+                    if (not sValue:isuuid()) then
+                        return nil, sField.."["..nIndex.."] must be a mod UUID.";
+                    end
+
+                    sValue = sValue:lower();
+                end
+
+                if (not bUUID or not tSeen[sValue]) then
+                    tList[#tList + 1] = sValue;
+                    tSeen[sValue] = true;
+                end
+            end
+
+            return tList;
+        }
+
+        --[[!
+            @fqxn CoG.BaseMod.Helpers.prepareInfo
+            @desc Validates and normalizes metadata without modifying the supplied table.
+            Blueprint entries remain raw so Factorium can reject them individually.
+            @param table tInput Mod-file metadata table.
+            @ret table|nil tInfo Normalized metadata with independent author/relationship lists.
+            @ret string|nil sReason Metadata rejection reason.
+            @vis private static
+        !]]
+        private static prepareInfo(tInput) {
+            -- Step 1: validate the container and required identity/display fields.
+            if (not BaseMod.isPlainTable(tInput)) then
+                return nil, "Mod metadata must be a plain table.";
+            end
+
+            if (not BaseMod.isNonblank(tInput.id) or not tInput.id:isuuid()) then
+                return nil, "Mod id must be a UUID.";
+            end
+
+            for _, sField in ipairs({ "name", "description" }) do
+                if (not BaseMod.isNonblank(tInput[sField])) then
+                    return nil, "Mod "..sField.." must be a nonblank string.";
+                end
+            end
+
+            -- Step 2: validate and copy the author, dependency and conflict lists.
+            local tAuthors, sReason = BaseMod.readStringList(tInput.authors, "authors", false, true);
+
+            if (not tAuthors) then
+                return nil, sReason;
+            end
+
+            local tRequired;
+            tRequired, sReason = BaseMod.readStringList(tInput.required, "required", true, false);
+
+            if (not tRequired) then
+                return nil, sReason;
+            end
+
+            local tConflicts;
+            tConflicts, sReason = BaseMod.readStringList(tInput.conflicts, "conflicts", true, false);
+
+            if (not tConflicts) then
+                return nil, sReason;
+            end
+
+            -- Step 3: check real calendar dates and finite numeric version bounds.
+            for _, sField in ipairs({ "released", "updated" }) do
+                local sDate = tInput[sField];
+
+                if (rawtype(sDate) ~= "string" or not sDate:isdatevalid()) then
+                    return nil, "Mod "..sField.." must be a valid YYYY-MM-DD date.";
+                end
+            end
+
+            local nVersion = tInput.version;
+
+            if (rawtype(nVersion) ~= "number" or nVersion ~= nVersion
+                or nVersion < 0.01 or nVersion > BaseMod.MAX_VERSION) then
+                return nil, "Mod version must be between 0.01 and "..BaseMod.MAX_VERSION..".";
+            end
+
+            -- Step 4: validate only the blueprint container, leaving its entries to Factorium.
+            if (tInput.blueprints ~= nil and not BaseMod.isPlainTable(tInput.blueprints)) then
+                return nil, "Mod blueprints must be a plain table.";
+            end
+
+            -- Step 5: produce normalized metadata; omitted optional strings become empty.
+            return {
+                id          = tInput.id:lower(),
+                name        = tInput.name,
+                authors     = tAuthors,
+                description = tInput.description,
+                released    = tInput.released,
+                updated     = tInput.updated,
+                version     = nVersion,
+                contact     = rawtype(tInput.contact) == "string" and tInput.contact or "",
+                website     = BaseMod.isNonblank(tInput.website) and tInput.website or "",
+                required    = tRequired,
+                conflicts   = tConflicts,
+                blueprints  = tInput.blueprints or {},
+            };
+        }
+
+        --[[!
+            @fqxn CoG.BaseMod.Methods.validateModInfo
+            @desc Validates metadata through a protected boundary. Returns normalized data or a reason,
+            without logging or throwing; the constructor/importer owns contextual reporting.
+            @param table tInput Returned mod metadata table.
+            @ret table|nil tInfo Normalized metadata on success.
+            @ret string|nil sReason Validation failure, including unexpected helper errors.
+            @vis static public
+        !]]
+        public static validateModInfo(tInput) {
+            -- Turn unexpected helper failures into the same ordinary rejection contract.
+            local bOK, tInfo, sReason = pcall(BaseMod.prepareInfo, tInput);
+
+            if (not bOK) then
+                return nil, tostring(tInfo);
+            end
+
+            return tInfo, sReason;
+        }
+
+        --[[!
+        @fqxn CoG.BaseMod.warn
+        @desc Retains warnings before invoking logging code. Callback failures and
+            unavailable or failing lazy BaseLog construction never interrupt the mod.
+        @param string sMessage Warning context.
+        !]]
+        private static warn(sMessage) {
+            local sWarning = "BaseMod: "..sMessage;
+            BaseMod._tWarnings[#BaseMod._tWarnings + 1] = sWarning;
+
+            pcall(function()
+                local log = BaseMod._tLog[1];
+                local BaseLogClass = class.getbyname("LuaEx.Classes.BaseLog");
+
+                if (log == nil) then
+                    assert(BaseLogClass, "Initialize LuaEx utility classes for the default BaseMod logger.");
+                    log = BaseLogClass("BaseMod.log", function()
+                        return os.date("%Y-%m-%d %H:%M:%S");
+                    end);
+                    BaseMod._tLog[1] = log;
+                end
+
+                if (rawtype(log) == "function") then
+                    log(sWarning);
+                else
+                    assert(BaseLogClass, "Initialize LuaEx utility classes for BaseLog warning levels.");
+                    log.log(sWarning, BaseLogClass.LEVEL.WARNING);
+                end
+            end);
+        }
+
+        --[[!
+        @fqxn CoG.BaseMod.setLog
+        @desc Selects a callback or dot-call logger object; nil restores lazy BaseLog.
+            Invalid destinations leave the existing destination unchanged.
+        @param function|table|nil log Logging callback or object with log method.
+        @ret boolean bSuccess Whether the destination was accepted.
+        @ret string|nil sReason Invalid-destination explanation.
+        !]]
+        public static setLog(log) {
+            if (log ~= nil and rawtype(log) ~= "function") then
+                local bOK, bValid = pcall(function()
+                    return rawtype(log.log) == "function";
+                end);
+
+                if (not bOK or not bValid) then
+                    local sReason = "Log must be a callback or object with a log method.";
+                    BaseMod.warn(sReason);
+                    return false, sReason;
+                end
+            end
+
+            BaseMod._tLog[1] = log;
+            return true;
+        }
+
+        --[[!
+        @fqxn CoG.BaseMod.getWarnings
+        @desc Returns an independent ordered copy of retained diagnostic strings.
+        @ret table tMessages Warning copy.
+        !]]
+        public static getWarnings() {
+            local tMessages = {};
+            for nIndex, sMessage in ipairs(BaseMod._tWarnings) do
+                tMessages[nIndex] = sMessage;
+            end
+            return tMessages;
+        }
+
+        --[[!
+        @fqxn CoG.BaseMod.Constructor
+        @desc Validates all metadata before commit. Rejected input logs and returns
+            with the original unset defaults. Lists are copied; blueprints retain
+            their raw reference for Factorium's later per-entry validation.
+        @param table tModInfo Mod metadata supplied by a subclass constructor.
+        !]]
+        protected BaseMod(tModInfo) {
+            local tInfo, sReason = BaseMod.validateModInfo(tModInfo);
+
+            if (not tInfo) then
+                local sName, sID = "unnamed", "unknown ID";
+                if (BaseMod.isPlainTable(tModInfo)) then
+                    sName = BaseMod.isNonblank(tModInfo.name) and tModInfo.name or sName;
+                    sID = BaseMod.isNonblank(tModInfo.id) and tModInfo.id or sID;
+                end
+                BaseMod.warn("Mod '"..sName.."' ("..sID..") rejected: "..sReason);
+                return;
+            end
+
+            this.ID = tInfo.id;
+            this.Name = tInfo.name;
+            this.authors = tInfo.authors;
+            this.Contact = tInfo.contact;
+            this.Description = tInfo.description;
+            this.Released = tInfo.released;
+            this.Updated = tInfo.updated;
+            this.Version = tInfo.version;
+            this.Website = tInfo.website;
+            this.blueprints = tInfo.blueprints;
+
+            for _, sID in ipairs(tInfo.required) do this.required[sID] = true; end
+            for _, sID in ipairs(tInfo.conflicts) do this.conflicts[sID] = true; end
+        }
+
+        --[[!
+        @fqxn CoG.BaseMod.getContact
+        @desc Retains the final public getter for protected Contact metadata.
+        @ret any vValue Current metadata value; unset scalars remain null.
+        !]]
+        public final getContact() { return this.Contact; }
+
+        --[[!
+        @fqxn CoG.BaseMod.getDescription
+        @desc Retains the final public getter for protected Description metadata.
+        @ret any vValue Current metadata value; unset scalars remain null.
+        !]]
+        public final getDescription() { return this.Description; }
+
+        --[[!
+        @fqxn CoG.BaseMod.getID
+        @desc Retains the final public getter for protected ID metadata.
+        @ret any vValue Current metadata value; unset scalars remain null.
+        !]]
+        public final getID() { return this.ID; }
+
+        --[[!
+        @fqxn CoG.BaseMod.getName
+        @desc Retains the final public getter for protected Name metadata.
+        @ret any vValue Current metadata value; unset scalars remain null.
+        !]]
+        public final getName() { return this.Name; }
+
+        --[[!
+        @fqxn CoG.BaseMod.getReleased
+        @desc Retains the final public getter for protected Released metadata.
+        @ret any vValue Current metadata value; unset scalars remain null.
+        !]]
+        public final getReleased() { return this.Released; }
+
+        --[[!
+        @fqxn CoG.BaseMod.getUpdated
+        @desc Retains the final public getter for protected Updated metadata.
+        @ret any vValue Current metadata value; unset scalars remain null.
+        !]]
+        public final getUpdated() { return this.Updated; }
+
+        --[[!
+        @fqxn CoG.BaseMod.getVersion
+        @desc Retains the final public getter for protected Version metadata.
+        @ret any vValue Current metadata value; unset scalars remain null.
+        !]]
+        public final getVersion() { return this.Version; }
+
+        --[[!
+        @fqxn CoG.BaseMod.getWebsite
+        @desc Retains the final public getter for protected Website metadata.
+        @ret any vValue Current metadata value; unset scalars remain null.
+        !]]
+        public final getWebsite() { return this.Website; }
+
+        --[[!
+        @fqxn CoG.BaseMod.getPath
+        @desc Retains the final public getter for protected Path metadata.
+        @ret any vValue Current metadata value; unset scalars remain null.
+        !]]
+        public final getPath() { return this.Path; }
+
+        --[[!
+        @fqxn CoG.BaseMod.getInfo
+        @desc Returns mod-file metadata. Author and relationship lists are independent;
+            UUID sets become sorted lists. Raw blueprint definitions retain their
+            reference until Factorium validates them. No validity/lifecycle flag is added.
+        @ret table tModInfo Metadata and raw definitions, including unset defaults.
+        !]]
+        public getInfo() {
+            local tAuthors, tRequired, tConflicts = {}, {}, {};
+            for nIndex, sAuthor in ipairs(this.authors) do tAuthors[nIndex] = sAuthor; end
+            for sID in pairs(this.required) do tRequired[#tRequired + 1] = sID; end
+            for sID in pairs(this.conflicts) do tConflicts[#tConflicts + 1] = sID; end
+            table.sort(tRequired);
+            table.sort(tConflicts);
+
+            return {
+                id = this.ID,
+                name = this.Name,
+                authors = tAuthors,
+                description = this.Description,
+                released = this.Released,
+                updated = this.Updated,
+                version = this.Version,
+                contact = this.Contact,
+                website = this.Website,
+                required = tRequired,
+                conflicts = tConflicts,
+                blueprints = this.blueprints,
+            };
+        }
+
+        --[[!
+        @fqxn CoG.BaseMod.validateSnapshot
+        @desc Checks the private backing shape for read-only metadata and the types
+            of protected lists/maps. Unset or partially initialized metadata remains
+            legitimate state; restoration does not manufacture a validity flag.
+        @param table tState Declaring-class native field projection.
+        !]]
+        private validateSnapshot(tState) {
+            local pro = tState.pro;
+            for _, sName in ipairs({"Contact", "Description", "ID", "Name", "Released", "Updated", "Version", "Website"}) do
+                local tField = pro[sName];
+                assert(BaseMod.isPlainTable(tField) and tField.value ~= nil,
+                    "Invalid BaseMod read-only storage: "..sName);
+                for sKey in pairs(tField) do
+                    assert(sKey == "value", "Unknown BaseMod read-only storage field.");
+                end
+            end
+            for _, sName in ipairs({"authors", "blueprints", "conflicts", "required"}) do
+                type.assert.table(pro[sName]);
+            end
+            assert(rawtype(pro.Path) == "string", "Invalid BaseMod path.");
+        }
+    }
+}
