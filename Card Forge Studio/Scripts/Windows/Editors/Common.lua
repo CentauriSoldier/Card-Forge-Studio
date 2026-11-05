@@ -17,6 +17,14 @@
 
 -- Shared source draft, saving, and editor controls for the two source windows.
 local wx = require("wx");
+
+-- KEYBOARD SHORTCUTS: edit or add bindings here.
+-- flags: combine wx.wxACCEL_CTRL / SHIFT / ALT; key: a letter byte or wx.WXK_*.
+-- action names refer to tShortcutActions in create(), alongside the Save handler.
+local _tKeyBindings = {
+    {action = "Save", flags = wx.wxACCEL_CTRL, key = string.byte("S")},
+};
+
 local wxstc = wxstc;
 local EditorSettings = require("Windows.EditorSettings");
 local WindowState = require("Windows.WindowState");
@@ -375,6 +383,16 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
         return nAnswer == wx.wxNO;
     end
     oSave:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(save));
+    -- Resolve the editable shortcut definitions to this window's existing actions.
+    local tShortcutActions = {Save = save};
+    local tAccelerators = {};
+    for _, tBinding in ipairs(_tKeyBindings) do
+        local fAction = assert(tShortcutActions[tBinding.action], "Unknown editor shortcut action: "..tBinding.action);
+        local nCommand = wx.wxNewId();
+        tAccelerators[#tAccelerators + 1] = wx.wxAcceleratorEntry(tBinding.flags, tBinding.key, nCommand);
+        dFrame:Connect(nCommand, wx.wxEVT_COMMAND_MENU_SELECTED, protect(fAction));
+    end
+    dFrame:SetAcceleratorTable(wx.wxAcceleratorTable(tAccelerators));
     oClose:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function() dFrame:Close(); end);
     dFrame:Connect(oTimer:GetId(), wx.wxEVT_TIMER, protect(refresh));
     dFrame:Connect(wx.wxEVT_CLOSE_WINDOW, function(oEvent)
