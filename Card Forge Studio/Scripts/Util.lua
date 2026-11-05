@@ -22,6 +22,7 @@ local _tReleaseFiles = {
 local _tReleaseFolders = {
     "Scripts",
     "Images",
+    "Audio",
     "Fonts",
     "Docs",
     "Bin",

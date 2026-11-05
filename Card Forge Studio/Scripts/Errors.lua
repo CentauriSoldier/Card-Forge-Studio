@@ -30,7 +30,7 @@ local _bReporting = false;
 !]]
 function Errors.report(vError, bRenderer)
     local sError = tostring(vError);
-    local pFile = APP_PATH.."/log.log";
+    local pFile = assert(_AppDataLocal).."/log.log";
     if (bRenderer) then sError = "Renderer: "..sError; end
     if (_bReporting) then
         local hFile = io.open(pFile, "a");

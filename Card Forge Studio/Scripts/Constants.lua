@@ -60,13 +60,13 @@ constant("_Bin",          pRoot.."/Bin");
 @desc Application installation folder supplied by the launcher.
 !]]
 constant("_ExeFolder",    pRoot);
--- Documentation has not been migrated; use the existing archive read-only.
+-- Bundled documentation assets live with the application.
 --[[!
 @fqxn CFS.Constants._Docs
 @pulsarlua string _Docs
-@desc Path to retained archived documentation assets, including licenses and templates; distinct from the current Docs output folder.
+@desc Path to bundled application documentation and supporting assets.
 !]]
-constant("_Docs",         pRoot.."/CFS Archive/Docs");
+constant("_Docs",         pRoot.."/Docs");
 
 local nTimerID = 99;
 --[[!
@@ -151,7 +151,7 @@ assert(hLicense:close());
 --[[!
 @fqxn CFS.Constants.LICENSE
 @pulsarlua string LICENSE
-@desc Bundled license text loaded from the archived documentation Licenses folder.
+@desc Bundled license text loaded from the application documentation Licenses folder.
 !]]
 constant("LICENSE", sLicense);
 

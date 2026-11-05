@@ -13,7 +13,7 @@
 </section>
 !]]
 
--- Welcome page artwork from the original AutoPlay page.
+-- Welcome page artwork uses a separate card logo and sparse fabrication backdrop.
 -- Development controls and WindowWizard experiments are intentionally omitted.
 local wx = require("wx");
 local Welcome = {};
@@ -27,13 +27,14 @@ local Welcome = {};
 function Welcome.create(pApplication)
     local sVersion = INIFile.GetValue(FS.AppCFG, "Settings", "Version"):gsub("[Aa][Ll][Pp][Hh][Aa]", "Beta");
     if (not sVersion:lower():find("beta", 1, true)) then sVersion = "Beta "..sVersion; end
-    local oVersionFont = wx.wxFont(10, wx.wxFONTFAMILY_ROMAN, wx.wxFONTSTYLE_NORMAL, wx.wxFONTWEIGHT_NORMAL, false, "Times New Roman");
+    local oVersionFont = wx.wxFont(10, wx.wxFONTFAMILY_SWISS, wx.wxFONTSTYLE_NORMAL, wx.wxFONTWEIGHT_NORMAL);
     assert(oVersionFont:IsOk(), "Cannot create the Welcome version font.");
     local oQuiet = wx.wxLogNull();
     local tLayers = {
-        {file = "BG Welcome.png", x = -202, y = 0, width = 1804, height = 1200},
-        {file = "Card Forge.png", x = 371, y = 333, width = 658, height = 160},
-        {file = "Studio.png", x = 501, y = 492, width = 399, height = 138},
+        {file = "BG Welcome.png", x = 0, y = 0, width = 1536, height = 1024},
+        {file = "Logo.png", x = -5, y = 130, width = 700, height = 700},
+        {file = "Card Forge.png", x = 735, y = 290, width = 700, height = 233},
+        {file = "Studio.png", x = 735, y = 490, width = 700, height = 233},
     };
 
     for _, tLayer in ipairs(tLayers) do
@@ -42,6 +43,25 @@ function Welcome.create(pApplication)
     end
 
     oQuiet:delete();
+    local oBackgroundImage = tLayers[1].image;
+    local nSampleX = oBackgroundImage:GetWidth() - 1;
+    local oBackgroundColour = wx.wxColour(oBackgroundImage:GetRed(nSampleX, 0),
+        oBackgroundImage:GetGreen(nSampleX, 0), oBackgroundImage:GetBlue(nSampleX, 0));
+
+    --[[!
+    @fqxn CFS.Windows.Main.Welcome.Private.Functions.drawRail
+    @desc Connects the three differently shaped link modules to a shared machine rail.
+    @vis private
+    !]]
+    local function drawRail(oDC, nWidth)
+        local nLeft = math.max(8, nWidth - 336);
+        oDC:SetPen(wx.wxPen(wx.wxColour(46, 64, 79), 8, wx.wxPENSTYLE_SOLID));
+        oDC:DrawLine(nLeft, 62, nWidth - 22, 62);
+        oDC:SetPen(wx.wxPen(wx.wxColour(100, 122, 139), 1, wx.wxPENSTYLE_SOLID));
+        oDC:DrawLine(nLeft, 58, nWidth - 22, 58);
+        oDC:SetPen(wx.wxPen(wx.wxColour(0, 153, 191), 2, wx.wxPENSTYLE_SOLID));
+        oDC:DrawLine(nLeft, 64, nWidth - 22, 64);
+    end
 
     --[[!
     @fqxn CFS.Windows.Main.Welcome.Private.Functions.draw
@@ -51,23 +71,42 @@ function Welcome.create(pApplication)
     !]]
     local function draw(oCanvas)
         local oSize = oCanvas:GetClientSize();
-        local nScale = math.min(oSize:GetWidth() / 1400, oSize:GetHeight() / 1200);
-        local nLeft = (oSize:GetWidth() - 1400 * nScale) / 2;
-        local nTop = (oSize:GetHeight() - 1200 * nScale) / 2;
+        local nScale = math.min(oSize:GetWidth() / 1536, oSize:GetHeight() / 1024);
+        local nLeft = (oSize:GetWidth() - 1536 * nScale) / 2;
+        local nTop = (oSize:GetHeight() - 1024 * nScale) / 2;
         local oDC = wx.wxPaintDC(oCanvas);
-        oDC:SetBackground(wx.wxBrush(wx.wxColour(0, 0, 0)));
+        oDC:SetBackground(wx.wxBrush(oBackgroundColour));
         oDC:Clear();
 
-        for nIndex, tLayer in ipairs(tLayers) do
-            local nLayerScale = nIndex == 1 and math.max(oSize:GetWidth() / tLayer.width, oSize:GetHeight() / tLayer.height) or nScale;
-            local nLayerLeft = nIndex == 1 and (oSize:GetWidth() - tLayer.width * nLayerScale) / 2 or nLeft + tLayer.x * nScale;
-            local nLayerTop = nIndex == 1 and (oSize:GetHeight() - tLayer.height * nLayerScale) / 2 or nTop + tLayer.y * nScale;
+        for _, tLayer in ipairs(tLayers) do
+            local nLayerScale = nScale;
+            local nLayerLeft = nLeft + tLayer.x * nScale;
+            local nLayerTop = nTop + tLayer.y * nScale;
             local nWidth = math.max(1, math.ceil(tLayer.width * nLayerScale));
             local nHeight = math.max(1, math.ceil(tLayer.height * nLayerScale));
             local oBitmap = wx.wxBitmap(tLayer.image:Scale(nWidth, nHeight, wx.wxIMAGE_QUALITY_HIGH));
             oDC:DrawBitmap(oBitmap, math.floor(nLayerLeft), math.floor(nLayerTop), true);
             oBitmap:delete();
         end
+
+        drawRail(oDC, oSize:GetWidth());
+
+        -- The title is artwork; the supporting welcome copy remains native text.
+        local oBodyFont = wx.wxFont(math.max(10, math.floor(16 * nScale)), wx.wxFONTFAMILY_SWISS,
+            wx.wxFONTSTYLE_NORMAL, wx.wxFONTWEIGHT_NORMAL);
+        local nTextLeft = math.floor(nLeft + 735 * nScale);
+        local nLineY = math.floor(nTop + 755 * nScale);
+        oDC:SetFont(oBodyFont);
+        local _, nLineHeight = oDC:GetTextExtent("Welcome aboard.");
+        oDC:SetTextForeground(wx.wxColour(105, 208, 250));
+        oDC:DrawText("Welcome aboard.", nTextLeft, nLineY);
+        oDC:SetTextForeground(wx.wxColour(220, 231, 242));
+        nLineY = nLineY + nLineHeight + math.max(14, math.floor(20 * nScale));
+        for _, sLine in ipairs({"Design your cards.", "Build your sets.", "Bring your ideas to the table."}) do
+            oDC:DrawText(sLine, nTextLeft, nLineY);
+            nLineY = nLineY + nLineHeight + 8;
+        end
+        oBodyFont:delete();
 
         oDC:SetFont(oVersionFont);
         oDC:SetTextForeground(wx.wxColour(255, 255, 255));
@@ -92,64 +131,127 @@ function Welcome.create(pApplication)
     @vis private
     !]]
     local function addLinks(dCanvas, fProtect)
+        local wxLuma = require("wxLuma.init")();
+        local oSkin = wxLuma.Controls.loadSkin();
         local tButtons = {};
         local tLinks = {
             {image = "patreon", url = APP_PATREON, label = "Help support the project"},
             {image = "github", url = APP_GITHUB, label = "View source code and download releases on GitHub"},
             {image = "website", url = "https://cardforge.studio", label = "Visit cardforge.studio"},
         };
+        local oClock = wx.wxStopWatch();
+        local oBackground;
+        local bVisible = true;
+        local bDisposed = false;
+        local bPlayed = false;
+        local nClickUntil = 0;
+
+        --[[!
+        @fqxn CFS.Windows.Main.Welcome.Private.Functions.playButtonSound
+        @desc Plays one asynchronous effect per interaction. Clicks take priority
+            over hover sounds; visual state changes never replay audio.
+        @vis private
+        !]]
+        local function playButtonSound(tButton, sState)
+            if (not bVisible or bDisposed) then return; end
+            local nNow = oClock:Time();
+            if (sState == "hover") then
+                if (nNow < nClickUntil or nNow - tButton.lastHover < 140) then return; end
+                tButton.lastHover = nNow;
+            else
+                nClickUntil = nNow + 300;
+            end
+            bPlayed = true;
+            return tButton.sounds[sState]:Play(wx.wxSOUND_ASYNC);
+        end
 
         for _, tLink in ipairs(tLinks) do
             local pImage = pApplication.."Images/Buttons/"..tLink.image;
-            local oNormal = wx.wxImage(pImage..".png", wx.wxBITMAP_TYPE_ANY);
-            local oHover = wx.wxImage(pImage.." hover.png", wx.wxBITMAP_TYPE_ANY);
-            assert(oNormal:IsOk() and oHover:IsOk(), "Cannot load Welcome link images.");
-            local oButton = wx.wxBitmapButton(dCanvas, wx.wxID_ANY,
-                wx.wxBitmap(oNormal:Scale(96, 96, wx.wxIMAGE_QUALITY_HIGH)), wx.wxDefaultPosition, wx.wxSize(96, 96), wx.wxBORDER_NONE);
-            oButton:SetBitmapCurrent(wx.wxBitmap(oHover:Scale(96, 96, wx.wxIMAGE_QUALITY_HIGH)));
-            oButton:SetBackgroundColour(wx.wxColour(45, 45, 45));
-            oButton:SetToolTip(tLink.label);
+            local pSound = pApplication.."Audio/SFX/Buttons/"..tLink.image;
+            local tButton = {normal = pImage..".png", hover = pImage.." hover.png",
+                inside = false, lastHover = -1000, x = 0, y = 12, sounds = {}};
+            for _, sState in ipairs({"hover", "click"}) do
+                local oSound = wx.wxSound(pSound.." "..sState..".wav");
+                assert(oSound:IsOk(), "Cannot load Welcome button sound: "..tLink.image.." "..sState);
+                tButton.sounds[sState] = oSound;
+            end
             local sURL = tLink.url;
-            oButton:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, fProtect(function()
-                assert(wx.wxLaunchDefaultBrowser(sURL), "Could not open the browser.");
+            local oButton = wxLuma.Controls.imageButton(dCanvas, {
+                Skin = oSkin,
+                Image = tButton.normal,
+                AlphaHit = false,
+                Background = function(oDC)
+                    oDC:SetBackground(wx.wxBrush(oBackgroundColour)); oDC:Clear();
+                    if (oBackground) then oDC:DrawBitmap(oBackground, -tButton.x, -tButton.y, false); end
+                end,
+                OnClick = fProtect(function()
+                    playButtonSound(tButton, "click");
+                    assert(wx.wxLaunchDefaultBrowser(sURL), "Could not open the browser.");
+                end),
+            });
+            tButton.button = oButton;
+            oButton.Control:SetBackgroundColour(oBackgroundColour);
+            oButton.Control:SetToolTip(tLink.label);
+            oButton.Control:SetCursor(wx.wxCursor(wx.wxCURSOR_HAND));
+            oButton.on("pointerEnter", fProtect(function()
+                if (not bVisible or bDisposed or tButton.inside) then return; end
+                tButton.inside = true;
+                oButton.setImage(tButton.hover);
+                playButtonSound(tButton, "hover");
             end));
-            tButtons[#tButtons + 1] = {button = oButton, normal = oNormal:Scale(96, 96, wx.wxIMAGE_QUALITY_HIGH), hover = oHover:Scale(96, 96, wx.wxIMAGE_QUALITY_HIGH)};
+            oButton.on("pointerLeave", fProtect(function()
+                if (bDisposed) then return; end
+                tButton.inside = false;
+                oButton.setImage(tButton.normal);
+            end));
+            tButtons[#tButtons + 1] = tButton;
         end
 
         --[[!
         @fqxn CFS.Windows.Main.Welcome.Private.Functions.layout
-        @desc Positions welcome link buttons after a canvas resize.
+        @desc Matches the background and shared rail, then positions wxLuma link modules.
+            No animation timer or per-frame bitmap replacement is used.
         @vis private
         !]]
         local function layout()
+            if (bDisposed) then return; end
             local oSize = dCanvas:GetClientSize();
-
-            local nScale = math.max(oSize:GetWidth() / tLayers[1].width, oSize:GetHeight() / tLayers[1].height);
+            local nCanvasWidth = math.max(1, oSize:GetWidth());
+            local nCanvasHeight = math.max(1, oSize:GetHeight());
+            local nScale = math.min(nCanvasWidth / tLayers[1].width, nCanvasHeight / tLayers[1].height);
             local nWidth = math.max(1, math.ceil(tLayers[1].width * nScale));
             local nHeight = math.max(1, math.ceil(tLayers[1].height * nScale));
-            local nLeft = math.floor((oSize:GetWidth() - tLayers[1].width * nScale) / 2);
-            local nTop = math.floor((oSize:GetHeight() - tLayers[1].height * nScale) / 2);
-            local oBackground = wx.wxBitmap(tLayers[1].image:Scale(nWidth, nHeight, wx.wxIMAGE_QUALITY_HIGH));
+            local nLeft = math.floor((nCanvasWidth - tLayers[1].width * nScale) / 2);
+            local nTop = math.floor((nCanvasHeight - tLayers[1].height * nScale) / 2);
+            if (oBackground) then oBackground:delete(); end
+            oBackground = wx.wxBitmap(nCanvasWidth, nCanvasHeight);
+            local oDC = wx.wxMemoryDC(); oDC:SelectObject(oBackground);
+            oDC:SetBackground(wx.wxBrush(oBackgroundColour)); oDC:Clear();
+            local oImageScaled = tLayers[1].image:Scale(nWidth, nHeight, wx.wxIMAGE_QUALITY_HIGH);
+            local oBackdrop = wx.wxBitmap(oImageScaled);
+            oDC:DrawBitmap(oBackdrop, nLeft, nTop, false);
+            drawRail(oDC, nCanvasWidth);
+            oDC:SelectObject(wx.wxNullBitmap); oDC:delete(); oBackdrop:delete(); oImageScaled:delete();
             for nIndex, tButton in ipairs(tButtons) do
-                local nX = math.max(0, oSize:GetWidth() - 12 - (#tButtons - nIndex + 1) * 108);
-                local nY = 12;
-                tButton.button:Move(nX, nY);
-                for _, sState in ipairs({"normal", "hover"}) do
-                    local oBitmap = wx.wxBitmap(96, 96);
-                    local oDC = wx.wxMemoryDC(); oDC:SelectObject(oBitmap);
-                    oDC:SetBackground(wx.wxBrush(wx.wxColour(0, 0, 0))); oDC:Clear();
-                    oDC:DrawBitmap(oBackground, nLeft - nX, nTop - nY, false);
-                    local oBadge = wx.wxBitmap(tButton[sState]); oDC:DrawBitmap(oBadge, 0, 0, true);
-                    oDC:SelectObject(wx.wxNullBitmap); oDC:delete(); oBadge:delete();
-                    if (sState == "normal") then tButton.button:SetBitmap(oBitmap); else tButton.button:SetBitmapCurrent(oBitmap); end
-                    oBitmap:delete();
-                end
+                tButton.x = math.max(0, nCanvasWidth - 12 - (#tButtons - nIndex + 1) * 108);
+                tButton.button.layout(tButton.x, tButton.y, 96, 96);
+                tButton.button.Control:Refresh(false);
             end
-            oBackground:delete();
         end
-
         dCanvas:Connect(wx.wxEVT_SIZE, function(oEvent)
-            layout();
+            layout(); oEvent:Skip();
+        end);
+        dCanvas:Connect(wx.wxEVT_DESTROY, function(oEvent)
+            if (oEvent:GetEventObject() == dCanvas and not bDisposed) then
+                bDisposed = true;
+                if (bPlayed) then wx.wxSound.Stop(); end
+                for _, tButton in ipairs(tButtons) do
+                    tButton.button.destroy();
+                    for _, oSound in pairs(tButton.sounds) do oSound:delete(); end
+                end
+                oSkin.destroy(); oClock:delete();
+                if (oBackground) then oBackground:delete(); end
+            end
             oEvent:Skip();
         end);
         layout();
@@ -157,16 +259,19 @@ function Welcome.create(pApplication)
         return {
             --[[!
             @fqxn CFS.Windows.Main.Welcome.Private.Functions.ShowItems
-            @desc Shows or hides welcome link controls and recomputes their positions.
-            @param any _ _.
-            @param any bShow Show.
+            @desc Shows or hides the static link modules and restores their idle artwork.
             @vis private
             !]]
             ShowItems = function(_, bShow)
+                if (bDisposed) then return; end
+                bVisible = bShow;
+                if (not bShow and bPlayed) then wx.wxSound.Stop(); end
                 for _, tButton in ipairs(tButtons) do
-                    tButton.button:Show(bShow);
+                    tButton.inside = false;
+                    tButton.button.setImage(tButton.normal);
+                    tButton.button.setEnabled(bShow);
+                    tButton.button.Control:Show(bShow);
                 end
-
                 layout();
             end,
         };

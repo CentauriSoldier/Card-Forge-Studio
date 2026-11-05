@@ -69,7 +69,7 @@ namespace CFS
 
             -- Keep the current file/memory synchronization: Debug is persisted too.
             -- The archived Debug method requested display-only messages with bSkipWrite.
-            local hFile = assert(io.open((assert(APP_PATH).."/log.log"), "a"), "Cannot open application log.");
+            local hFile = assert(io.open((assert(_AppDataLocal).."/log.log"), "a"), "Cannot open application log.");
             assert(hFile:write(sRecord));
             assert(hFile:close(), "Cannot close application log.");
 
@@ -89,7 +89,7 @@ namespace CFS
                 !]]
         public static ClearFile()
         {
-            local hFile = assert(io.open((assert(APP_PATH).."/log.log"), "w"));
+            local hFile = assert(io.open((assert(_AppDataLocal).."/log.log"), "w"));
             assert(hFile:close(), "Cannot close cleared log file.");
         }
 

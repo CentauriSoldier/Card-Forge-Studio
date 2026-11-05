@@ -2,6 +2,7 @@
 #define _UNICODE
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <wchar.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,24 +33,27 @@ static void writeError(const char *message)
 {
     wchar_t folder[32768];
     wchar_t path[32768];
-    wchar_t *separator;
     FILE *file = NULL;
-    DWORD length = GetModuleFileNameW(NULL, folder, 32768);
 
-    if (length > 0 && length < 32768 && (separator = wcsrchr(folder, L'\\')) != NULL)
+    /* Native failures use the same per-user folder as the Lua logger. */
+    if (FAILED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA | CSIDL_FLAG_CREATE,
+        NULL, SHGFP_TYPE_CURRENT, folder)))
     {
-        *separator = L'\0';
-        if (swprintf_s(path, 32768, L"%ls\\log.log", folder) >= 0)
-        {
-            _wfopen_s(&file, path, L"ab");
-        }
+        return;
     }
-
-    if (file == NULL && GetTempPathW(32768, folder) > 0 &&
-        swprintf_s(path, 32768, L"%lsCard Forge Studio-errors.log", folder) >= 0)
+    if (swprintf_s(path, 32768, L"%ls\\Card Forge Studio", folder) < 0)
     {
-        _wfopen_s(&file, path, L"ab");
+        return;
     }
+    if (!CreateDirectoryW(path, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
+    {
+        return;
+    }
+    if (swprintf_s(folder, 32768, L"%ls\\log.log", path) < 0)
+    {
+        return;
+    }
+    _wfopen_s(&file, folder, L"ab");
 
     if (file != NULL)
     {
