@@ -51,7 +51,9 @@ function EditorOptions.create(dParent)
     local function block(sName)
         dBody = wx.wxScrolledWindow(dPages, wx.wxID_ANY); dBody:SetScrollRate(0, 12);
         oBody = wx.wxBoxSizer(wx.wxVERTICAL); dBody:SetSizer(oBody);
-        tPages[#tPages + 1] = dBody; oCategories:Append(sName);
+        local nIndex = 1;
+        while (nIndex <= #tPages and oCategories:GetString(nIndex - 1):lower() < sName:lower()) do nIndex = nIndex + 1; end
+        table.insert(tPages, nIndex, dBody); oCategories:Insert(sName, nIndex - 1);
         oPages:Add(dBody, 1, wx.wxEXPAND); dBody:Hide();
         local oBox = wx.wxStaticBox(dBody, wx.wxID_ANY, sName);
         local oBlock = wx.wxStaticBoxSizer(oBox, wx.wxVERTICAL);
@@ -85,7 +87,28 @@ function EditorOptions.create(dParent)
         oRow:Add(oControl, 0, wx.wxALIGN_CENTER_VERTICAL);
         oBlock:Add(oRow, 0, wx.wxEXPAND + wx.wxALL, 6);
     end
-    local oBlock = block("Indentation");
+    local tBindingKeys = {};
+    local oBlock = block("Bindings");
+    local oBindingHelp = wx.wxStaticText(dBody, wx.wxID_ANY, "Click a shortcut, then press Ctrl/Alt with a letter or digit, or F1-F12. Backspace/Delete clears it. Save and standard editing shortcuts are reserved.");
+    oBindingHelp:Wrap(560); oBlock:Add(oBindingHelp, 0, wx.wxEXPAND + wx.wxALL, 6);
+    for _, tBinding in ipairs(EditorSettings.bindings()) do
+        local sKey, sModifiers = tBinding.key, tBinding.modifiers;
+        local oControl = wx.wxTextCtrl(dBody, wx.wxID_ANY, EditorSettings.bindingText(tState[sKey], tState[sModifiers]), wx.wxDefaultPosition, wx.wxSize(190, -1), wx.wxTE_READONLY);
+        tBindingKeys[sKey] = sModifiers; tControls[sKey] = oControl;
+        row(oBlock, tBinding.label, oControl);
+        oControl:Connect(wx.wxEVT_KEY_DOWN, function(oEvent)
+            local nKey = oEvent:GetKeyCode();
+            local nModifiers = oEvent:GetModifiers() & (wx.wxMOD_CONTROL | wx.wxMOD_SHIFT | wx.wxMOD_ALT);
+            if (nKey == wx.WXK_TAB) then oEvent:Skip(); return; end
+            if ((nKey == wx.WXK_BACK or nKey == wx.WXK_DELETE) and nModifiers == 0) then
+                tState[sKey], tState[sModifiers] = 0, 0;
+            elseif (nKey >= 65 and nKey <= 90 or nKey >= 48 and nKey <= 57 or nKey >= wx.WXK_F1 and nKey <= wx.WXK_F12) then
+                tState[sKey], tState[sModifiers] = nKey, nModifiers;
+            else return; end
+            oControl:ChangeValue(EditorSettings.bindingText(tState[sKey], tState[sModifiers]));
+        end);
+    end
+    oBlock = block("Indentation");
     tControls.useTabs = wx.wxChoice(dBody, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxDefaultSize, {"Soft tabs (spaces)", "Hard tabs (tab characters)"});
     tControls.useTabs:SetSelection(tState.useTabs and 1 or 0); row(oBlock, "Indent with", tControls.useTabs);
     tControls.tabWidth = wx.wxSpinCtrl(dBody, wx.wxID_ANY, "", wx.wxDefaultPosition, wx.wxSize(90, -1), wx.wxSP_ARROW_KEYS, 1, 8, tState.tabWidth);
@@ -142,6 +165,17 @@ function EditorOptions.create(dParent)
     end
     tControls.autocompleteUseEditorFontSize:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, enableSuggestionFonts);
     enableSuggestionFonts();
+    oBlock = block("Hover Documentation");
+    check(oBlock, "hoverEnabled", "Show documentation when hovering over a documented name");
+    check(oBlock, "hoverAliases", "Track simple local aliases for hover documentation");
+    tControls.hoverDelay = wx.wxSpinCtrl(dBody, wx.wxID_ANY, "", wx.wxDefaultPosition, wx.wxSize(90, -1), wx.wxSP_ARROW_KEYS, 100, 5000, tState.hoverDelay);
+    row(oBlock, "Hover delay (milliseconds)", tControls.hoverDelay);
+    local function enableHoverDelay()
+        tControls.hoverDelay:Enable(tControls.hoverEnabled:GetValue());
+        tControls.hoverAliases:Enable(tControls.hoverEnabled:GetValue());
+    end
+    tControls.hoverEnabled:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, enableHoverDelay);
+    enableHoverDelay();
     oBlock = block("Environment Reference");
     check(oBlock, "referenceUseEditorFontSize", "Use editor font size for the list and description");
     for _, tDefinition in ipairs({{"referenceListFontSize", "Variable list font size"}, {"referenceDescriptionFontSize", "Description font size"}}) do
@@ -187,6 +221,9 @@ function EditorOptions.create(dParent)
             if (tColorKeys[sKey]) then
                 local oColor = oControl:GetColour();
                 tValues[sKey] = oColor:Red() * 65536 + oColor:Green() * 256 + oColor:Blue();
+            elseif (tBindingKeys[sKey]) then
+                local sModifiers = tBindingKeys[sKey];
+                tValues[sKey], tValues[sModifiers] = tState[sKey], tState[sModifiers];
             elseif (sKey == "useTabs") then tValues[sKey] = tControls[sKey]:GetSelection() == 1;
             elseif (sKey == "theme") then tValues[sKey] = tControls[sKey]:GetSelection();
             elseif (sKey == "size") then tValues[sKey] = tonumber(tControls[sKey]:GetStringSelection());

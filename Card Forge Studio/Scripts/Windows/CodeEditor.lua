@@ -50,9 +50,10 @@ function CodeEditor.create(dParent, sEncoded, sTitle)
     local oSyntaxTimer = wx.wxTimer(dDialog);
     local sResult;
 
-    EditorSettings.configure(oCode, "lua");
+    local tFindBar = EditorSettings.findBar(dDialog, function() return oCode; end);
+    EditorSettings.configure(oCode, "lua", tFindBar.focus);
     require("Autocomplete").Attach(oCode);
-    local oThemeBar, oTheme, oFontSize, unregister = EditorSettings.bar(dDialog, {oCode});
+    local oThemeBar, oTheme, oFontSize, unregister = EditorSettings.bar(dDialog, {oCode}, tFindBar);
     oCode:SetText(Base64.dec(sEncoded));
     oCode:EmptyUndoBuffer();
 
@@ -107,7 +108,7 @@ function CodeEditor.create(dParent, sEncoded, sTitle)
     dDialog:SetSizer(oLayout);
     checkSyntax();
     return {dialog = dDialog, editor = oCode, apply = oApply, cancel = oCancel, checkSyntax = checkSyntax,
-        theme = oTheme, fontSize = oFontSize, status = oStatus, syntaxTimer = oSyntaxTimer,
+        findBar = tFindBar, theme = oTheme, fontSize = oFontSize, status = oStatus, syntaxTimer = oSyntaxTimer,
         windowState = oWindowState, getResult = function() return sResult; end};
 end
 

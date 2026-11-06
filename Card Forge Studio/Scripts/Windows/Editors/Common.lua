@@ -183,6 +183,10 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
     local oClose = wx.wxButton(dPanel, wx.wxID_CLOSE, "Close");
     local oTimer = wx.wxTimer(dFrame, wx.wxNewId());
     local bClosed = false;
+    local tFindBar = EditorSettings.findBar(dPanel, function()
+        local nIndex = tOptions.groups and nActiveFile or (tBooks[1]:GetSelection() + 1);
+        return nIndex and tFileEditors[nIndex];
+    end);
     --[[!
     @fqxn CFS.Windows.Editors.Common.Private.Functions.pull
     @desc Copies text from instantiated editor controls into their source drafts.
@@ -237,7 +241,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
     local function createCode(nIndex, dParent)
         local tFile = tModel.files[nIndex];
         local oCode = wxstc.wxStyledTextCtrl(dParent, wx.wxID_ANY);
-        EditorSettings.configure(oCode, tFile.kind);
+        EditorSettings.configure(oCode, tFile.kind, tFindBar.focus);
         if (tFile.kind == "lua") then require("Autocomplete").Attach(oCode, (tFile.path or ""):find("RowProc", 1, true) ~= nil); end
         oCode:SetText(tFile.text); oCode:EmptyUndoBuffer();
         oCode:Connect(wxstc.wxEVT_STC_CHANGE, function() oTimer:StartOnce(250); end);
@@ -250,7 +254,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
         tPages[nIndex] = {book = oBook, index = oBook:GetPageCount(), panel = dPage};
         oBook:AddPage(dPage, tFile.name);
     end
-    local oBar, oTheme, oFontSize, unregister = EditorSettings.bar(dPanel, tEditors);
+    local oBar, oTheme, oFontSize, unregister = EditorSettings.bar(dPanel, tEditors, tFindBar);
     oLayout:Add(oBar, 0, wx.wxEXPAND + wx.wxALL, 8);
     --[[!
     @fqxn CFS.Windows.Editors.Common.Private.Functions.ensurePage
@@ -447,7 +451,7 @@ function Common.create(dParent, tFiles, sTitle, tOptions)
         end
     end
     refresh(); dFrame:Show(true); dFrame:Layout();
-    return {frame = dFrame, book = dBook, books = tBooks, barIndicators = tBarIndicators, newButtons = tNewButtons, openFile = openFile, editors = tEditors, fileEditors = tFileEditors, editingArea = dEditingArea, model = tModel, theme = oTheme, fontSize = oFontSize, refresh = refresh, save = save,
+    return {frame = dFrame, book = dBook, books = tBooks, barIndicators = tBarIndicators, newButtons = tNewButtons, openFile = openFile, editors = tEditors, fileEditors = tFileEditors, editingArea = dEditingArea, findBar = tFindBar, model = tModel, theme = oTheme, fontSize = oFontSize, refresh = refresh, save = save,
         --[[!
         @fqxn CFS.Windows.Editors.Common.Private.Functions.close
         @desc Closes through unsaved-draft protection; returns immediately if already closed.

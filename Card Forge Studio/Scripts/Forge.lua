@@ -1605,14 +1605,14 @@ end
 @desc Draws an image onto the active card render target.
 
 <p>
-  Loads (or retrieves from cache) an image from the active game directory and draws it
+  Loads (or retrieves from cache) an image from the active resource root and draws it
   into the current card draw context. This function is primarily intended for use by
   CardSet <code>Draw</code> scripts, but may also be used internally by the Forge.
 </p>
 
 <h3>Behavior</h3>
 <ul>
-  <li>Resolves the image path relative to the active game folder.</li>
+  <li>Resolves the image path relative to the active resource root.</li>
   <li>Sanitizes the provided path to prevent invalid or unsafe access.</li>
   <li>Caches image handles to avoid redundant loads across draw calls.</li>
   <li>Draws the image using alpha blending.</li>
@@ -1625,17 +1625,17 @@ end
   <li>Repeated calls with the same image path reuse cached image handles.</li>
 </ul>
 
-@param string pImage  Relative image path (from the game directory).
-@param number nX      X position in card-space coordinates.
-@param number nY      Y position in card-space coordinates.
-@param number nWidth  Draw width in card-space units.
-@param number nHeight Draw height in card-space units.
-@param string sName   Optional image identifier used for error reporting.
+@param string sPath Image path relative to the active resource root.
+@param number nX Horizontal card-space position.
+@param number nY Vertical card-space position.
+@param number nWidth Optional draw width; defaults to the native image width.
+@param number nHeight Optional draw height; defaults to the native image height.
+@ret void none No values returned.
+
 @ex
 -- Draw an image asset onto the card at a fixed position
 local pOgre = "Images/Ogre.png";
 Forge.DrawImage(pOgre, 100, 100, 32, 32);
-        @param any sPath s Path.
         !]]
 function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight)
     assert(_D, "Forge drawing is only available during a render pass.");
@@ -1660,11 +1660,99 @@ function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight)
     _D.DrawImage(oImage, nX, nY, nWidth, nHeight);
 end
 
+-- Experimental image tinting is isolated here; existing DrawImage calls are unchanged.
+-- Weak source keys release variants after normal image invalidation or game/set changes.
+local _tTintedImages = setmetatable({}, {__mode = "k"});
+
+--[[!
+@fqxn CFS.Modules.Forge.Functions.DrawImageTinted
+@pulsarlua function Forge.DrawImageTinted
+@desc Draws an image with multiplicative RGBA tinting during an active render pass. Each source RGB channel is multiplied by the matching tint channel divided by 255; source alpha is multiplied by tint alpha. White with full opacity preserves the image. Uses the same relative path checks and missing-art fallback as DrawImage. Source artwork is never modified. Tinted bitmaps are cached separately, with at most 64 variants per cached source; normal source invalidation discards its variants. Preview and PNG export use the same draw function.
+@param string sPath Image path relative to the active resource root.
+@param number nX Horizontal card-space position.
+@param number nY Vertical card-space position.
+@param number nWidth Draw width, or nil for native width.
+@param number nHeight Draw height, or nil for native height.
+@param wxColour oTint Native color, such as Color.RGBA(255, 80, 80, 255).
+@ret void none No values returned.
+
+@example
+Forge.DrawImageTinted("Images/Icon.png", 10, 10, 64, 64, Color.RGBA(255, 80, 80, 255));
+!]]
+function Forge.DrawImageTinted(sPath, nX, nY, nWidth, nHeight, oTint)
+    assert(_D, "Forge drawing is only available during a render pass.");
+    assert(wxlua.type(oTint) == "wxColour" and oTint:IsOk(), "Image tint must be a valid native color.");
+    local pImage = resolveImage(sPath);
+
+    if (not wx.wxFileExists(pImage)) then
+        pImage = io.normalizepath(APP_PATH.."/Images/Missing.png");
+    end
+
+    local tImage = _tImages[pImage];
+
+    if (not tImage) then
+        assert(wx.wxFileExists(pImage), "Card image does not exist: "..pImage);
+        local oBitmap = wx.wxBitmap(pImage, wx.wxBITMAP_TYPE_ANY);
+        assert(oBitmap:IsOk(), "Could not decode card image: "..pImage);
+        tImage = {bitmap = oBitmap, stamp = imageStamp(pImage),};
+        _tImages[pImage] = tImage;
+    end
+
+    local nRed, nGreen, nBlue, nAlpha = oTint:Red(), oTint:Green(), oTint:Blue(), oTint:Alpha();
+    local sKey = string.char(nRed, nGreen, nBlue, nAlpha);
+    local tVariants = _tTintedImages[tImage];
+
+    if (not tVariants or tVariants.count >= 64 and not tVariants[sKey]) then
+        tVariants = {count = 0};
+        _tTintedImages[tImage] = tVariants;
+    end
+
+    local oBitmap = tVariants[sKey];
+
+    if (not oBitmap) then
+        local oImage = tImage.bitmap:ConvertToImage();
+        local bOK, vError = xpcall(function()
+            -- InitAlpha also converts a color-key mask to alpha before RGB changes.
+            if (not oImage:HasAlpha()) then oImage:InitAlpha(); end
+            local tRed, tGreen, tBlue, tAlpha = {}, {}, {}, {};
+
+            for nByte = 0, 255 do
+                local sByte = string.char(nByte);
+                tRed[sByte] = string.char(floor(nByte * nRed / 255));
+                tGreen[sByte] = string.char(floor(nByte * nGreen / 255));
+                tBlue[sByte] = string.char(floor(nByte * nBlue / 255));
+                tAlpha[sByte] = string.char(floor(nByte * nAlpha / 255));
+            end
+
+            local sRGB = oImage:GetData():gsub("(.)(.)(.)", function(sR, sG, sB)
+                return tRed[sR]..tGreen[sG]..tBlue[sB];
+            end);
+            local sAlpha = oImage:GetAlpha():gsub(".", tAlpha);
+            oImage:SetData(sRGB);
+            oImage:SetAlpha(sAlpha);
+            oBitmap = wx.wxBitmap(oImage);
+            assert(oBitmap:IsOk(), "Could not create tinted card image: "..pImage);
+        end, debug.traceback);
+        oImage:delete();
+        assert(bOK, vError);
+        tVariants[sKey] = oBitmap;
+        tVariants.count = tVariants.count + 1;
+    end
+
+    _D.DrawImage(oBitmap, nX, nY, nWidth, nHeight);
+end
+
 --[[!
 @fqxn CFS.Modules.Forge.Functions.DrawRectangle
 @pulsarlua function Forge.DrawRectangle
 @desc Draws a rectangle through the current native drawing context; requires an active render pass.
-@param any ... Additional arguments.
+@param number nX Left position in card-space coordinates.
+@param number nY Top position in card-space coordinates.
+@param number nWidth Rectangle width.
+@param number nHeight Rectangle height.
+@param wxColour|number oFill Native fill color or packed RGBA value.
+@ret void none No values returned.
+
 !]]
 function Forge.DrawRectangle(...)
     assert(_D, "Forge drawing is only available during a render pass.");
@@ -1675,6 +1763,8 @@ end
 @fqxn CFS.Modules.Forge.Functions.GetOutputInfo
 @pulsarlua function Forge.GetOutputInfo
 @desc Returns native card width and height.
+@ret table tInfo Native card dimensions in the numeric Width and Height fields.
+
 !]]
 function Forge.GetOutputInfo()
     return {Width = _nWidth, Height = _nHeight,};
@@ -1684,7 +1774,9 @@ end
 @fqxn CFS.Modules.Forge.Functions.SetDrawFunction
 @pulsarlua function Forge.SetDrawFunction
 @desc Installs the front drawing callback and marks the card for redraw.
-@param any fDraw Draw.
+@param function fDraw Front callback called with the object name, drawing context, and native device context.
+@ret void none No values returned.
+
 !]]
 function Forge.SetDrawFunction(fDraw)
     assert(rawtype(fDraw) == "function", "Draw must return a function.");
@@ -1696,7 +1788,9 @@ end
 @fqxn CFS.Modules.Forge.Functions.SetDrawBackFunction
 @pulsarlua function Forge.SetDrawBackFunction
 @desc Installs the back drawing callback and marks the card for redraw.
-@param any fDraw Draw.
+@param function fDraw Back callback called with the object name, drawing context, and native device context.
+@ret void none No values returned.
+
 !]]
 function Forge.SetDrawBackFunction(fDraw)
     assert(rawtype(fDraw) == "function", "DrawBack must return a function.");
@@ -1708,7 +1802,9 @@ end
 @fqxn CFS.Modules.Forge.Functions.SetActiveRow
 @pulsarlua function Forge.SetActiveRow
 @desc Sets the active render row and requests a card redraw.
-@param any tRow Row.
+@param table tRow Row data to use for subsequent rendering.
+@ret void none No values returned.
+
 !]]
 function Forge.SetActiveRow(tRow)
     _tActiveRow = tRow;
@@ -1719,7 +1815,9 @@ end
 @fqxn CFS.Modules.Forge.Functions.SetActiveCardSet
 @pulsarlua function Forge.SetActiveCardSet
 @desc Loads card dimensions, clears image and bitmap caches, selects the front, and requests redraw.
-@param any oCardSet Card set.
+@param CardSet oCardSet Card set supplying the native card width and height.
+@ret void none No values returned.
+
 !]]
 function Forge.SetActiveCardSet(oCardSet)
     _nWidth, _nHeight = oCardSet.GetCardWidth(), oCardSet.GetCardHeight();
@@ -1734,7 +1832,9 @@ end
 @fqxn CFS.Modules.Forge.Functions.SetFace
 @pulsarlua function Forge.SetFace
 @desc Selects front or back and requests redraw when the face changes.
-@param any sFace Card face: front or back.
+@param string sFace Card face: "front" or "back".
+@ret void none No values returned.
+
 !]]
 function Forge.SetFace(sFace)
     assert(sFace == "front" or sFace == "back", "Unknown card face.");
@@ -1749,7 +1849,9 @@ end
 @fqxn CFS.Modules.Forge.Functions.SetDrawEnabled
 @pulsarlua function Forge.SetDrawEnabled
 @desc Blocks or permits timer-driven preview drawing.
-@param any bEnabled Enabled.
+@param boolean bEnabled True permits timer-driven preview drawing; false blocks it.
+@ret void none No values returned.
+
 !]]
 function Forge.SetDrawEnabled(bEnabled)
     _bDrawBlocked = not bEnabled;
@@ -1759,6 +1861,8 @@ end
 @fqxn CFS.Modules.Forge.Functions.RequestCardRedraw
 @pulsarlua function Forge.RequestCardRedraw
 @desc Marks card pixels and the surrounding canvas dirty.
+@ret void none No values returned.
+
 !]]
 function Forge.RequestCardRedraw()
     _bRedrawCard, _bRedrawCanvas = true, true;
@@ -1768,6 +1872,8 @@ end
 @fqxn CFS.Modules.Forge.Functions.RequestUtilRedraw
 @pulsarlua function Forge.RequestUtilRedraw
 @desc Marks utility guides and the surrounding canvas dirty.
+@ret void none No values returned.
+
 !]]
 function Forge.RequestUtilRedraw()
     _bRedrawUtil, _bRedrawCanvas = true, true;
@@ -1777,6 +1883,9 @@ end
 @fqxn CFS.Modules.Forge.Functions.GetBitmap
 @pulsarlua function Forge.GetBitmap
 @desc Returns the current preview bitmap and its revision number.
+@ret wxBitmap|nil oBitmap Current preview bitmap, or nil before a preview exists.
+@ret number nRevision Preview revision counter.
+
 !]]
 function Forge.GetBitmap()
     return _oBitmap, _nRevision;
@@ -1786,6 +1895,8 @@ end
 @fqxn CFS.Modules.Forge.Functions.OnTimer
 @pulsarlua function Forge.OnTimer
 @desc Checks image changes and renders dirty preview pixels when ready. Releases drawing resources and propagates rendering failures.
+@ret boolean bRendered True when a pending canvas update was handled; false when drawing was skipped.
+
 !]]
 function Forge.OnTimer()
     checkImages();
@@ -1831,9 +1942,11 @@ end
 @fqxn CFS.Modules.Forge.Functions.ExportPNG
 @pulsarlua function Forge.ExportPNG
 @desc Renders a selected face at the requested percentage and writes PNG without replacing preview state; restores drawing context after success or failure.
-@param any sFace Card face: front or back.
-@param any pFile File path.
-@param any nPercent Output size as a percentage of native card dimensions.
+@param string sFace Card face to render: "front" or "back".
+@param string pFile Destination PNG filesystem path.
+@param number nPercent Optional export scale percentage; defaults to 100.
+@ret void none No values returned.
+
 !]]
 function Forge.ExportPNG(sFace, pFile, nPercent)
     assert(sFace == "front" or sFace == "back", "Unknown export face.");
@@ -1867,6 +1980,8 @@ end
 @fqxn CFS.Modules.Forge.Functions.Release
 @pulsarlua function Forge.Release
 @desc Clears image, row, and bitmap state and resets pending redraw flags.
+@ret void none No values returned.
+
 !]]
 function Forge.Release()
     _tImages, _tActiveRow, _oBitmap = {}, nil, nil;
@@ -1885,7 +2000,7 @@ end
 
 <h3>Behavior</h3>
 <ul>
-  <li>Uses the specified style from <code>Forge.STYLE</code>.</li>
+  <li>Uses the specified style from <code>STYLE</code>.</li>
   <li>Optionally centers text around the provided coordinates.</li>
   <li>Supports rotated text via an angle parameter.</li>
   <li>Supports custom line-wrapping through a user-supplied wrapper function.</li>
@@ -1898,18 +2013,20 @@ end
   <li>Returns the final draw position and measured size of the last rendered line.</li>
 </ul>
 
+
 @param string  sStyle   Name of the FontStyle to use.
 @param number  nRawX    Base X position in card-space coordinates.
 @param number  nRawY    Base Y position in card-space coordinates.
 @param string  sText    Text to draw.
-@param boolean vCenterX Optional horizontal centering flag.
-@param boolean vCenterY Optional vertical centering flag.
-@param number  vAngle   Optional rotation angle (degrees).
+@param boolean|nil vCenterX Optional horizontal centering flag.
+@param boolean|nil vCenterY Optional vertical centering flag.
+@param number|nil vAngle   Optional rotation angle (degrees).
 @param function|nil vWrap Optional wrapping function.
-@return number nX       Final X position of the last line drawn.
-@return number nY       Final Y position of the last line drawn.
-@return number nWidth   Width of the rendered text block.
-@return number nHeight  Height of the rendered text block.
+@param any ... Extra arguments passed as a table to the optional wrapping callback.
+@ret number|nil nX Final X position of the last line, or nil when the wrapper supplies no lines.
+@ret number|nil nY Final Y position of the last line, or nil when no lines are drawn.
+@ret number|nil nWidth Measured width of the last line, or nil when no lines are drawn.
+@ret number|nil nHeight Measured height of the last line, or nil when no lines are drawn.
 
 @ex
 -- Draw centered title text near the top of the card
@@ -2335,7 +2452,7 @@ end
 
 <h3>Behavior</h3>
 <ul>
-  <li>Parses inline style tags and resolves them against <code>Forge.STYLE</code>.</li>
+  <li>Parses inline style tags and resolves them against <code>STYLE</code>.</li>
   <li>Preserves style runs across wrapped lines.</li>
   <li>Uses ink-box layout to neutralize negative bearings and kerning artifacts.</li>
   <li>Supports centering, rotation, and custom wrapping behavior.</li>
@@ -2348,18 +2465,20 @@ end
   <li>Returns the top-left position and total size of the rendered text block.</li>
 </ul>
 
+
 @param string  sStyle   Base FontStyle name.
 @param number  nRawX    Base X position in card-space coordinates.
 @param number  nRawY    Base Y position in card-space coordinates.
 @param string  sText    Text with inline style markup.
-@param boolean vCenterX Optional horizontal centering flag.
-@param boolean vCenterY Optional vertical centering flag.
-@param number  vAngle   Optional rotation angle (degrees).
+@param boolean|nil vCenterX Optional horizontal centering flag.
+@param boolean|nil vCenterY Optional vertical centering flag.
+@param number|nil vAngle   Optional rotation angle (degrees).
 @param function|nil vWrap Optional wrapping function.
-@return number nX       Top-left X position of the rendered block.
-@return number nY       Top-left Y position of the rendered block.
-@return number nWidth   Total width of the rendered block.
-@return number nHeight  Total height of the rendered block.
+@param any ... Extra arguments passed as a table to the optional wrapping callback.
+@ret number nX       Top-left X position of the rendered block.
+@ret number nY       Top-left Y position of the rendered block.
+@ret number nWidth   Total width of the rendered block.
+@ret number nHeight  Total height of the rendered block.
 
 @ex
 -- Draw a description line with inline emphasis
@@ -2390,10 +2509,11 @@ end
 @param string sText Styled text with newline-separated entries.
 @param number nWidth Positive finite maximum line width in pixels.
 @param table tModes One "Wrap" or "Shrink" string for each entry, including blank entries.
-@return number nX Left position of the rendered block.
-@return number nY Top position of the rendered block.
-@return number nWidth Measured block width.
-@return number nHeight Measured block height, including wrapped lines.
+@ret number nX Left position of the rendered block.
+@ret number nY Top position of the rendered block.
+@ret number nWidth Measured block width.
+@ret number nHeight Measured block height, including wrapped lines.
+
 @ex -- Requires an existing style named BODY.
 local sAbilities =
     "Deal 3 damage to each enemy within range.\n" ..

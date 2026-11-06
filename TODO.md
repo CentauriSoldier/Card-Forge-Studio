@@ -1,0 +1,3 @@
+# TODO
+
+- [ ] Review native constructor members exposed through UserEnv, including `Color.RGB.new`, `Color.RGBA.new`, `Color.RGB.AlphaBlend`, and `Color.RGBA.AlphaBlend`. Check their actual usefulness to game scripts and remove superfluous members from UserEnv exposure. Remove or update associated documentation comments in relevant files so removed members no longer appear in tips or autocomplete. Check live environment discovery and generated completion snapshots as well: removing comments alone does not remove exposed members from autocomplete. Preserve the supported `Color.RGB(...)` and `Color.RGBA(...)` constructors.

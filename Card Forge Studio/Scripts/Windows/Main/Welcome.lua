@@ -31,8 +31,8 @@ function Welcome.create(pApplication)
     assert(oVersionFont:IsOk(), "Cannot create the Welcome version font.");
     local oQuiet = wx.wxLogNull();
     local tLayers = {
-        {file = "BG Welcome.png", x = 0, y = 0, width = 1536, height = 1024},
-        {file = "Logo.png", x = -5, y = 130, width = 700, height = 700},
+        {file = "BG Welcome.png", x = 0, y = -5, width = 1644, height = 1096},
+        {file = "Logo.png", x = -5, y = 200, width = 700, height = 700},
         {file = "Card Forge.png", x = 735, y = 290, width = 700, height = 233},
         {file = "Studio.png", x = 735, y = 490, width = 700, height = 233},
     };
@@ -78,7 +78,9 @@ function Welcome.create(pApplication)
         oDC:SetBackground(wx.wxBrush(oBackgroundColour));
         oDC:Clear();
 
-        for _, tLayer in ipairs(tLayers) do
+        -- The card sits behind the enlarged cutout machine so its arms and platform overlap it.
+        for _, nLayer in ipairs({2, 1, 3, 4}) do
+            local tLayer = tLayers[nLayer];
             local nLayerScale = nScale;
             local nLayerLeft = nLeft + tLayer.x * nScale;
             local nLayerTop = nTop + tLayer.y * nScale;
@@ -218,18 +220,18 @@ function Welcome.create(pApplication)
             local oSize = dCanvas:GetClientSize();
             local nCanvasWidth = math.max(1, oSize:GetWidth());
             local nCanvasHeight = math.max(1, oSize:GetHeight());
-            local nScale = math.min(nCanvasWidth / tLayers[1].width, nCanvasHeight / tLayers[1].height);
+            local nScale = math.min(nCanvasWidth / 1536, nCanvasHeight / 1024);
             local nWidth = math.max(1, math.ceil(tLayers[1].width * nScale));
             local nHeight = math.max(1, math.ceil(tLayers[1].height * nScale));
-            local nLeft = math.floor((nCanvasWidth - tLayers[1].width * nScale) / 2);
-            local nTop = math.floor((nCanvasHeight - tLayers[1].height * nScale) / 2);
+            local nLeft = math.floor((nCanvasWidth - 1536 * nScale) / 2 + tLayers[1].x * nScale);
+            local nTop = math.floor((nCanvasHeight - 1024 * nScale) / 2 + tLayers[1].y * nScale);
             if (oBackground) then oBackground:delete(); end
             oBackground = wx.wxBitmap(nCanvasWidth, nCanvasHeight);
             local oDC = wx.wxMemoryDC(); oDC:SelectObject(oBackground);
             oDC:SetBackground(wx.wxBrush(oBackgroundColour)); oDC:Clear();
             local oImageScaled = tLayers[1].image:Scale(nWidth, nHeight, wx.wxIMAGE_QUALITY_HIGH);
             local oBackdrop = wx.wxBitmap(oImageScaled);
-            oDC:DrawBitmap(oBackdrop, nLeft, nTop, false);
+            oDC:DrawBitmap(oBackdrop, nLeft, nTop, true);
             drawRail(oDC, nCanvasWidth);
             oDC:SelectObject(wx.wxNullBitmap); oDC:delete(); oBackdrop:delete(); oImageScaled:delete();
             for nIndex, tButton in ipairs(tButtons) do

@@ -19,13 +19,14 @@
 local wx = require("wx");
 local wxstc = wxstc;
 local EditorSettings = {};
+local _nWordIndicator = 8;
 local _aFontSizes = {8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36,};
 -- Background, text, comments, keywords, literals, strings, numbers, operators,
 -- caret, selection, gutter text, current line.
 local _tThemes = {
     {name = "Default", marginBackground = "#FFFFFF", marginForeground = "#555555", foldBackground = "#FFFFFF", foldForeground = "#555555", colors = {"#FFFFFF", "#000000", "#287832", "#2346B4", "#2346B4", "#963C28", "#000000", "#000000", "#000000", "#C0D8FF", "#555555", "#F5F5F5",},},
     {name = "Zenburn", marginBackground = "#454545", marginForeground = "#B8C8C8", foldBackground = "#494949", foldForeground = "#B8C8C8", colors = {"#3F3F3F", "#DCDCCC", "#7F9F7F", "#F0DFAF", "#DCA3A3", "#CC9393", "#8CD0D3", "#F0EFD0", "#DCDCCC", "#585858", "#9FAFAF", "#494949",},},
-    {name = "Synthwave Protocol", marginBackground = "#100B27", marginForeground = "#3AA0FF", foldBackground = "#150F2E", foldForeground = "#3AA0FF", colors = {"#0B0620", "#D0D0F0", "#5F7A9A", "#00B7FF", "#FFF1A8", "#B98B6A", "#FF3B6A", "#FF3B6A", "#FF0000", "#2A1A62", "#3AA0FF", "#140B34",},},
+    {name = "Synthwave Protocol", matchBackground = "#A78BFA", marginBackground = "#100B27", marginForeground = "#3AA0FF", foldBackground = "#150F2E", foldForeground = "#3AA0FF", colors = {"#0B0620", "#D0D0F0", "#5F7A9A", "#00B7FF", "#FFF1A8", "#B98B6A", "#FF3B6A", "#FF3B6A", "#FF0000", "#6545A0", "#3AA0FF", "#140B34",},},
 };
 
 -- Adapted palettes; token mappings and readable gutters are specific to this editor.
@@ -58,7 +59,37 @@ function EditorSettings.themes()
     return _tThemes;
 end
 
+local _tBindings = {
+    {key = "findKey", modifiers = "findModifiers", label = "Find"},
+    {key = "duplicateLineKey", modifiers = "duplicateLineModifiers", label = "Duplicate line"},
+};
+
+--[[!
+@fqxn CFS.Windows.EditorSettings.Private.Functions.validBinding
+@desc Checks supported key combinations while preserving existing Save and standard editing shortcuts.
+@param number nKey Key code, or zero for an unassigned binding.
+@param number nModifiers Ctrl, Shift, and Alt flags.
+@ret boolean bValid Whether the combination is supported and unreserved.
+@vis private
+!]]
+local function validBinding(nKey, nModifiers)
+    if (nKey == 0) then return nModifiers == 0; end
+    local bFunction = nKey >= wx.WXK_F1 and nKey <= wx.WXK_F12;
+    local bCharacter = nKey >= 65 and nKey <= 90 or nKey >= 48 and nKey <= 57;
+    if (not bFunction and not bCharacter) then return false; end
+    if (not bFunction and (nModifiers & (wx.wxMOD_CONTROL | wx.wxMOD_ALT)) == 0) then return false; end
+    -- Preserve Save, clipboard, select-all, undo/redo, and the native close shortcut.
+    if (bCharacter and nModifiers == wx.wxMOD_CONTROL and ("ACSVXYZ"):find(string.char(nKey), 1, true)) then return false; end
+    if (nKey == 90 and nModifiers == (wx.wxMOD_CONTROL | wx.wxMOD_SHIFT)) then return false; end
+    if (nKey == wx.WXK_F4 and nModifiers == wx.wxMOD_ALT) then return false; end
+    return true;
+end
+
 local _tDefinitions = {
+    findKey = {setting = "FindKey", default = string.byte("F"), min = 0, max = wx.WXK_F12},
+    findModifiers = {setting = "FindModifiers", default = wx.wxMOD_CONTROL, min = 0, max = 7},
+    duplicateLineKey = {setting = "DuplicateLineKey", default = string.byte("D"), min = 0, max = wx.WXK_F12},
+    duplicateLineModifiers = {setting = "DuplicateLineModifiers", default = wx.wxMOD_CONTROL | wx.wxMOD_SHIFT, min = 0, max = 7},
     autocompleteUseEditorFontSize = {setting = "AutocompleteUseEditorFontSize", default = true},
     referenceUseEditorFontSize = {setting = "ReferenceUseEditorFontSize", default = true},
     referenceListFontSize = {setting = "ReferenceListFontSize", default = 11, min = 8, max = 24},
@@ -70,6 +101,9 @@ local _tDefinitions = {
     documentationBackground = {setting = "DocumentationBackground", default = 16448245, min = 0, max = 16777215},
     documentationText = {setting = "DocumentationText", default = 1644830, min = 0, max = 16777215},
     documentationFontSize = {setting = "DocumentationFontSize", default = 11, min = 8, max = 24},
+    hoverAliases = {setting = "HoverDocumentationAliases", default = true},
+    hoverEnabled = {setting = "HoverDocumentationEnabled", default = true},
+    hoverDelay = {setting = "HoverDocumentationDelay", default = 600, min = 100, max = 5000},
     autocompleteEnabled = {setting = "AutocompleteEnabled", default = true},
     autocompleteHelp = {setting = "AutocompleteHelp", default = true},
     autocompleteCharacters = {setting = "AutocompleteCharacters", default = 2, min = 1, max = 10},
@@ -121,6 +155,18 @@ local function current()
         end
         _tCurrent[sKey] = vValue;
     end
+    for _, tBinding in ipairs(_tBindings) do
+        if (not validBinding(_tCurrent[tBinding.key], _tCurrent[tBinding.modifiers])) then
+            _tCurrent[tBinding.key] = _tDefinitions[tBinding.key].default;
+            _tCurrent[tBinding.modifiers] = _tDefinitions[tBinding.modifiers].default;
+        end
+    end
+    if (_tCurrent.findKey ~= 0 and _tCurrent.findKey == _tCurrent.duplicateLineKey and _tCurrent.findModifiers == _tCurrent.duplicateLineModifiers) then
+        for _, tBinding in ipairs(_tBindings) do
+            _tCurrent[tBinding.key] = _tDefinitions[tBinding.key].default;
+            _tCurrent[tBinding.modifiers] = _tDefinitions[tBinding.modifiers].default;
+        end
+    end
     return _tCurrent;
 end
 --[[!
@@ -133,6 +179,36 @@ function EditorSettings.get()
     for sKey, vValue in pairs(current()) do tCopy[sKey] = vValue; end
     return tCopy;
 end
+--[[!
+@fqxn CFS.Windows.EditorSettings.Functions.bindings
+@desc Returns the configurable editor command definitions.
+@ret table tBindings Detached definitions with key, modifiers, and label fields.
+!]]
+function EditorSettings.bindings()
+    local tCopy = {};
+    for _, tBinding in ipairs(_tBindings) do
+        tCopy[#tCopy + 1] = {key = tBinding.key, modifiers = tBinding.modifiers, label = tBinding.label};
+    end
+    return tCopy;
+end
+
+--[[!
+@fqxn CFS.Windows.EditorSettings.Functions.bindingText
+@desc Formats a supported key/modifier pair for the Bindings page.
+@param number nKey Key code, or zero to disable the binding.
+@param number nModifiers Modifier flags.
+@ret string sText Human-readable shortcut.
+!]]
+function EditorSettings.bindingText(nKey, nModifiers)
+    if (nKey == 0) then return "Unassigned"; end
+    local tParts = {};
+    if ((nModifiers & wx.wxMOD_CONTROL) ~= 0) then tParts[#tParts + 1] = "Ctrl"; end
+    if ((nModifiers & wx.wxMOD_ALT) ~= 0) then tParts[#tParts + 1] = "Alt"; end
+    if ((nModifiers & wx.wxMOD_SHIFT) ~= 0) then tParts[#tParts + 1] = "Shift"; end
+    tParts[#tParts + 1] = nKey >= wx.WXK_F1 and nKey <= wx.WXK_F12 and ("F"..tostring(math.floor(nKey - wx.WXK_F1 + 1))) or string.char(nKey);
+    return table.concat(tParts, "+");
+end
+
 --[[!
 @fqxn CFS.Windows.EditorSettings.Functions.sizes
 @pulsarlua function EditorSettings.sizes
@@ -206,6 +282,11 @@ function EditorSettings.apply(oCode)
         oCode:StyleSetUnderline(wxstc.wxSTC_STYLE_BRACEBAD, true);
         oCode:SetCaretForeground(wx.wxColour(aColors[9]));
         oCode:SetSelBackground(true, wx.wxColour(aColors[10]));
+        oCode:IndicatorSetStyle(_nWordIndicator, wxstc.wxSTC_INDIC_ROUNDBOX);
+        oCode:IndicatorSetForeground(_nWordIndicator, wx.wxColour(tTheme.matchBackground or aColors[10]));
+        oCode:IndicatorSetAlpha(_nWordIndicator, 100);
+        oCode:IndicatorSetOutlineAlpha(_nWordIndicator, 180);
+        oCode:IndicatorSetUnder(_nWordIndicator, true);
         oCode:SetCaretLineBackground(wx.wxColour(aColors[12]));
         oCode:SetCaretLineVisible(_tCurrent.currentLine);
         oCode:SetMarginWidth(0, _tCurrent.lineNumbers and (oCode:TextWidth(wxstc.wxSTC_STYLE_LINENUMBER, '9999') + 12) or 0);
@@ -214,6 +295,7 @@ function EditorSettings.apply(oCode)
         oCode:SetTabIndents(_tCurrent.tabIndents); oCode:SetBackSpaceUnIndents(_tCurrent.backspaceUnindents);
         oCode:SetWrapMode(_tCurrent.wordWrap and wxstc.wxSTC_WRAP_WORD or wxstc.wxSTC_WRAP_NONE);
         oCode:SetViewWhiteSpace(_tCurrent.whitespace and wxstc.wxSTC_WS_VISIBLEALWAYS or wxstc.wxSTC_WS_INVISIBLE);
+        oCode:SetMouseDwellTime(_tCurrent.hoverEnabled and _tCurrent.hoverDelay or wxstc.wxSTC_TIME_FOREVER);
         oCode:SetViewEOL(_tCurrent.lineEndings);
         oCode:SetEndAtLastLine(not _tCurrent.scrollPastEnd);
         oCode:SetIndentationGuides(_tCurrent.indentGuides and wxstc.wxSTC_IV_LOOKBOTH or wxstc.wxSTC_IV_NONE);
@@ -229,6 +311,7 @@ function EditorSettings.apply(oCode)
 @desc Registers controls for shared preference updates and returns an unregister callback.
 @param any dWindow Window.
 @param any tControls Controls.
+@param table tFindBar Optional permanent Find bar to include in this row.
 @param any fUpdated Updated.
 !]]
 function EditorSettings.register(dWindow, tControls, fUpdated)
@@ -286,6 +369,12 @@ function EditorSettings.setMany(tValues)
         end
         assert(bValid, "Invalid editor option: "..tostring(sKey));
     end
+    local tCombined = EditorSettings.get();
+    for sKey, vValue in pairs(tValues) do tCombined[sKey] = vValue; end
+    for _, tBinding in ipairs(_tBindings) do
+        assert(validBinding(tCombined[tBinding.key], tCombined[tBinding.modifiers]), "Invalid or reserved shortcut for "..tBinding.label..". Use Ctrl/Alt with a letter or digit, or F1-F12.");
+    end
+    assert(tCombined.findKey == 0 or tCombined.findKey ~= tCombined.duplicateLineKey or tCombined.findModifiers ~= tCombined.duplicateLineModifiers, "Find and Duplicate line cannot use the same shortcut.");
     for sKey, vValue in pairs(tValues) do
         local sSetting, sValue;
         if (sKey == "theme") then sSetting, sValue = "Theme", _tThemes[vValue + 1].name;
@@ -312,11 +401,11 @@ end
 --[[!
 @fqxn CFS.Windows.EditorSettings.Functions.bar
 @pulsarlua function EditorSettings.bar
-@desc Builds the theme, font-size, and Options toolbar; returns its controls and unregister callback.
+@desc Builds the theme, font-size, Reference, and Options toolbar, optionally sharing its row with a flexible Find bar; returns its controls and unregister callback.
 @param any dParent Parent window.
 @param any tControls Controls.
 !]]
-function EditorSettings.bar(dParent, tControls)
+function EditorSettings.bar(dParent, tControls, tFindBar)
     local oBar = wx.wxBoxSizer(wx.wxHORIZONTAL);
     local tNames, tSizes = {}, {};
     for _, tTheme in ipairs(_tThemes) do tNames[#tNames + 1] = tTheme.name; end
@@ -344,7 +433,7 @@ function EditorSettings.bar(dParent, tControls)
     oBar:Add(oTheme, 0, wx.wxALIGN_CENTER_VERTICAL);
     oBar:Add(wx.wxStaticText(dParent, wx.wxID_ANY, "Font size:"), 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT + wx.wxRIGHT, 8);
     oBar:Add(oSize, 0, wx.wxALIGN_CENTER_VERTICAL);
-    oBar:AddStretchSpacer();
+    if (not tFindBar) then oBar:AddStretchSpacer(); end
     local oOptions = wx.wxButton(dParent, wx.wxID_ANY, "Options...");
     oOptions:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function()
         local bOK, sError = pcall(function() require("Windows.EditorOptions").show(dParent); end);
@@ -357,6 +446,11 @@ function EditorSettings.bar(dParent, tControls)
     end);
     oBar:Add(oReference, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT, 8);
     oBar:Add(oOptions, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT, 8);
+    if (tFindBar) then
+        local oSeparator = wx.wxStaticLine(dParent, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(1, 20), wx.wxLI_VERTICAL);
+        oBar:Add(oSeparator, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT + wx.wxRIGHT, 8);
+        oBar:Add(tFindBar.panel, 1, wx.wxALIGN_CENTER_VERTICAL);
+    end
     return oBar, oTheme, oSize, unregister;
 end
 --[[!
@@ -405,13 +499,102 @@ function EditorSettings.cleanControl(oCode)
     return oCode:GetText();
 end
 --[[!
+@fqxn CFS.Windows.EditorSettings.Functions.findBar
+@desc Creates a permanent Find bar for the active editor. Searches literal text with optional case and whole-word matching, wrapping at document boundaries.
+@param userdata dParent Parent window.
+@param function fGetCode Returns the currently active editor control.
+@ret table tBar Panel, query/options controls, focus action, and search action.
+!]]
+function EditorSettings.findBar(dParent, fGetCode)
+    local dBar = wx.wxPanel(dParent, wx.wxID_ANY);
+    local oLayout = wx.wxBoxSizer(wx.wxHORIZONTAL);
+    local oQuery = wx.wxTextCtrl(dBar, wx.wxID_ANY, "", wx.wxDefaultPosition, wx.wxDefaultSize, wx.wxTE_PROCESS_ENTER);
+    local oCase = wx.wxCheckBox(dBar, wx.wxID_ANY, "Aa");
+    local oWhole = wx.wxCheckBox(dBar, wx.wxID_ANY, "Word");
+    local oPrevious = wx.wxButton(dBar, wx.wxID_ANY, "<", wx.wxDefaultPosition, wx.wxSize(26, -1));
+    local oNext = wx.wxButton(dBar, wx.wxID_ANY, ">", wx.wxDefaultPosition, wx.wxSize(26, -1));
+    local oStatus = wx.wxStaticText(dBar, wx.wxID_ANY, "");
+    oStatus:SetMinSize(wx.wxSize(70, -1));
+    oQuery:SetMinSize(wx.wxSize(40, -1)); oQuery:SetHint("Find...");
+    local oFindLabel = wx.wxStaticText(dBar, wx.wxID_ANY, "Find:");
+    oCase:SetToolTip("Case-sensitive search"); oWhole:SetToolTip("Match whole words");
+    oPrevious:SetToolTip("Previous match (Shift+Enter)"); oNext:SetToolTip("Next match (Enter)");
+    local oMore = wx.wxButton(dBar, wx.wxID_ANY, "...", wx.wxDefaultPosition, wx.wxSize(26, -1));
+    oMore:SetToolTip("Search options");
+    oLayout:Add(oFindLabel, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 6);
+    oLayout:Add(oQuery, 1, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 6);
+    oLayout:Add(oCase, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 6);
+    oLayout:Add(oWhole, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 6);
+    oLayout:Add(oPrevious, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 4);
+    oLayout:Add(oNext, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 6);
+    oLayout:Add(oMore, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 4);
+    oLayout:Add(oStatus, 0, wx.wxALIGN_CENTER_VERTICAL);
+    dBar:SetSizer(oLayout);
+    local function layout()
+        local bCompact = dBar:GetClientSize():GetWidth() < 440;
+        oFindLabel:Show(not bCompact);
+        oCase:Show(not bCompact); oWhole:Show(not bCompact); oMore:Show(bCompact);
+        oStatus:Show(not bCompact and oStatus:GetLabel() ~= "");
+        oQuery:SetToolTip(oStatus:GetLabel() == "" and "Find text" or oStatus:GetLabel());
+        dBar:Layout();
+    end
+    oMore:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function()
+        local oMenu = wx.wxMenu();
+        local nCase, nWhole = wx.wxNewId(), wx.wxNewId();
+        oMenu:AppendCheckItem(nCase, "Case sensitive"); oMenu:Check(nCase, oCase:GetValue());
+        oMenu:AppendCheckItem(nWhole, "Whole word"); oMenu:Check(nWhole, oWhole:GetValue());
+        oMenu:Connect(nCase, wx.wxEVT_COMMAND_MENU_SELECTED, function() oCase:SetValue(not oCase:GetValue()); end);
+        oMenu:Connect(nWhole, wx.wxEVT_COMMAND_MENU_SELECTED, function() oWhole:SetValue(not oWhole:GetValue()); end);
+        dBar:PopupMenu(oMenu); oMenu:delete();
+    end);
+    dBar:Connect(wx.wxEVT_SIZE, function(oEvent) layout(); oEvent:Skip(); end);
+    layout();
+
+    -- Search without changing the document or the editor's target/search state.
+    local function search(bPrevious)
+        local oCode, sQuery = fGetCode(), oQuery:GetValue();
+        if (not oCode or sQuery == "") then oStatus:SetLabel(""); layout(); return false; end
+        local nFlags = (oCase:GetValue() and wxstc.wxSTC_FIND_MATCHCASE or 0) | (oWhole:GetValue() and wxstc.wxSTC_FIND_WHOLEWORD or 0);
+        local nLength = oCode:GetTextLength();
+        local nStart = bPrevious and oCode:GetSelectionStart() or oCode:GetSelectionEnd();
+        local nFound = oCode:FindText(nStart, bPrevious and 0 or nLength, sQuery, nFlags);
+        local bWrapped = nFound < 0;
+
+        if (bWrapped) then nFound = oCode:FindText(bPrevious and nLength or 0, nStart, sQuery, nFlags); end
+        if (nFound < 0) then oStatus:SetLabel("Not found"); layout(); return false; end
+        oCode:SetSelection(nFound, nFound + #sQuery); oCode:EnsureCaretVisible();
+        oStatus:SetLabel(bWrapped and "Wrapped" or ""); layout();
+        return true;
+    end
+    local function focus()
+        local oCode = fGetCode();
+        local sSelection = oCode and oCode:GetSelectedText() or "";
+        if (sSelection ~= "" and not sSelection:find("[\r\n]")) then oQuery:ChangeValue(sSelection); end
+        oQuery:SetFocus(); oQuery:SelectAll();
+    end
+    oQuery:Connect(wx.wxEVT_TEXT, function() oStatus:SetLabel(""); layout(); end);
+    oQuery:Connect(wx.wxEVT_COMMAND_TEXT_ENTER, function() search(false); end);
+    oQuery:Connect(wx.wxEVT_KEY_DOWN, function(oEvent)
+        if (oEvent:GetKeyCode() == wx.WXK_RETURN and oEvent:ShiftDown()) then
+            search(true);
+        elseif (oEvent:GetKeyCode() == wx.WXK_ESCAPE) then
+            local oCode = fGetCode(); if (oCode) then oCode:SetFocus(); end
+        else oEvent:Skip(); end
+    end);
+    oPrevious:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function() search(true); end);
+    oNext:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function() search(false); end);
+    return {panel = dBar, query = oQuery, matchCase = oCase, wholeWord = oWhole, previous = oPrevious, next = oNext, status = oStatus, focus = focus, search = search};
+end
+
+--[[!
 @fqxn CFS.Windows.EditorSettings.Functions.configure
 @pulsarlua function EditorSettings.configure
-@desc Configures language lexing, folding, bracket matching, auto-close, auto-indent, and shared preferences.
+@desc Configures language lexing, folding, bracket and selected-word highlighting, editable command bindings, auto-close, auto-indent, and shared preferences.
 @param any oCode Code.
 @param any sKind Kind.
+@param function fFind Optional action to focus the permanent Find bar.
 !]]
-function EditorSettings.configure(oCode, sKind)
+function EditorSettings.configure(oCode, sKind, fFind)
     oCode:SetLexer(sKind == "lua" and wxstc.wxSTC_LEX_LUA or sKind == "ini" and wxstc.wxSTC_LEX_PROPERTIES or wxstc.wxSTC_LEX_NULL);
     oCode:SetKeyWords(0, "and break do else elseif end for function goto if in local not or repeat return then until while");
     oCode:SetKeyWords(1, "false nil true");
@@ -430,6 +613,49 @@ function EditorSettings.configure(oCode, sKind)
         {wxstc.wxSTC_MARKNUM_FOLDERMIDTAIL, wxstc.wxSTC_MARK_TCORNER},
     };
     for _, tMarker in ipairs(tMarkers) do oCode:MarkerDefine(tMarker[1], tMarker[2]); end
+    local nMatchStart, nMatchEnd;
+    -- Indicator 8 belongs to selected-word matches; leave other indicators intact.
+    local function clearMatches()
+        if (nMatchStart == nil) then return; end
+        local nPrevious = oCode:GetIndicatorCurrent();
+        oCode:SetIndicatorCurrent(_nWordIndicator); oCode:IndicatorClearRange(0, oCode:GetTextLength());
+        oCode:SetIndicatorCurrent(nPrevious); nMatchStart, nMatchEnd = nil, nil;
+    end
+    oCode:Connect(wxstc.wxEVT_STC_DOUBLECLICK, function(oEvent)
+        clearMatches();
+        local nPosition = oEvent:GetPosition();
+        if (nPosition < 0) then oEvent:Skip(); return; end
+        local nStart = oCode:WordStartPosition(nPosition, true);
+        local nEnd = oCode:WordEndPosition(nPosition, true);
+        local sWord = oCode:GetTextRange(nStart, nEnd);
+        if (sWord == "" or not sWord:match("^[%w_]+$")) then oEvent:Skip(); return; end
+        nMatchStart, nMatchEnd = nStart, nEnd;
+        local nPrevious, nSearch = oCode:GetIndicatorCurrent(), 0;
+        oCode:SetIndicatorCurrent(_nWordIndicator);
+
+        while (nSearch < oCode:GetTextLength()) do
+            local nFound = oCode:FindText(nSearch, oCode:GetTextLength(), sWord, wxstc.wxSTC_FIND_MATCHCASE | wxstc.wxSTC_FIND_WHOLEWORD);
+            if (nFound < 0) then break; end
+            if (nFound ~= nStart) then oCode:IndicatorFillRange(nFound, #sWord); end
+            nSearch = nFound + #sWord;
+        end
+
+        oCode:SetIndicatorCurrent(nPrevious); oEvent:Skip();
+    end);
+    oCode:Connect(wxstc.wxEVT_STC_MODIFIED, function(oEvent)
+        if ((oEvent:GetModificationType() & (wxstc.wxSTC_MOD_INSERTTEXT | wxstc.wxSTC_MOD_DELETETEXT)) ~= 0) then clearMatches(); end
+        oEvent:Skip();
+    end);
+    oCode:Connect(wx.wxEVT_KEY_DOWN, function(oEvent)
+        local tState = current();
+        local nModifiers = oEvent:GetModifiers() & (wx.wxMOD_CONTROL | wx.wxMOD_SHIFT | wx.wxMOD_ALT);
+        local nKey = oEvent:GetKeyCode();
+        if (tState.findKey ~= 0 and nKey == tState.findKey and nModifiers == tState.findModifiers and fFind) then
+            clearMatches(); fFind();
+        elseif (tState.duplicateLineKey ~= 0 and nKey == tState.duplicateLineKey and nModifiers == tState.duplicateLineModifiers) then
+            clearMatches(); oCode:LineDuplicate();
+        else oEvent:Skip(); end
+    end);
     oCode:Connect(wxstc.wxEVT_STC_MARGINCLICK, function(oEvent)
         if (oEvent:GetMargin() == 1) then oCode:ToggleFold(oCode:LineFromPosition(oEvent:GetPosition())); end
     end);
@@ -453,6 +679,7 @@ function EditorSettings.configure(oCode, sKind)
         oEvent:Skip();
     end);
     oCode:Connect(wxstc.wxEVT_STC_UPDATEUI, function(oEvent)
+        if (nMatchStart ~= nil and (oCode:GetSelectionStart() ~= nMatchStart or oCode:GetSelectionEnd() ~= nMatchEnd)) then clearMatches(); end
         local bOK, sError = pcall(matchBrackets, oCode);
         if (not bOK) then require("Errors").report(sError); end
         oEvent:Skip();

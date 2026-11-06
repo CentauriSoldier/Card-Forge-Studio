@@ -547,12 +547,14 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
     UserEnv = UserEnv or require("Globals.UserEnv");
     UserEnv.UserUpdateENV({});
     UserEnv.ProcSysUpdateRoot({
-        STYLE        = STYLE,
-        _TABLE       = PROCSYS_TO_TABLE,
-        _NUMBER      = PROCSYS_TO_NUMBER,
-        _sCardSetName = oCardSet.GetName(),
-        _nCardWidth   = oCardSet.GetCardWidth(),
-        _nCardHeight  = oCardSet.GetCardHeight(),
+        STYLE        	= STYLE,
+        _TABLE       	= PROCSYS_TO_TABLE,
+        _NUMBER      	= PROCSYS_TO_NUMBER,
+		_pCardSet		= "/"..oCardSet.GetUUID(),
+		_sCardSetID 	= oCardSet.GetUUID(),
+        _sCardSetName 	= oCardSet.GetName(),
+        _nCardWidth   	= oCardSet.GetCardWidth(),
+        _nCardHeight  	= oCardSet.GetCardHeight(),
     }, true);
 
     --[[!

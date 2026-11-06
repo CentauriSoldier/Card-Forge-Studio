@@ -121,9 +121,23 @@ local function documentation()
                 if (sFQXN) then
                     local sDescription = sBlock:match("@desc%s+(.-)%s*@") or sBlock:match("@desc%s+(.+)") or "";
                     sDescription = sDescription:gsub("<[^>]*>", " "):gsub("&nbsp;", " "):gsub("&amp;", "&"):gsub("%s+", " ");
-                    local tParameters = {};
-                    for sName in sBlock:gmatch("@param%s+[^%s]+%s+([^%s]+)") do tParameters[#tParameters + 1] = sName; end
-                    local tDoc = {description = sDescription, parameters = tParameters, inherit = sBlock:match("@inheritdoc%s+([^%s]+)")};
+                    local tParameters, tParameterDetails, tReturns = {}, {}, {};
+                    for sTag, sValue in sBlock:gmatch("@([%a]+)%s+([^@]+)") do
+                        if (sTag == "param" or sTag == "ret" or sTag == "return") then
+                            local sType, sName, sDetail = sValue:match("^(%S+)%s+(%S+)%s*(.-)%s*$");
+                            if (sType and sName) then
+                                sDetail = sDetail:gsub("<[^>]*>", " "):gsub("&nbsp;", " "):gsub("&amp;", "&"):gsub("%s+", " ");
+                                local sEntry = sName.." ("..sType..")"..(sDetail ~= "" and ": "..sDetail or "");
+                                if (sTag == "param") then
+                                    tParameters[#tParameters + 1] = sName;
+                                    tParameterDetails[#tParameterDetails + 1] = sEntry;
+                                else
+                                    tReturns[#tReturns + 1] = sEntry;
+                                end
+                            end
+                        end
+                    end
+                    local tDoc = {kind = sBlock:match("@pulsarlua%s+([^%s]+)"), description = sDescription, parameters = tParameters, parameterDetails = tParameterDetails, returns = tReturns, inherit = sBlock:match("@inheritdoc%s+([^%s]+)")};
                     tDocs[sFQXN] = tDoc;
                     local sName = sBlock:match("@pulsarlua%s+[^%s]+%s+([^%s]+)");
                     if (not sName and sFQXN:sub(1, 12) == "CFS.UserEnv.") then
@@ -138,6 +152,8 @@ local function documentation()
         if (tDoc.inherit and tDocs[tDoc.inherit]) then
             tDoc.description = tDocs[tDoc.inherit].description;
             tDoc.parameters = tDocs[tDoc.inherit].parameters;
+            tDoc.parameterDetails = tDocs[tDoc.inherit].parameterDetails;
+            tDoc.returns = tDocs[tDoc.inherit].returns;
         end
     end
     return tNames;
@@ -152,7 +168,14 @@ function Autocomplete.Describe(tItem, tDocs)
     local sText = tItem.name.."  ("..tItem.kind..")";
     if (tDoc) then
         if (#tDoc.parameters > 0) then sText = tItem.name.."("..table.concat(tDoc.parameters, ", ")..")"; end
-        return sText.."\n\n"..tDoc.description;
+        sText = sText.."\n\n"..tDoc.description;
+        if (tDoc.parameterDetails and #tDoc.parameterDetails > 0) then
+            sText = sText.."\n\nParameters:\n"..table.concat(tDoc.parameterDetails, "\n");
+        end
+        if (tDoc.returns and #tDoc.returns > 0) then
+            sText = sText.."\n\nReturns:\n"..table.concat(tDoc.returns, "\n");
+        end
+        return sText;
     end
     if (tItem.name:match("^_tRow[%.%[]") or tItem.name:match("^tRow[%.%[]")) then
         return sText.."\n\nA column from the currently loaded card set.";
@@ -178,6 +201,231 @@ function Autocomplete.Style(oControl, sPrefix)
     oControl:Refresh();
 end
 
+--[[!
+@fqxn CFS.Modules.Autocomplete.Private.Functions.buildAliases
+@desc Builds conservative local-alias bindings without executing the source. Names with reassignment or competing declarations are excluded throughout the script. Incomplete lexical or block structure yields an empty index.
+@param string sSource Current editor source.
+@param table tDocs Documented names available for alias targets.
+@ret table tAliases Alias bindings with source and scope boundaries.
+@vis private
+!]]
+local function buildAliases(sSource, tDocs)
+    local tTokens, nPosition = {}, 1;
+    local tPairs = {["=="] = true, ["~="] = true, ["<="] = true, [">="] = true, [".."] = true, ["//"] = true, ["<<"] = true, [">>"] = true, ["::"] = true};
+
+    while (nPosition <= #sSource) do
+        local nStart, sChar = nPosition, sSource:sub(nPosition, nPosition);
+
+        if (sChar:match("%s")) then
+            nPosition = nPosition + 1;
+        elseif (sSource:sub(nPosition, nPosition + 1) == "--") then
+            local sEquals = sSource:match("^%[(=*)%[", nPosition + 2);
+
+            if (sEquals) then
+                local nEnd = sSource:find("]"..sEquals.."]", nPosition + 4 + #sEquals, true);
+                if (not nEnd) then return {}; end
+                nPosition = nEnd + #sEquals + 2;
+            else
+                nPosition = (sSource:find("\n", nPosition + 2, true) or #sSource) + 1;
+            end
+        elseif (sChar == '"' or sChar == "'") then
+            nPosition = nPosition + 1;
+            local bClosed = false;
+
+            while (nPosition <= #sSource) do
+                local sCurrent = sSource:sub(nPosition, nPosition);
+
+                if (sCurrent == "\\") then
+                    nPosition = nPosition + 2;
+                elseif (sCurrent == sChar) then
+                    nPosition = nPosition + 1; bClosed = true; break;
+                elseif (sCurrent == "\n" or sCurrent == "\r") then
+                    return {};
+                else
+                    nPosition = nPosition + 1;
+                end
+            end
+
+            if (not bClosed) then return {}; end
+            tTokens[#tTokens + 1] = {text = "<string>", first = nStart, last = nPosition - 1};
+        elseif (sChar == "[" and sSource:match("^%[(=*)%[", nPosition)) then
+            local sEquals = sSource:match("^%[(=*)%[", nPosition);
+            local nEnd = sSource:find("]"..sEquals.."]", nPosition + #sEquals + 2, true);
+            if (not nEnd) then return {}; end
+            nPosition = nEnd + #sEquals + 2;
+            tTokens[#tTokens + 1] = {text = "<string>", first = nStart, last = nPosition - 1};
+        else
+            local sText = sSource:match("^[%a_][%w_]*", nPosition);
+            local bName = sText ~= nil;
+
+            if (not sText) then
+                sText = sSource:match("^%d[%w_%.]*", nPosition);
+
+                if (not sText) then
+                    local sPair = sSource:sub(nPosition, nPosition + 1);
+                    sText = tPairs[sPair] and sPair or sChar;
+                end
+            end
+
+            nPosition = nPosition + #sText;
+            tTokens[#tTokens + 1] = {text = sText, name = bName, first = nStart, last = nPosition - 1};
+        end
+    end
+
+    local tRoot = {first = 1, last = #sSource + 1};
+    local tStack, tDeclarations, tWrites, tCandidates = {tRoot}, {}, {}, {};
+    local function declare(sName)
+        tDeclarations[sName] = (tDeclarations[sName] or 0) + 1;
+    end
+    local function token(nIndex)
+        return tTokens[nIndex] and tTokens[nIndex].text;
+    end
+    local tContinuations = {["("] = true, ["["] = true, ["{"] = true, ["<string>"] = true, ["."] = true, [":"] = true, [","] = true,
+        ["+"] = true, ["-"] = true, ["*"] = true, ["/"] = true, ["//"] = true, ["%"] = true, ["^"] = true, [".."] = true,
+        ["and"] = true, ["or"] = true, ["<"] = true, [">"] = true, ["<="] = true, [">="] = true, ["=="] = true, ["~="] = true,
+        ["&"] = true, ["|"] = true, ["~"] = true, ["<<"] = true, [">>"] = true};
+
+    for nIndex, tToken in ipairs(tTokens) do
+        local sText = tToken.text;
+        local tScope = tStack[#tStack];
+
+        if (sText == "local") then
+            local nNext = nIndex + 1;
+
+            if (token(nNext) == "function") then
+                if (tTokens[nNext + 1] and tTokens[nNext + 1].name) then declare(token(nNext + 1)); end
+            else
+                while (tTokens[nNext] and tTokens[nNext].name) do
+                    declare(token(nNext));
+                    if (token(nNext + 1) ~= ",") then break; end
+                    nNext = nNext + 2;
+                end
+
+                local tName = tTokens[nIndex + 1];
+
+                if (tName and tName.name and token(nIndex + 2) == "=") then
+                    local nTarget = nIndex + 3;
+
+                    if (tTokens[nTarget] and tTokens[nTarget].name) then
+                        local sTarget = token(nTarget); nTarget = nTarget + 1;
+
+                        while (token(nTarget) == "." and tTokens[nTarget + 1] and tTokens[nTarget + 1].name) do
+                            sTarget = sTarget.."."..token(nTarget + 1); nTarget = nTarget + 2;
+                        end
+
+                        local tNext = tTokens[nTarget];
+                        local bEnd = not tNext or tNext.text == ";" or tNext.text == "end" or tNext.text == "else" or tNext.text == "elseif" or tNext.text == "until";
+
+                        if (tNext and not bEnd and not tContinuations[tNext.text]) then
+                            bEnd = sSource:sub(tTokens[nTarget - 1].last + 1, tNext.first - 1):find("[\r\n]") ~= nil;
+                        end
+
+                        if (bEnd) then
+                            tCandidates[#tCandidates + 1] = {name = tName.text, target = sTarget, first = tTokens[nTarget - 1].last + 1, scope = tScope};
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Count writes across all scopes; a competing write suppresses the alias.
+        if (tToken.name and token(nIndex - 1) ~= "." and token(nIndex - 1) ~= ":") then
+            local nNext = nIndex + 1;
+            while (token(nNext) == "." and tTokens[nNext + 1] and tTokens[nNext + 1].name) do nNext = nNext + 2; end
+            while (token(nNext) == "," and tTokens[nNext + 1] and tTokens[nNext + 1].name) do nNext = nNext + 2; end
+            if (token(nNext) == "=") then tWrites[sText] = (tWrites[sText] or 0) + 1; end
+        end
+
+        if (sText == "function") then
+            local nNext = nIndex + 1;
+
+            if (tTokens[nNext] and tTokens[nNext].name) then
+                local sName = token(nNext); tWrites[sName] = (tWrites[sName] or 0) + 1;
+            end
+
+            while (token(nNext) and token(nNext) ~= "(") do
+                if (token(nNext) == ":") then declare("self"); end
+                nNext = nNext + 1;
+            end
+
+            if (not token(nNext)) then return {}; end
+            nNext = nNext + 1;
+
+            while (token(nNext) and token(nNext) ~= ")") do
+                if (tTokens[nNext].name) then declare(token(nNext)); end
+                nNext = nNext + 1;
+            end
+
+            if (not token(nNext)) then return {}; end
+            tStack[#tStack + 1] = {kind = "function", first = tToken.first, parent = tScope};
+        elseif (sText == "if" or sText == "while" or sText == "for" or sText == "repeat") then
+            tStack[#tStack + 1] = {kind = sText, first = tToken.first, parent = tScope};
+
+            if (sText == "for") then
+                local nNext = nIndex + 1;
+
+                while (tTokens[nNext] and tTokens[nNext].name) do
+                    declare(token(nNext));
+                    if (token(nNext + 1) ~= ",") then break; end
+                    nNext = nNext + 2;
+                end
+            end
+        elseif (sText == "do") then
+            if ((tScope.kind == "while" or tScope.kind == "for") and not tScope.body) then
+                tScope.body = true;
+            else
+                tStack[#tStack + 1] = {kind = "do", first = tToken.first, parent = tScope};
+            end
+        elseif (sText == "else" or sText == "elseif") then
+            if (tScope.kind ~= "if") then return {}; end
+            tScope.last = tToken.first;
+            tStack[#tStack] = {kind = "if", first = tToken.first, parent = tScope.parent};
+        elseif (sText == "end" or sText == "until") then
+            if (#tStack == 1 or (sText == "until") ~= (tScope.kind == "repeat")) then return {}; end
+            tScope.last = tToken.first; tStack[#tStack] = nil;
+        end
+    end
+
+    if (#tStack ~= 1) then return {}; end
+    local tAliases = {};
+
+    for _, tAlias in ipairs(tCandidates) do
+        if (tDeclarations[tAlias.name] == 1 and tWrites[tAlias.name] == 1) then
+            local sBase = tAlias.target:match("^[^.]+");
+
+            if (tDocs[tAlias.target] and not tDeclarations[sBase] and not tWrites[sBase]) then
+                tAlias.resolved = tAlias.target;
+            else
+                local tParent = tAliases[tAlias.target];
+
+                if (tParent and tParent.first < tAlias.first and tParent.scope.last > tAlias.first) then
+                    local tScope = tAlias.scope;
+                    while (tScope and tScope ~= tParent.scope) do tScope = tScope.parent; end
+                    if (tScope) then tAlias.resolved = tParent.resolved; end
+                end
+            end
+
+            if (tAlias.resolved) then tAliases[tAlias.name] = tAlias; end
+        end
+    end
+
+    return tAliases;
+end
+
+--[[!
+@fqxn CFS.Modules.Autocomplete.Private.Functions.resolveAlias
+@desc Looks up a cached alias only after its declaration and inside its lexical scope.
+@param table tAliases Cached alias bindings.
+@param string sName Hovered name.
+@param number nPosition One-based source byte position.
+@ret string|nil sTarget Documented target, or nil when no unambiguous binding applies.
+@vis private
+!]]
+local function resolveAlias(tAliases, sName, nPosition)
+    local tAlias = tAliases[sName];
+    if (tAlias and nPosition >= tAlias.first and nPosition < tAlias.scope.last) then return tAlias.resolved; end
+end
+
 function Autocomplete.Attach(oCode, bRowProcessor)
     local dPanel = wx.wxPanel(oCode, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(460, 300), wx.wxBORDER_SIMPLE);
     local oList = wx.wxListBox(dPanel, wx.wxID_ANY);
@@ -188,10 +436,12 @@ function Autocomplete.Attach(oCode, bRowProcessor)
     dPanel:SetSizer(oLayout); dPanel:Hide();
     local oTimer = wx.wxTimer(dPanel);
     local tItems, tDocs = {}, {};
-    local nStart, nCompletionPosition;
+    local nStart, nCompletionPosition, nHoverPosition;
+    local bHover, bAliasHover = false, false;
+    local tAliases, bAliasesDirty = {}, true;
     local sAppearance;
     local function dismiss()
-        dPanel:Hide(); oTimer:Stop();
+        dPanel:Hide(); oTimer:Stop(); bHover = false; bAliasHover = false; oList:Show();
     end
     tControls[oCode] = dismiss;
     local appearance;
@@ -207,28 +457,116 @@ function Autocomplete.Attach(oCode, bRowProcessor)
             Autocomplete.Style(oList, "suggestion"); Autocomplete.Style(oHelp, "documentation");
             sAppearance = sCurrentAppearance;
         end
-        oHelp:Show(tSettings.autocompleteHelp);
-        local nListHeight = oList:GetCharHeight() * 5 + 10;
+        oList:Show(not bHover);
+        oHelp:Show(bHover or tSettings.autocompleteHelp);
+        local nListHeight = bHover and 0 or (oList:GetCharHeight() * 5 + 10);
         oList:SetMinSize(wx.wxSize(-1, nListHeight));
         oList:SetMaxSize(wx.wxSize(-1, nListHeight));
+        local oSize, oCaret = oCode:GetClientSize(), oCode:PointFromPosition(bHover and nHoverPosition or oCode:GetCurrentPos());
+        local nMaxWidth = math.max(1, math.floor(oSize:GetWidth() * 0.7));
+        local nContentWidth = 0;
+        for _, tItem in ipairs(tItems) do
+            local nWidth = oList:GetTextExtent(tItem.name);
+            nContentWidth = math.max(nContentWidth, nWidth + 32);
+        end
+        if (bHover or tSettings.autocompleteHelp) then
+            for sLine in (oHelp:GetValue().."\n"):gmatch("(.-)\n") do
+                local nWidth = oHelp:GetTextExtent(sLine);
+                nContentWidth = math.max(nContentWidth, nWidth + 32);
+            end
+        end
+        local nPanelWidth = math.min(nMaxWidth, math.max(240, nContentWidth));
+        local nTextWidth = math.max(1, nPanelWidth - 32);
         local nLines = 0;
         for sLine in (oHelp:GetValue().."\n"):gmatch("(.-)\n") do
             local sWrapped = ""; nLines = nLines + 1;
             for sWord in sLine:gmatch("%S+") do
                 local sCandidate = sWrapped == "" and sWord or sWrapped.." "..sWord;
                 local nWidth = oHelp:GetTextExtent(sCandidate);
-                if (nWidth > 430 and sWrapped ~= "") then nLines = nLines + 1; sWrapped = sWord;
-                else sWrapped = sCandidate; end
+                if (nWidth > nTextWidth and sWrapped ~= "") then
+                    nLines = nLines + 1; sWrapped = sWord;
+                else
+                    sWrapped = sCandidate;
+                end
+                -- Account for long identifiers that wrap without whitespace.
+                local nWordWidth = oHelp:GetTextExtent(sWrapped);
+                if (nWordWidth > nTextWidth) then
+                    nLines = nLines + math.ceil(nWordWidth / nTextWidth) - 1;
+                    sWrapped = "";
+                end
             end
         end
-        local nDescriptionHeight = math.max(180, nLines * (oHelp:GetCharHeight() + 2) + 24);
-        local oSize, oCaret = oCode:GetClientSize(), oCode:PointFromPosition(oCode:GetCurrentPos());
-        local nHeight = tSettings.autocompleteHelp and (nListHeight + nDescriptionHeight + 6) or (nListHeight + 2);
-        nHeight = math.min(nHeight, math.max(nListHeight + 2, oSize:GetHeight() - 4));
-        dPanel:SetSize(wx.wxSize(460, nHeight));
+        local nDescriptionHeight = math.max(80, nLines * (oHelp:GetCharHeight() + 2) + 24);
+        local nHeight = (bHover or tSettings.autocompleteHelp) and (nListHeight + nDescriptionHeight + 6) or (nListHeight + 2);
+        nHeight = math.max(1, math.min(nHeight, oSize:GetHeight() - 4));
+        dPanel:SetSize(wx.wxSize(nPanelWidth, nHeight));
         dPanel:Layout();
-        dPanel:Move(wx.wxPoint(math.max(0, math.min(oCaret:GetX(), oSize:GetWidth() - 460)), math.max(0, math.min(oCaret:GetY() + oCode:TextHeight(0), oSize:GetHeight() - nHeight))));
+        local nY = oCaret:GetY() + oCode:TextHeight(0);
+        if (bHover and nY + nHeight > oSize:GetHeight()) then nY = oCaret:GetY() - nHeight; end
+        dPanel:Move(wx.wxPoint(math.max(0, math.min(oCaret:GetX(), oSize:GetWidth() - nPanelWidth)), math.max(0, math.min(nY, oSize:GetHeight() - nHeight))));
     end
+    --[[!
+    @fqxn CFS.Modules.Autocomplete.Private.Functions.hover
+    @desc Resolves a documented dotted name at the mouse position without evaluating script values. Reuses the documentation panel independently of autocomplete suggestions.
+    @param number nPosition Editor byte position under the mouse.
+    @vis private
+    !]]
+    local function hover(nPosition)
+        local tSettings = require("Windows.EditorSettings").get();
+        if (not tSettings.hoverEnabled or dPanel:IsShown() and not bHover) then return; end
+        if (nPosition < 0 or nPosition >= oCode:GetTextLength()) then return; end
+        oCode:Colourise(0, nPosition + 1);
+        local nStyle = oCode:GetStyleAt(nPosition);
+        if (nStyle == 1 or nStyle == 2 or nStyle == 3 or nStyle == 6 or nStyle == 7 or nStyle == 8 or nStyle == 12) then return; end
+        local nLine = oCode:LineFromPosition(nPosition);
+        local nLineStart = oCode:PositionFromLine(nLine);
+        local sLine = oCode:GetTextRange(nLineStart, oCode:GetLineEndPosition(nLine));
+        local nOffset = nPosition - nLineStart + 1;
+        if (not sLine:sub(nOffset, nOffset):match("[%w_%.]")) then return; end
+        local nFirst, nLast = nOffset, nOffset;
+        while (nFirst > 1 and sLine:sub(nFirst - 1, nFirst - 1):match("[%w_%.]")) do nFirst = nFirst - 1; end
+        while (nLast < #sLine and sLine:sub(nLast + 1, nLast + 1):match("[%w_%.]")) do nLast = nLast + 1; end
+        local sName = sLine:sub(nFirst, nLast);
+        local tHoverDocs = documentation();
+        local sTarget;
+
+        if (tSettings.hoverAliases) then
+            if (bAliasesDirty) then
+                tAliases = buildAliases(oCode:GetText(), tHoverDocs);
+                bAliasesDirty = false;
+            end
+            sTarget = resolveAlias(tAliases, sName, nLineStart + nFirst);
+        end
+
+        local tDoc = tHoverDocs[sTarget or sName];
+        if (not tDoc or tDoc.description == "") then return; end
+        if (sTarget) then tHoverDocs[sName] = tDoc; end
+        bHover = true; bAliasHover = sTarget ~= nil; nHoverPosition = nLineStart + nFirst - 1;
+        tItems = {}; tDocs = tHoverDocs;
+        local sHelp = Autocomplete.Describe({name = sName, kind = tDoc.kind or "value"}, tDocs);
+        if (sTarget) then sHelp = "Alias of "..sTarget.."\n\n"..sHelp; end
+        oHelp:SetValue(sHelp);
+        appearance(); dPanel:Show(); dPanel:Raise(); oTimer:Start(150);
+    end
+    local function dismissHover(oEvent)
+        if (bHover) then dismiss(); end
+        oEvent:Skip();
+    end
+    local tSettings = require("Windows.EditorSettings").get();
+    oCode:SetMouseDwellTime(tSettings.hoverEnabled and tSettings.hoverDelay or wxstc.wxSTC_TIME_FOREVER);
+    oCode:Connect(wxstc.wxEVT_STC_MODIFIED, function(oEvent)
+        if ((oEvent:GetModificationType() & (wxstc.wxSTC_MOD_INSERTTEXT | wxstc.wxSTC_MOD_DELETETEXT)) ~= 0) then
+            bAliasesDirty = true; tAliases = {};
+            if (bHover) then dismiss(); end
+        end
+        oEvent:Skip();
+    end);
+    oCode:Connect(wxstc.wxEVT_STC_DWELLSTART, function(oEvent) hover(oEvent:GetPosition()); oEvent:Skip(); end);
+    oCode:Connect(wxstc.wxEVT_STC_DWELLEND, dismissHover);
+    oCode:Connect(wx.wxEVT_MOTION, dismissHover);
+    oCode:Connect(wx.wxEVT_MOUSEWHEEL, dismissHover);
+    oCode:Connect(wx.wxEVT_LEFT_DOWN, dismissHover);
+    oCode:Connect(wx.wxEVT_KILL_FOCUS, dismissHover);
     local function complete()
         local tItem = tItems[oList:GetSelection() + 1];
         if (not tItem) then return; end
@@ -237,6 +575,7 @@ function Autocomplete.Attach(oCode, bRowProcessor)
         oCode:ReplaceSelection(tItem.name); oCode:SetFocus();
     end
     local function show()
+        if (bHover) then dismiss(); end
         local tSettings = require("Windows.EditorSettings").get();
         if (not tSettings.autocompleteEnabled) then dismiss(); return; end
         local nPosition = oCode:GetCurrentPos();
@@ -265,6 +604,7 @@ function Autocomplete.Attach(oCode, bRowProcessor)
     end
     oCode:Connect(wxstc.wxEVT_STC_CHARADDED, function(oEvent) show(); oEvent:Skip(); end);
     oCode:Connect(wx.wxEVT_KEY_DOWN, function(oEvent)
+        if (bHover) then dismiss(); end
         if (not dPanel:IsShown()) then oEvent:Skip(); return; end
         local nKey = oEvent:GetKeyCode();
         if (nKey == wx.WXK_DOWN or nKey == wx.WXK_UP) then
@@ -282,7 +622,8 @@ function Autocomplete.Attach(oCode, bRowProcessor)
         oEvent:Skip();
     end);
     oCode:Connect(wxstc.wxEVT_STC_UPDATEUI, function(oEvent)
-        if (dPanel:IsShown() and (oCode:GetSelectionStart() ~= oCode:GetSelectionEnd() or oCode:GetCurrentPos() ~= nCompletionPosition)) then dismiss(); end
+        if (bHover and (oEvent:GetUpdated() & (wxstc.wxSTC_UPDATE_V_SCROLL | wxstc.wxSTC_UPDATE_H_SCROLL)) ~= 0) then dismiss(); end
+        if (not bHover and dPanel:IsShown() and (oCode:GetSelectionStart() ~= oCode:GetSelectionEnd() or oCode:GetCurrentPos() ~= nCompletionPosition)) then dismiss(); end
         oEvent:Skip();
     end);
     oList:Connect(wx.wxEVT_COMMAND_LISTBOX_SELECTED, help);
@@ -293,7 +634,8 @@ function Autocomplete.Attach(oCode, bRowProcessor)
         else oEvent:Skip(); end
     end);
     dPanel:Connect(oTimer:GetId(), wx.wxEVT_TIMER, function()
-        if (not require("Windows.EditorSettings").get().autocompleteEnabled) then dismiss(); return; end
+        local tSettings = require("Windows.EditorSettings").get();
+        if (bHover and (not tSettings.hoverEnabled or bAliasHover and not tSettings.hoverAliases) or not bHover and not tSettings.autocompleteEnabled) then dismiss(); return; end
         local oFocus = wx.wxWindow.FindFocus();
         local nFocusID = oFocus and oFocus:GetId();
         if (nFocusID ~= oCode:GetId() and nFocusID ~= oList:GetId() and nFocusID ~= oHelp:GetId()) then dismiss(); return; end
