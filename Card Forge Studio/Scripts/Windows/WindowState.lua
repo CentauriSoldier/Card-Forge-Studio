@@ -46,16 +46,25 @@ end
 --[[!
 @fqxn CFS.Windows.WindowState.Functions.raiseOthers
 @pulsarlua function WindowState.raiseOthers
-@desc Raises shown, non-minimized registered frames and suppresses recursive activation.
+@desc Raises shown, non-minimized registered frames without activating them, preserves their original window styles, and keeps the selected frame in front.
 @param any dWindow Window.
 !]]
 function WindowState.raiseOthers(dWindow)
     if (_bRaising or not WindowState.getRaiseTogether()) then return false; end
     _bRaising = true;
-    for _, dOther in pairs(_tWindows) do
-        if (dOther:GetId() ~= dWindow:GetId() and dOther:IsShown() and not dOther:IsIconized()) then dOther:Raise(); end
+
+    --On Windows, Raise activates each frame and interrupts menus and grid clicks.
+    --Changing the topmost flag uses SWP_NOACTIVATE; restore the original flags immediately.
+    local function raiseWithoutActivating(dFrame)
+        local nStyle = dFrame:GetWindowStyleFlag();
+        dFrame:SetWindowStyleFlag(nStyle ~ wx.wxSTAY_ON_TOP);
+        dFrame:SetWindowStyleFlag(nStyle);
     end
-    dWindow:Raise();
+
+    for _, dOther in pairs(_tWindows) do
+        if (dOther:GetId() ~= dWindow:GetId() and dOther:IsShown() and not dOther:IsIconized()) then raiseWithoutActivating(dOther); end
+    end
+    raiseWithoutActivating(dWindow);
     return true;
 end
 

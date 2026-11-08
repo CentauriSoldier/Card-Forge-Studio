@@ -1660,6 +1660,259 @@ function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight)
     _D.DrawImage(oImage, nX, nY, nWidth, nHeight);
 end
 
+-- Circular variants follow the source cache lifetime and never alter source artwork.
+local _tCircularImages = setmetatable({}, {__mode = "k"});
+
+--[[!
+@fqxn CFS.Modules.Forge.Functions.DrawImageCircular
+@pulsarlua function Forge.DrawImageCircular
+@desc Draws a centered circular portrait during an active render pass. Resolves paths, missing artwork and source bitmaps using the existing image cache. Center-crops the source to a square, preserves its alpha and applies a softly antialiased circular edge. X/Y identify the circle center; diameter changes do not move that center. The optional diameter defaults to the smaller source dimension. One masked bitmap is cached per source record and reused at every draw size; source invalidation also releases its circular variant. Source files and other drawing calls are unchanged. Preview and PNG export use the same bitmap.
+@param string sPath Image path relative to the active resource root.
+@param number nX Horizontal center of the circle in card-space coordinates.
+@param number nY Vertical center of the circle in card-space coordinates.
+@param number nDiameter Optional positive finite circle diameter; defaults to the smaller source dimension.
+@ret void none No values returned.
+@error Requires an active render pass, a valid game-relative path and a positive finite diameter when supplied. Raises an error if image decoding or circular bitmap creation fails.
+@ex
+-- Keep the portrait centered while changing its size.
+Forge.DrawImageCircular("Cards/Portrait.png", 412.5, 350, 500);
+!]]
+function Forge.DrawImageCircular(sPath, nX, nY, nDiameter)
+    assert(_D, "Forge drawing is only available during a render pass.");
+    assert(nDiameter == nil or rawtype(nDiameter) == "number" and nDiameter > 0 and nDiameter < math.huge, "Circle diameter must be a positive finite number.");
+    local pImage = resolveImage(sPath);
+
+    -- 1. Reuse the same path validation, missing-art fallback and source cache.
+    if (not wx.wxFileExists(pImage)) then
+        pImage = io.normalizepath(APP_PATH.."/Images/Missing.png");
+    end
+
+    local tImage = _tImages[pImage];
+
+    if (not tImage) then
+        assert(wx.wxFileExists(pImage), "Card image does not exist: "..pImage);
+        local oBitmap = wx.wxBitmap(pImage, wx.wxBITMAP_TYPE_ANY);
+        assert(oBitmap:IsOk(), "Could not decode card image: "..pImage);
+        tImage = {bitmap = oBitmap, stamp = imageStamp(pImage),};
+        _tImages[pImage] = tImage;
+    end
+
+    local oBitmap = _tCircularImages[tImage];
+
+    if (not oBitmap) then
+        local oImage = tImage.bitmap:ConvertToImage();
+        local oSquare;
+        local bOK, vError = xpcall(function()
+            -- 2. Crop equally from opposite sides instead of stretching the portrait.
+            local nSize = math.min(oImage:GetWidth(), oImage:GetHeight());
+            oSquare = oImage:GetSubImage(wx.wxRect(floor((oImage:GetWidth() - nSize) / 2), floor((oImage:GetHeight() - nSize) / 2), nSize, nSize));
+            if (not oSquare:HasAlpha()) then oSquare:InitAlpha(); end
+
+            -- 3. Multiply existing alpha by circular coverage, retaining source holes.
+            local sAlpha    = oSquare:GetAlpha();
+            local nRadius   = nSize / 2;
+            local tRows     = {};
+
+            for nY = 0, nSize - 1 do
+                local tAlpha = {};
+                local nDY    = nY + 0.5 - nRadius;
+
+                for nX = 0, nSize - 1 do
+                    local nDX       = nX + 0.5 - nRadius;
+                    local nCoverage = math.max(0, math.min(1, nRadius + 0.5 - math.sqrt(nDX * nDX + nDY * nDY)));
+                    tAlpha[nX + 1]  = string.char(floor(sAlpha:byte(nY * nSize + nX + 1) * nCoverage + 0.5));
+                end
+
+                tRows[nY + 1] = table.concat(tAlpha);
+            end
+
+            oSquare:SetAlpha(table.concat(tRows));
+            oBitmap = wx.wxBitmap(oSquare);
+            assert(oBitmap:IsOk(), "Could not create circular card image: "..pImage);
+        end, debug.traceback);
+        if (oSquare) then oSquare:delete(); end
+        oImage:delete();
+        assert(bOK, vError);
+        _tCircularImages[tImage] = oBitmap;
+    end
+
+    -- 4. Translate the shared center only at the final bitmap draw.
+    local nSize = nDiameter or oBitmap:GetWidth();
+    _D.DrawImage(oBitmap, nX - nSize / 2, nY - nSize / 2, nSize, nSize);
+end
+
+
+-- Oval variants share source-cache lifetime; each source keeps at most 16 crop ratios.
+local _tOvalImages = setmetatable({}, {__mode = "k"});
+
+--[[!
+@fqxn CFS.Modules.Forge.Functions.DrawImageOval
+@pulsarlua function Forge.DrawImageOval
+@desc Draws a centered oval portrait during an active render pass. Center-crops the source to the requested width-to-height ratio, rounded to whole source pixels, instead of stretching its contents. Multiplies existing alpha by an antialiased ellipse mask without altering source files. X/Y identify the oval center. Uses existing game-relative path validation, source caching, missing-art fallback and file invalidation. Masked bitmaps are cached by source crop dimensions, with at most 16 ratios per source; repeated sizes with the same crop reuse a bitmap. Preview and PNG export use the same draw path. Existing rectangular and circular drawing functions are unchanged.
+@param string sPath Image path relative to the active resource root.
+@param number nX Horizontal center in card-space coordinates.
+@param number nY Vertical center in card-space coordinates.
+@param number nWidth Positive finite oval width in card-space coordinates.
+@param number nHeight Positive finite oval height in card-space coordinates.
+@ret void none No values returned.
+@error Requires an active render pass, a valid game-relative path and positive finite dimensions. Image decoding or oval bitmap creation failures raise an error.
+@ex
+-- Width and height change independently while the portrait stays centered.
+Forge.DrawImageOval("Cards/Portrait.png", 412.5, 350, 320, 400);
+!]]
+function Forge.DrawImageOval(sPath, nX, nY, nWidth, nHeight)
+    assert(_D, "Forge drawing is only available during a render pass.");
+    assert(rawtype(nWidth) == "number" and nWidth > 0 and nWidth < math.huge, "Oval width must be a positive finite number.");
+    assert(rawtype(nHeight) == "number" and nHeight > 0 and nHeight < math.huge, "Oval height must be a positive finite number.");
+    local pImage = resolveImage(sPath);
+
+    -- 1. Share source bitmaps and the normal missing-art behavior with DrawImage.
+    if (not wx.wxFileExists(pImage)) then
+        pImage = io.normalizepath(APP_PATH.."/Images/Missing.png");
+    end
+
+    local tImage = _tImages[pImage];
+
+    if (not tImage) then
+        assert(wx.wxFileExists(pImage), "Card image does not exist: "..pImage);
+        local oBitmap = wx.wxBitmap(pImage, wx.wxBITMAP_TYPE_ANY);
+        assert(oBitmap:IsOk(), "Could not decode card image: "..pImage);
+        tImage = {bitmap = oBitmap, stamp = imageStamp(pImage),};
+        _tImages[pImage] = tImage;
+    end
+
+    -- 2. Compute the largest centered source crop matching the requested ratio.
+    local nSourceWidth  = tImage.bitmap:GetWidth();
+    local nSourceHeight = tImage.bitmap:GetHeight();
+    local nRatio        = nWidth / nHeight;
+    local nCropWidth    = math.max(1, math.min(nSourceWidth, floor(nSourceHeight * nRatio + 0.5)));
+    local nCropHeight   = math.max(1, math.min(nSourceHeight, floor(nSourceWidth / nRatio + 0.5)));
+    local sKey          = tostring(nCropWidth)..":"..tostring(nCropHeight);
+    local tVariants     = _tOvalImages[tImage];
+
+    if (not tVariants or tVariants.count >= 16 and not tVariants[sKey]) then
+        tVariants = {count = 0};
+        _tOvalImages[tImage] = tVariants;
+    end
+
+    local oBitmap = tVariants[sKey];
+
+    if (not oBitmap) then
+        local oImage = tImage.bitmap:ConvertToImage();
+        local oCrop;
+        local bOK, vError = xpcall(function()
+            oCrop = oImage:GetSubImage(wx.wxRect(floor((nSourceWidth - nCropWidth) / 2), floor((nSourceHeight - nCropHeight) / 2), nCropWidth, nCropHeight));
+            if (not oCrop:HasAlpha()) then oCrop:InitAlpha(); end
+
+            -- 3. Preserve source transparency inside the ellipse and soften its edge.
+            local sAlpha    = oCrop:GetAlpha();
+            local nRadiusX  = nCropWidth / 2;
+            local nRadiusY  = nCropHeight / 2;
+            local nEdge     = math.min(nRadiusX, nRadiusY);
+            local tRows     = {};
+
+            for nY = 0, nCropHeight - 1 do
+                local tAlpha = {};
+                local nDY    = (nY + 0.5 - nRadiusY) / nRadiusY;
+
+                for nX = 0, nCropWidth - 1 do
+                    local nDX       = (nX + 0.5 - nRadiusX) / nRadiusX;
+                    local nCoverage = math.max(0, math.min(1, 0.5 + (1 - math.sqrt(nDX * nDX + nDY * nDY)) * nEdge));
+                    tAlpha[nX + 1]  = string.char(floor(sAlpha:byte(nY * nCropWidth + nX + 1) * nCoverage + 0.5));
+                end
+
+                tRows[nY + 1] = table.concat(tAlpha);
+            end
+
+            oCrop:SetAlpha(table.concat(tRows));
+            oBitmap = wx.wxBitmap(oCrop);
+            assert(oBitmap:IsOk(), "Could not create oval card image: "..pImage);
+        end, debug.traceback);
+        if (oCrop) then oCrop:delete(); end
+        oImage:delete();
+        assert(bOK, vError);
+        tVariants[sKey] = oBitmap;
+        tVariants.count = tVariants.count + 1;
+    end
+
+    -- 4. Draw around the shared center; source cropping keeps portrait proportions.
+    _D.DrawImage(oBitmap, nX - nWidth / 2, nY - nHeight / 2, nWidth, nHeight);
+end
+
+
+-- Rectangular cover crops follow source-cache lifetime; each source retains 16 ratios.
+local _tCroppedImages = setmetatable({}, {__mode = "k"});
+
+--[[!
+@fqxn CFS.Modules.Forge.Functions.DrawImageCropped
+@pulsarlua function Forge.DrawImageCropped
+@desc Draws an image centered in a rectangular window without stretching its contents. Center-crops the source to the requested width-to-height ratio, rounded to whole source pixels, then draws that crop at the supplied size. X/Y locate the destination center. Source transparency is retained; this function does not add rounded corners or a frame mask. Uses existing game-relative path checks, source caching, missing-art fallback and file invalidation. Crop bitmaps are reused by source crop dimensions, with at most 16 ratios per source. Preview and PNG export share this draw path. Source artwork and other drawing functions are unchanged.
+@param string sPath Image path relative to the active resource root.
+@param number nX Horizontal center of the destination window in card-space coordinates.
+@param number nY Vertical center of the destination window in card-space coordinates.
+@param number nWidth Positive finite destination width.
+@param number nHeight Positive finite destination height.
+@ret void none No values returned.
+@error Requires an active render pass, a valid game-relative path and positive finite dimensions. Image decoding or crop bitmap creation failures raise an error.
+@ex
+Forge.DrawImageCropped("Cards/Structure/Base/Land/Ashpoint.png", 485, 330, 460, 300);
+!]]
+function Forge.DrawImageCropped(sPath, nX, nY, nWidth, nHeight)
+    assert(_D, "Forge drawing is only available during a render pass.");
+    assert(rawtype(nWidth) == "number" and nWidth > 0 and nWidth < math.huge, "Cropped image width must be a positive finite number.");
+    assert(rawtype(nHeight) == "number" and nHeight > 0 and nHeight < math.huge, "Cropped image height must be a positive finite number.");
+    local pImage = resolveImage(sPath);
+
+    -- 1. Share normal source loading and missing-art behavior with DrawImage.
+    if (not wx.wxFileExists(pImage)) then
+        pImage = io.normalizepath(APP_PATH.."/Images/Missing.png");
+    end
+    local tImage = _tImages[pImage];
+
+    if (not tImage) then
+        assert(wx.wxFileExists(pImage), "Card image does not exist: "..pImage);
+        local oBitmap = wx.wxBitmap(pImage, wx.wxBITMAP_TYPE_ANY);
+        assert(oBitmap:IsOk(), "Could not decode card image: "..pImage);
+        tImage = {bitmap = oBitmap, stamp = imageStamp(pImage),};
+        _tImages[pImage] = tImage;
+    end
+
+    -- 2. Keep the largest centered crop matching the destination proportions.
+    local nSourceWidth  = tImage.bitmap:GetWidth();
+    local nSourceHeight = tImage.bitmap:GetHeight();
+    local nRatio        = nWidth / nHeight;
+    local nCropWidth    = math.max(1, math.min(nSourceWidth, floor(nSourceHeight * nRatio + 0.5)));
+    local nCropHeight   = math.max(1, math.min(nSourceHeight, floor(nSourceWidth / nRatio + 0.5)));
+    local sKey          = tostring(nCropWidth)..":"..tostring(nCropHeight);
+    local tVariants     = _tCroppedImages[tImage];
+
+    if (not tVariants or tVariants.count >= 16 and not tVariants[sKey]) then
+        tVariants = {count = 0};
+        _tCroppedImages[tImage] = tVariants;
+    end
+    local oBitmap = tVariants[sKey];
+
+    if (not oBitmap) then
+        local oImage = tImage.bitmap:ConvertToImage();
+        local oCrop;
+        local bOK, vError = xpcall(function()
+            -- 3. Cropping preserves original pixel data and existing transparency.
+            oCrop = oImage:GetSubImage(wx.wxRect(floor((nSourceWidth - nCropWidth) / 2), floor((nSourceHeight - nCropHeight) / 2), nCropWidth, nCropHeight));
+            oBitmap = wx.wxBitmap(oCrop);
+            assert(oBitmap:IsOk(), "Could not create cropped card image: "..pImage);
+        end, debug.traceback);
+        if (oCrop) then oCrop:delete(); end
+        oImage:delete();
+        assert(bOK, vError);
+        tVariants[sKey] = oBitmap;
+        tVariants.count = tVariants.count + 1;
+    end
+
+    -- 4. Translate the shared center only at the final bitmap draw.
+    _D.DrawImage(oBitmap, nX - nWidth / 2, nY - nHeight / 2, nWidth, nHeight);
+end
+
+
 -- Experimental image tinting is isolated here; existing DrawImage calls are unchanged.
 -- Weak source keys release variants after normal image invalidation or game/set changes.
 local _tTintedImages = setmetatable({}, {__mode = "k"});
@@ -2088,6 +2341,66 @@ Forge.DrawText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngl
 
     return nLastX, nLastY, nLastWidth, nLastHeight;
 end
+--[[!
+@fqxn CFS.Modules.Forge.Functions.DrawTextCurved
+@pulsarlua function Forge.DrawTextCurved
+@desc Draws one plain UTF-8 text line centered on a circular arc using an existing Style at its configured size. X/Y identify the midpoint of the text line, not the circle's center. With bBelow false or omitted, the middle arches upward and the ends sit lower; true reverses the arc while keeping letters upright. Measures prefix advances through Style.Prep so configured letter spacing and native pair spacing contribute to placement. Each code point is rotated tangent to the arc and drawn through the normal Style.Draw path, retaining its effects; this does not perform joined-script or combining-character shaping across glyphs. No text is shrunk, wrapped or stretched. Existing text calls are unchanged.
+@param string sStyle Existing Style name.
+@param number nX Horizontal midpoint of the text arc in card-space coordinates.
+@param number nY Vertical position of the middle of the text line in card-space coordinates.
+@param string sText Plain, valid UTF-8 single-line text; an empty string draws nothing.
+@param number nRadius Positive finite arc radius in card-space coordinates; larger radii produce flatter text.
+@param boolean bBelow Optional lower-arc direction; defaults to false.
+@ret number nWidth Measured straight-line advance in pixels, not the curved bounding-box width.
+@ret number nHeight Native font line height, not the curved bounding-box height.
+@error Requires an active render pass, an existing Style, single-line UTF-8 text and a positive finite radius. Text must occupy at most a semicircle; change the radius or Style if it is too long.
+@ex
+Forge.DrawTextCurved("NAME", 412.5, 175, "Eternal Warden", 650);
+Forge.DrawTextCurved("NAME", 412.5, 730, "Arden Raxor", 650, true);
+!]]
+function Forge.DrawTextCurved(sStyle, nX, nY, sText, nRadius, bBelow)
+    assert(_D, "Forge drawing is only available during a render pass.");
+    assert(rawtype(sText) == "string" and not sText:find("[\r\n]"), "Curved text requires a single text line.");
+    assert(rawtype(nRadius) == "number" and nRadius > 0 and nRadius < math.huge, "Text arc radius must be a positive finite number.");
+    assert(bBelow == nil or rawtype(bBelow) == "boolean", "Lower text arc flag must be boolean.");
+    local oStyle = assert(GetFontStyle(sStyle), "Curved text requires an existing Style.");
+
+    if (_bAutoUpdateStyle) then oStyle.Update(); end
+
+    -- 1. Remove fixed effect padding from advances, without changing the Style.
+    local nEffectWidth  = oStyle.Prep(_D, "");
+    local nWidth        = oStyle.Prep(_D, sText) - nEffectWidth;
+    local nHeight       = _D.GetTextHeight(sText);
+    local nDirection    = bBelow and -1 or 1;
+    local sPrefix       = "";
+    local tGlyphs       = {};
+    assert(nWidth <= math.pi * nRadius, "Curved text exceeds a semicircle; increase the radius or adjust its Style.");
+
+    -- 2. Validate and measure the whole line before drawing any of its glyphs.
+    for _, nCodePoint in utf8.codes(sText) do
+        local sGlyph    = utf8.char(nCodePoint);
+        local nGlyphW   = _D.GetTextWidth(sGlyph);
+        sPrefix = sPrefix..sGlyph;
+        local nAdvance  = oStyle.Prep(_D, sPrefix) - nEffectWidth;
+        tGlyphs[#tGlyphs + 1] = {Text = sGlyph, Width = nGlyphW, Offset = nAdvance - nGlyphW / 2 - nWidth / 2};
+    end
+
+    -- 3. Keep each glyph upright and tangent to the requested upper or lower arc.
+    for _, tGlyph in ipairs(tGlyphs) do
+        local nTheta    = tGlyph.Offset / nRadius;
+        local nPointX   = nX + nRadius * math.sin(nTheta);
+        local nPointY   = nY + nDirection * nRadius * (1 - math.cos(nTheta));
+        local nAngle    = floor((-nDirection * math.deg(nTheta)) % 360);
+        local nRadians  = math.rad(nAngle);
+        local nDrawX    = nPointX - math.cos(nRadians) * tGlyph.Width / 2 - math.sin(nRadians) * nHeight / 2;
+        local nDrawY    = nPointY + math.sin(nRadians) * tGlyph.Width / 2 - math.cos(nRadians) * nHeight / 2;
+        oStyle.Draw(_Object, _D, _InternalDC, floor(nDrawX), floor(nDrawY), tGlyph.Text, nAngle);
+    end
+
+    return nWidth, nHeight;
+end
+
+
 --[[!
 @fqxn CFS.Modules.Forge.Private.Functions.drawStyledText
 @desc Shared styled-run parsing, measurement and drawing for both styled-text calls.

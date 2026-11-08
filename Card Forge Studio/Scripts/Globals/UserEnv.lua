@@ -567,6 +567,50 @@ InjectEnv("Forge", {
     !]]
     DrawImage       = Forge.DrawImage,
     --[[!
+    @fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawImageCircular
+    @pulsarlua function Forge.DrawImageCircular
+    @desc Draws a centered circular portrait during an active render pass. Center-crops the image without stretching, preserves source transparency and softens the circular edge. Uses Forge's game-relative path checks, missing-art fallback and source cache. One circular bitmap per source is reused across draw sizes and discarded with source invalidation. X/Y are the circle center, unlike DrawImage's top-left coordinates. Source artwork is unchanged; preview and PNG export share the result.
+    @param string sPath Image path relative to the active resource root.
+    @param number nX Horizontal center in card-space coordinates.
+    @param number nY Vertical center in card-space coordinates.
+    @param number nDiameter Optional positive finite diameter; defaults to the smaller source dimension.
+    @ret void none No values returned.
+    @error Requires an active render pass and valid image path. Supplied diameter must be positive and finite. Image decoding or masking failures raise an error.
+    @ex
+    Forge.DrawImageCircular("Cards/Portrait.png", 412.5, 350, 500);
+    !]]
+    DrawImageCircular = Forge.DrawImageCircular,
+    --[[!
+    @fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawImageOval
+    @pulsarlua function Forge.DrawImageOval
+    @desc Draws a centered oval portrait during an active render pass. Center-crops to the requested width-to-height ratio, rounded to source pixels, rather than stretching the portrait. Preserves source transparency and applies a soft ellipse edge. Uses Forge's existing path validation, missing-art fallback and source cache. Masked bitmaps are reused by crop dimensions, with at most 16 crop ratios per source, and invalidated with the source. X/Y are the oval center. Source artwork is unchanged; preview and PNG export share the result.
+    @param string sPath Image path relative to the active resource root.
+    @param number nX Horizontal center in card-space coordinates.
+    @param number nY Vertical center in card-space coordinates.
+    @param number nWidth Positive finite oval width in card-space coordinates.
+    @param number nHeight Positive finite oval height in card-space coordinates.
+    @ret void none No values returned.
+    @error Requires an active render pass and valid image path. Dimensions must be positive and finite. Image decoding or masking failures raise an error.
+    @ex
+    Forge.DrawImageOval("Cards/Portrait.png", 412.5, 350, 320, 400);
+    !]]
+    DrawImageOval   = Forge.DrawImageOval,
+    --[[!
+    @fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawImageCropped
+    @pulsarlua function Forge.DrawImageCropped
+    @desc Draws an image centered in a rectangular window using a centered cover crop instead of stretching. Width-to-height matching is rounded to source pixels. Retains source transparency but does not add rounded corners or a frame mask. Uses Forge's existing path validation, missing-art fallback and source cache. Crop bitmaps are reused by crop dimensions, with at most 16 ratios per source, and invalidated with their source. X/Y are the window center. Source files and other draw functions are unchanged; preview and PNG export share the result.
+    @param string sPath Image path relative to the active resource root.
+    @param number nX Horizontal center in card-space coordinates.
+    @param number nY Vertical center in card-space coordinates.
+    @param number nWidth Positive finite destination width.
+    @param number nHeight Positive finite destination height.
+    @ret void none No values returned.
+    @error Requires an active render pass, a valid image path and positive finite dimensions. Decoding or crop creation failures raise an error.
+    @ex
+    Forge.DrawImageCropped("Cards/Structure/Base/Land/Ashpoint.png", 485, 330, 460, 300);
+    !]]
+    DrawImageCropped = Forge.DrawImageCropped,
+    --[[!
     @fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawImageTinted
     @pulsarlua function Forge.DrawImageTinted
     @desc Draws an image with multiplicative RGBA tinting during an active render pass. Each source RGB channel is multiplied by the matching tint channel divided by 255; source alpha is multiplied by tint alpha. White with full opacity preserves the image. Uses the same relative path checks and missing-art fallback as DrawImage. Source artwork is never modified. Tinted bitmaps are cached separately, with at most 64 variants per cached source; normal source invalidation discards its variants. Preview and PNG export use the same draw function.
@@ -619,6 +663,23 @@ InjectEnv("Forge", {
     @ret number nHeight  Height of the rendered text block.
     !]]
     DrawText        = Forge.DrawText,
+    --[[!
+    @fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawTextCurved
+    @pulsarlua function Forge.DrawTextCurved
+    @desc Draws one plain UTF-8 line along an arc with its existing Style size and effects. X/Y locate the middle of the text line, not the circle center. The default upper arc has its middle higher than its ends; bBelow true reverses the curve while keeping text upright. Style-measured advances retain letter spacing and native pair spacing. Glyphs are drawn separately, so joined scripts and combining sequences are not shaped as a run. No wrapping, shrinking or stretching occurs. Existing text functions are unchanged.
+    @param string sStyle Existing Style name.
+    @param number nX Horizontal midpoint of the text arc.
+    @param number nY Vertical midpoint of the central text line.
+    @param string sText Plain valid UTF-8 single-line text; empty text draws nothing.
+    @param number nRadius Positive finite radius; larger values flatten the arc.
+    @param boolean bBelow Optional lower-arc direction, default false.
+    @ret number nWidth Straight-line text advance, not the curved bounding width.
+    @ret number nHeight Font line height, not the curved bounding height.
+    @error Requires a render pass, valid Style, single-line UTF-8 text and positive finite radius. Text longer than a semicircle is rejected without resizing.
+    @ex
+    Forge.DrawTextCurved("NAME", 412.5, 175, "Eternal Warden", 650);
+    !]]
+    DrawTextCurved   = Forge.DrawTextCurved,
     --[[!
     @fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawStyledText
     @pulsarlua function Forge.DrawStyledText
