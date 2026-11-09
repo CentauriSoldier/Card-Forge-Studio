@@ -89,7 +89,7 @@ function EditorOptions.create(dParent)
     end
     local tBindingKeys = {};
     local oBlock = block("Bindings");
-    local oBindingHelp = wx.wxStaticText(dBody, wx.wxID_ANY, "Click a shortcut, then press Ctrl/Alt with a letter or digit, or F1-F12. Backspace/Delete clears it. Save and standard editing shortcuts are reserved.");
+    local oBindingHelp = wx.wxStaticText(dBody, wx.wxID_ANY, "Click a shortcut, then press Ctrl/Alt with a letter, digit, Up/Down arrow, or F1-F12. Ctrl+Shift+mouse wheel scrolls horizontally. Backspace/Delete clears it. Save and standard editing shortcuts are reserved.");
     oBindingHelp:Wrap(560); oBlock:Add(oBindingHelp, 0, wx.wxEXPAND + wx.wxALL, 6);
     for _, tBinding in ipairs(EditorSettings.bindings()) do
         local sKey, sModifiers = tBinding.key, tBinding.modifiers;
@@ -102,7 +102,7 @@ function EditorOptions.create(dParent)
             if (nKey == wx.WXK_TAB) then oEvent:Skip(); return; end
             if ((nKey == wx.WXK_BACK or nKey == wx.WXK_DELETE) and nModifiers == 0) then
                 tState[sKey], tState[sModifiers] = 0, 0;
-            elseif (nKey >= 65 and nKey <= 90 or nKey >= 48 and nKey <= 57 or nKey >= wx.WXK_F1 and nKey <= wx.WXK_F12) then
+            elseif (nKey >= 65 and nKey <= 90 or nKey >= 48 and nKey <= 57 or nKey >= wx.WXK_F1 and nKey <= wx.WXK_F12 or nKey == wx.WXK_UP or nKey == wx.WXK_DOWN) then
                 tState[sKey], tState[sModifiers] = nKey, nModifiers;
             else return; end
             oControl:ChangeValue(EditorSettings.bindingText(tState[sKey], tState[sModifiers]));

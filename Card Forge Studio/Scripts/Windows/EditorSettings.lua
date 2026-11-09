@@ -20,6 +20,7 @@ local wx = require("wx");
 local wxstc = wxstc;
 local EditorSettings = {};
 local _nWordIndicator = 8;
+local _tScrollWidthDirty = setmetatable({}, {__mode = "k"});
 local _aFontSizes = {8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36,};
 -- Background, text, comments, keywords, literals, strings, numbers, operators,
 -- caret, selection, gutter text, current line.
@@ -62,6 +63,8 @@ end
 local _tBindings = {
     {key = "findKey", modifiers = "findModifiers", label = "Find"},
     {key = "duplicateLineKey", modifiers = "duplicateLineModifiers", label = "Duplicate line"},
+    {key = "moveLineUpKey", modifiers = "moveLineUpModifiers", label = "Move line up"},
+    {key = "moveLineDownKey", modifiers = "moveLineDownModifiers", label = "Move line down"},
 };
 
 --[[!
@@ -76,7 +79,8 @@ local function validBinding(nKey, nModifiers)
     if (nKey == 0) then return nModifiers == 0; end
     local bFunction = nKey >= wx.WXK_F1 and nKey <= wx.WXK_F12;
     local bCharacter = nKey >= 65 and nKey <= 90 or nKey >= 48 and nKey <= 57;
-    if (not bFunction and not bCharacter) then return false; end
+    local bArrow = nKey == wx.WXK_UP or nKey == wx.WXK_DOWN;
+    if (not bFunction and not bCharacter and not bArrow) then return false; end
     if (not bFunction and (nModifiers & (wx.wxMOD_CONTROL | wx.wxMOD_ALT)) == 0) then return false; end
     -- Preserve Save, clipboard, select-all, undo/redo, and the native close shortcut.
     if (bCharacter and nModifiers == wx.wxMOD_CONTROL and ("ACSVXYZ"):find(string.char(nKey), 1, true)) then return false; end
@@ -90,6 +94,10 @@ local _tDefinitions = {
     findModifiers = {setting = "FindModifiers", default = wx.wxMOD_CONTROL, min = 0, max = 7},
     duplicateLineKey = {setting = "DuplicateLineKey", default = string.byte("D"), min = 0, max = wx.WXK_F12},
     duplicateLineModifiers = {setting = "DuplicateLineModifiers", default = wx.wxMOD_CONTROL | wx.wxMOD_SHIFT, min = 0, max = 7},
+    moveLineUpKey = {setting = "MoveLineUpKey", default = wx.WXK_UP, min = 0, max = wx.WXK_F12},
+    moveLineUpModifiers = {setting = "MoveLineUpModifiers", default = wx.wxMOD_CONTROL | wx.wxMOD_SHIFT, min = 0, max = 7},
+    moveLineDownKey = {setting = "MoveLineDownKey", default = wx.WXK_DOWN, min = 0, max = wx.WXK_F12},
+    moveLineDownModifiers = {setting = "MoveLineDownModifiers", default = wx.wxMOD_CONTROL | wx.wxMOD_SHIFT, min = 0, max = 7},
     autocompleteUseEditorFontSize = {setting = "AutocompleteUseEditorFontSize", default = true},
     referenceUseEditorFontSize = {setting = "ReferenceUseEditorFontSize", default = true},
     referenceListFontSize = {setting = "ReferenceListFontSize", default = 11, min = 8, max = 24},
@@ -161,7 +169,15 @@ local function current()
             _tCurrent[tBinding.modifiers] = _tDefinitions[tBinding.modifiers].default;
         end
     end
-    if (_tCurrent.findKey ~= 0 and _tCurrent.findKey == _tCurrent.duplicateLineKey and _tCurrent.findModifiers == _tCurrent.duplicateLineModifiers) then
+    local tSeen, bConflict = {}, false;
+    for _, tBinding in ipairs(_tBindings) do
+        if (_tCurrent[tBinding.key] ~= 0) then
+            local sChord = _tCurrent[tBinding.key]..":".._tCurrent[tBinding.modifiers];
+            bConflict = bConflict or tSeen[sChord] == true;
+            tSeen[sChord] = true;
+        end
+    end
+    if (bConflict) then
         for _, tBinding in ipairs(_tBindings) do
             _tCurrent[tBinding.key] = _tDefinitions[tBinding.key].default;
             _tCurrent[tBinding.modifiers] = _tDefinitions[tBinding.modifiers].default;
@@ -205,7 +221,8 @@ function EditorSettings.bindingText(nKey, nModifiers)
     if ((nModifiers & wx.wxMOD_CONTROL) ~= 0) then tParts[#tParts + 1] = "Ctrl"; end
     if ((nModifiers & wx.wxMOD_ALT) ~= 0) then tParts[#tParts + 1] = "Alt"; end
     if ((nModifiers & wx.wxMOD_SHIFT) ~= 0) then tParts[#tParts + 1] = "Shift"; end
-    tParts[#tParts + 1] = nKey >= wx.WXK_F1 and nKey <= wx.WXK_F12 and ("F"..tostring(math.floor(nKey - wx.WXK_F1 + 1))) or string.char(nKey);
+    local tArrows = {[wx.WXK_UP] = "Up", [wx.WXK_DOWN] = "Down"};
+    tParts[#tParts + 1] = tArrows[nKey] or (nKey >= wx.WXK_F1 and nKey <= wx.WXK_F12 and ("F"..tostring(math.floor(nKey - wx.WXK_F1 + 1))) or string.char(nKey));
     return table.concat(tParts, "+");
 end
 
@@ -241,6 +258,31 @@ local function matchBrackets(oCode)
     else oCode:BraceHighlight(nBrace, nMatch); end
     return nBrace, nMatch;
 end
+--[[!
+@fqxn CFS.Windows.EditorSettings.Private.Functions.updateScrollWidth
+@desc Measures native line endpoints, including styled glyph widths and tab stops, to grow or shrink the horizontal range. Preserves the current horizontal position where content remains and clamps it when text fits. Word-wrapped editors have no horizontal range. Called after content/layout changes, not on every scroll event.
+@param wxStyledTextCtrl oCode Editor whose content and layout are current.
+@ret void none No values returned.
+@vis private
+!]]
+local function updateScrollWidth(oCode)
+    _tScrollWidthDirty[oCode] = nil;
+    local nWidth = 1;
+    if (oCode:GetWrapMode() == wxstc.wxSTC_WRAP_NONE) then
+        for nLine = 0, oCode:GetLineCount() - 1 do
+            local nStart = oCode:PositionFromLine(nLine);
+            local nEnd = oCode:GetLineEndPosition(nLine);
+            nWidth = math.max(nWidth, math.ceil(oCode:PointFromPosition(nEnd):GetX() - oCode:PointFromPosition(nStart):GetX()) + 1);
+        end
+    end
+
+    local nAvailable = oCode:GetClientSize():GetWidth() - oCode:GetMarginLeft() - oCode:GetMarginRight();
+    for nMargin = 0, 4 do nAvailable = nAvailable - oCode:GetMarginWidth(nMargin); end
+    local nMaximum = math.max(0, nWidth - math.max(0, nAvailable));
+    if (oCode:GetScrollWidth() ~= nWidth) then oCode:SetScrollWidth(nWidth); end
+    if (oCode:GetXOffset() > nMaximum) then oCode:SetXOffset(nMaximum); end
+end
+
 --[[!
 @fqxn CFS.Windows.EditorSettings.Functions.apply
 @pulsarlua function EditorSettings.apply
@@ -294,6 +336,8 @@ function EditorSettings.apply(oCode)
         oCode:SetTabWidth(_tCurrent.tabWidth); oCode:SetIndent(_tCurrent.tabWidth); oCode:SetUseTabs(_tCurrent.useTabs);
         oCode:SetTabIndents(_tCurrent.tabIndents); oCode:SetBackSpaceUnIndents(_tCurrent.backspaceUnindents);
         oCode:SetWrapMode(_tCurrent.wordWrap and wxstc.wxSTC_WRAP_WORD or wxstc.wxSTC_WRAP_NONE);
+        --Native tracking only grows; explicit measurement also shrinks after edits.
+        oCode:SetScrollWidthTracking(false);
         oCode:SetViewWhiteSpace(_tCurrent.whitespace and wxstc.wxSTC_WS_VISIBLEALWAYS or wxstc.wxSTC_WS_INVISIBLE);
         oCode:SetMouseDwellTime(_tCurrent.hoverEnabled and _tCurrent.hoverDelay or wxstc.wxSTC_TIME_FOREVER);
         oCode:SetViewEOL(_tCurrent.lineEndings);
@@ -302,6 +346,7 @@ function EditorSettings.apply(oCode)
         oCode:SetEdgeMode(_tCurrent.columnGuide and wxstc.wxSTC_EDGE_LINE or wxstc.wxSTC_EDGE_NONE);
         oCode:SetEdgeColumn(_tCurrent.column); oCode:SetEdgeColour(wx.wxColour(tTheme.marginForeground));
         oCode:Colourise(0, -1);
+        updateScrollWidth(oCode);
         matchBrackets(oCode);
         oCode:Refresh();
     end
@@ -372,9 +417,16 @@ function EditorSettings.setMany(tValues)
     local tCombined = EditorSettings.get();
     for sKey, vValue in pairs(tValues) do tCombined[sKey] = vValue; end
     for _, tBinding in ipairs(_tBindings) do
-        assert(validBinding(tCombined[tBinding.key], tCombined[tBinding.modifiers]), "Invalid or reserved shortcut for "..tBinding.label..". Use Ctrl/Alt with a letter or digit, or F1-F12.");
+        assert(validBinding(tCombined[tBinding.key], tCombined[tBinding.modifiers]), "Invalid or reserved shortcut for "..tBinding.label..". Use Ctrl/Alt with a letter, digit, Up/Down arrow, or F1-F12.");
     end
-    assert(tCombined.findKey == 0 or tCombined.findKey ~= tCombined.duplicateLineKey or tCombined.findModifiers ~= tCombined.duplicateLineModifiers, "Find and Duplicate line cannot use the same shortcut.");
+    local tSeen = {};
+    for _, tBinding in ipairs(_tBindings) do
+        if (tCombined[tBinding.key] ~= 0) then
+            local sChord = tCombined[tBinding.key]..":"..tCombined[tBinding.modifiers];
+            assert(not tSeen[sChord], "Editor commands cannot use the same shortcut.");
+            tSeen[sChord] = true;
+        end
+    end
     for sKey, vValue in pairs(tValues) do
         local sSetting, sValue;
         if (sKey == "theme") then sSetting, sValue = "Theme", _tThemes[vValue + 1].name;
@@ -643,7 +695,10 @@ function EditorSettings.configure(oCode, sKind, fFind)
         oCode:SetIndicatorCurrent(nPrevious); oEvent:Skip();
     end);
     oCode:Connect(wxstc.wxEVT_STC_MODIFIED, function(oEvent)
-        if ((oEvent:GetModificationType() & (wxstc.wxSTC_MOD_INSERTTEXT | wxstc.wxSTC_MOD_DELETETEXT)) ~= 0) then clearMatches(); end
+        if ((oEvent:GetModificationType() & (wxstc.wxSTC_MOD_INSERTTEXT | wxstc.wxSTC_MOD_DELETETEXT)) ~= 0) then
+            clearMatches();
+            _tScrollWidthDirty[oCode] = true;
+        end
         oEvent:Skip();
     end);
     oCode:Connect(wx.wxEVT_KEY_DOWN, function(oEvent)
@@ -654,7 +709,32 @@ function EditorSettings.configure(oCode, sKind, fFind)
             clearMatches(); fFind();
         elseif (tState.duplicateLineKey ~= 0 and nKey == tState.duplicateLineKey and nModifiers == tState.duplicateLineModifiers) then
             clearMatches(); oCode:LineDuplicate();
+        elseif (tState.moveLineUpKey ~= 0 and nKey == tState.moveLineUpKey and nModifiers == tState.moveLineUpModifiers) then
+            clearMatches(); oCode:MoveSelectedLinesUp();
+        elseif (tState.moveLineDownKey ~= 0 and nKey == tState.moveLineDownKey and nModifiers == tState.moveLineDownModifiers) then
+            clearMatches(); oCode:MoveSelectedLinesDown();
         else oEvent:Skip(); end
+    end);
+    --Mouse events expose individual modifier states, not wxKeyEvent.GetModifiers.
+    local nWheelRemainder = 0;
+    oCode:Connect(wx.wxEVT_MOUSEWHEEL, function(oEvent)
+        if (oEvent:ControlDown() or not oEvent:ShiftDown() or oEvent:AltDown()
+            or oEvent:GetWheelAxis() ~= wx.wxMOUSE_WHEEL_VERTICAL) then
+            nWheelRemainder = 0;
+            oEvent:Skip();
+            return;
+        end
+        local nDelta = oEvent:GetWheelDelta();
+        if (nDelta <= 0) then oEvent:Skip(); return; end
+        nWheelRemainder = nWheelRemainder + oEvent:GetWheelRotation() / nDelta;
+        local nSteps = nWheelRemainder > 0 and math.floor(nWheelRemainder) or math.ceil(nWheelRemainder);
+        nWheelRemainder = nWheelRemainder - nSteps;
+        if (nSteps == 0) then return; end
+        local nStepWidth = math.max(1, oCode:TextWidth(wxstc.wxSTC_STYLE_DEFAULT, "M")) * math.max(1, math.min(10, oEvent:GetLinesPerAction()));
+        local nTextWidth = oCode:GetClientSize():GetWidth() - oCode:GetMarginLeft() - oCode:GetMarginRight();
+        for nMargin = 0, 4 do nTextWidth = nTextWidth - oCode:GetMarginWidth(nMargin); end
+        local nMaximum = math.max(0, oCode:GetScrollWidth() - nTextWidth);
+        oCode:SetXOffset(math.max(0, math.min(nMaximum, oCode:GetXOffset() - nSteps * nStepWidth)));
     end);
     oCode:Connect(wxstc.wxEVT_STC_MARGINCLICK, function(oEvent)
         if (oEvent:GetMargin() == 1) then oCode:ToggleFold(oCode:LineFromPosition(oEvent:GetPosition())); end
@@ -678,7 +758,12 @@ function EditorSettings.configure(oCode, sKind, fFind)
         end
         oEvent:Skip();
     end);
+    oCode:Connect(wx.wxEVT_SIZE, function(oEvent)
+        updateScrollWidth(oCode);
+        oEvent:Skip();
+    end);
     oCode:Connect(wxstc.wxEVT_STC_UPDATEUI, function(oEvent)
+        if (_tScrollWidthDirty[oCode]) then updateScrollWidth(oCode); end
         if (nMatchStart ~= nil and (oCode:GetSelectionStart() ~= nMatchStart or oCode:GetSelectionEnd() ~= nMatchEnd)) then clearMatches(); end
         local bOK, sError = pcall(matchBrackets, oCode);
         if (not bOK) then require("Errors").report(sError); end

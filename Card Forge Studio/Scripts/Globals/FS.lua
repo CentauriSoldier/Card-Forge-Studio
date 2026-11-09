@@ -63,6 +63,7 @@ local _sOriginalPackagePath = package.path;
 @field string ENV Active ENV path.
 @field string Info Active Info path.
 @field string Styles Active Styles path.
+@field string Effects Active Scripts/Effects.lua processor path.
 !]]
 local tGame     = {
     Root        = "",
@@ -79,6 +80,7 @@ local tGame     = {
     ENV         = "",
     Info        = "",
     Styles      = "",
+    Effects     = "",
 };
 local tGameDecoy    = {};
 local tGameMeta     = {
@@ -168,7 +170,7 @@ tFS.GetManifest = function(sKind, tContext)
     assert(rawtype(sName) == "string" and sName:match("%S") and not sName:find("[%c]"), "Invalid manifest name.");
     if (sKind == "Game") then
         local tFiles = { ["autocomplete.lua"] = "return {version = 1, items = {}};\r\n", ["Info.ini"] = "[SETTINGS]\r\nIncludePlugins=false\r\nName="..sName.."\r\n" };
-        for sTarget, sTemplate in pairs({["Scripts/CFG.lua"] = "CFG.lua", ["Scripts/ENV.lua"] = "ENV.lua", ["Styles.ini"] = "Styles.ini"}) do
+        for sTarget, sTemplate in pairs({["Scripts/CFG.lua"] = "CFG.lua", ["Scripts/ENV.lua"] = "ENV.lua", ["Scripts/Effects.lua"] = "Effects.lua", ["Styles.ini"] = "Styles.ini"}) do
             local hFile = assert(io.open(pTemplates.."/"..sTemplate, "rb"));
             tFiles[sTarget] = assert(hFile:read("a")); assert(hFile:close());
         end
@@ -432,7 +434,7 @@ end
 --[[!
 @fqxn CFS.Modules.FS.Game.Functions.Prep
 @pulsarlua function FS.Game.Prep
-@desc Validates a game's required paths before publishing them. Existing game data is preserved; a missing generated autocomplete file is created during loading.
+@desc Validates a game's required paths before publishing them. Existing game data is preserved; missing generated autocomplete and Scripts/Effects.lua files are created during loading.
 @param Game oGame Game to prepare.
 !]]
 tGame.Prep = function(oGame)
@@ -447,6 +449,7 @@ tGame.Prep = function(oGame)
         Docs        = pRoot.."\\Docs",
         -- Manual      = pRoot.."\\Manual",
         ENV         = pScripts.."\\ENV",
+        Effects     = pScripts.."\\Effects.lua",
         Exports     = pRoot.."\\Exports",
         Info        = pRoot.."\\Info.ini",
         Root        = pRoot,
@@ -459,13 +462,25 @@ tGame.Prep = function(oGame)
     for sKey, pPath in pairs(tPaths) do
         if (sKey == "Info" or sKey == "Styles") then
             CheckFile(pPath);
-        elseif (sKey ~= "Wiki" and sKey ~= "Manual") then
+        elseif (sKey ~= "Wiki" and sKey ~= "Manual" and sKey ~= "Effects") then
             CheckFolder(pPath);
         end
     end
 
     CheckFile(pScripts.."\\CFG.lua");
     CheckFile(pScripts.."\\ENV.lua");
+
+    --Add the optional processor starter only when absent; never replace game edits.
+    if (not wx.wxFileExists(tPaths.Effects)) then
+        assert(not wx.wxDirExists(tPaths.Effects), "Effects path is a directory.");
+        local hTemplate = assert(io.open(pTemplates.."/Effects.lua", "rb"));
+        local sEffects = assert(hTemplate:read("a"));
+        assert(hTemplate:close());
+        local hEffects = assert(io.open(tPaths.Effects, "wb"));
+        local bWritten, sError = hEffects:write(sEffects);
+        local bClosed, sCloseError = hEffects:close();
+        assert(bWritten, sError); assert(bClosed, sCloseError);
+    end
 
     local pAutocomplete = pRoot.."/autocomplete.lua";
     if (not wx.wxFileExists(pAutocomplete)) then

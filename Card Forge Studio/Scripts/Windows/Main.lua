@@ -566,6 +566,7 @@ function Main.create(tOptions)
         if (not oGame) then return; end
 
         CFS.Game.Activate(oGame);
+        INIFile.SetValue(FS.AppCFG, "Settings", "LastGame", oGame.GetUUID());
         bDataLoaded = false;
         tDataSession.setData({}, {}, {}, {});
         showPage("Welcome");
@@ -605,6 +606,7 @@ function Main.create(tOptions)
             -- if (dManualWindow and not dManualWindow.close()) then return; end
             if (dWikiWindow and not dWikiWindow.close()) then return; end
             CFS.Game.Activate(oGame);
+            INIFile.SetValue(FS.AppCFG, "Settings", "LastGame", oGame.GetUUID());
             bDataLoaded = false;
             tDataSession.setData({}, {}, {}, {});
             showPage("Welcome");
@@ -638,6 +640,8 @@ function Main.create(tOptions)
         dFinalWindow = dFinalWindow or dFinalData.create(tDataSession);
         if (WindowState.isOpen("BaseData") ~= false) then dBaseWindow.show(); end
         if (WindowState.isOpen("FinalData") ~= false) then dFinalWindow.show(); end
+        INIFile.SetValue(FS.AppCFG, "Settings", "LastGame", oCardSet.GetGameUUID());
+        INIFile.SetValue(FS.AppCFG, "LastCardSets", oCardSet.GetGameUUID(), oCardSet.GetUUID());
         return tData;
     end
 
@@ -1142,6 +1146,40 @@ function Main.create(tOptions)
         dLog.Close();
         oEvent:Skip();
     end);
+
+    --[[!
+    @fqxn CFS.Windows.Main.Private.Functions.restoreLastSession
+    @desc Restores the saved game and optionally its last successfully loaded card set. Missing preferences default to enabled. Unknown identifiers leave Welcome visible; a missing card set leaves its game loaded. Startup waits for the first idle event so Globals discovery and error handling have initialized. Existing load paths perform all processing.
+    @ret void none No values returned.
+    @vis private
+    !]]
+    local function restoreLastSession()
+        if (INIFile.GetValue(FS.AppCFG, "Settings", "LoadLastGame") == "0") then return; end
+        local sGameUUID = INIFile.GetValue(FS.AppCFG, "Settings", "LastGame");
+        if (sGameUUID == "") then return; end
+        local oLastGame;
+        for _, oGame in ipairs(CFS.Game.GetAll()) do
+            if (oGame.GetUUID():lower() == sGameUUID:lower()) then oLastGame = oGame; break; end
+        end
+        if (not oLastGame) then return; end
+
+        CFS.Game.Activate(oLastGame);
+        dFrame:SetTitle(APP_NAME.." - "..oLastGame.GetName());
+        dFrame:SetStatusText("Game loaded: "..oLastGame.GetName(), 0);
+        if (INIFile.GetValue(FS.AppCFG, "Settings", "LoadLastCardSet") == "0") then return; end
+        local sCardSetUUID = INIFile.GetValue(FS.AppCFG, "LastCardSets", oLastGame.GetUUID());
+        if (sCardSetUUID == "") then return; end
+        local oCardSet = oLastGame.GetCardSet(sCardSetUUID);
+        if (oCardSet) then loadCardSet(oCardSet, true); end
+    end
+
+    local bRestorePending = true;
+    dFrame:Connect(wx.wxEVT_IDLE, protect(function(oEvent)
+        oEvent:Skip();
+        if (not bRestorePending) then return; end
+        bRestorePending = false;
+        restoreLastSession();
+    end));
 
     dFrame:SetMenuBar(oMenuBar);
     showPage("Welcome");

@@ -393,6 +393,7 @@ namespace CFS
 
             sRet = table.concat({
                 tostring(tParsed.FontColor),
+                tostring(tParsed.FontColorPath),
                 tostring(tParsed.LetterSpacing),
                 tostring(tParsed.BackgroundEnabled),
                 tostring(tParsed.BackgroundColor),
@@ -424,6 +425,50 @@ namespace CFS
             }, "\31");
 
             return sRet;
+        }
+
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.ResolveColor
+        @pulsarlua function FontStyle.ResolveColor
+        @desc Resolves fixed RGB/RGBA or hex text, or a case-sensitive dotted CFG path containing identifier segments only. No code or expressions are evaluated. CFG is read from the current UserEnv on each call. References may resolve to native colors, packed RGBA integers, or fixed color strings. A syntactically valid but missing/invalid reference returns nil plus its path; callers can display black until configuration becomes available. INI inheritance must be resolved before this method is called.
+        @param string sValue Fixed color text or a path such as CFG.Color.Tint.Air.
+        @ret number|nil nColor Packed RGBA color, or nil when unresolved/invalid.
+        @ret string|nil sPath Valid CFG path, or nil for fixed colors and invalid syntax.
+        !]]
+        public static ResolveColor(sValue)
+        {
+            local sText = rawtype(sValue) == "string" and sValue:match("^%s*(.-)%s*$") or "";
+            local tParts = {};
+            local vColor;
+
+            if (sText:sub(1, 4) ~= "CFG.") then
+                return FontStyle._tColor.TryFromString(sText), nil;
+            end
+
+            for sPart in sText:gmatch("[^%.]+") do
+                if (not sPart:match("^[%a_][%w_]*$")) then return nil, nil; end
+                tParts[#tParts + 1] = sPart;
+            end
+            if (#tParts < 2 or table.concat(tParts, ".") ~= sText) then return nil, nil; end
+
+            --Styles can load before game configuration; unresolved paths are retained for later draws.
+            if (UserEnv and rawtype(UserEnv.Get) == "function") then
+                vColor = UserEnv.Get().CFG;
+            end
+            for nIndex = 2, #tParts do
+                if (rawtype(vColor) ~= "table") then return nil, sText; end
+                vColor = vColor[tParts[nIndex]];
+            end
+
+            if (rawtype(vColor) == "number" and vColor >= 0 and vColor <= 0xFFFFFFFF and vColor % 1 == 0) then
+                return vColor, sText;
+            elseif (rawtype(vColor) == "string") then
+                return FontStyle._tColor.TryFromString(vColor), sText;
+            elseif (wxlua.type(vColor) == "wxColour" and vColor:IsOk()) then
+                return FontStyle._tColor.RGBA(vColor:Red(), vColor:Green(), vColor:Blue(), vColor:Alpha()), sText;
+            end
+
+            return nil, sText;
         }
 
         --[[!
@@ -465,7 +510,8 @@ namespace CFS
                     local sFontFamilyRaw    = val("Family");
                     local sFontFamily       = FontStyle.isstring(sFontFamilyRaw) and sFontFamilyRaw:trimright() or "";
                     local nFontSize         = FontStyle.floor(tonumber(val("Size")) or 12);
-                    local nFontColor        = FontStyle._tColor.TryFromString(val("Color"), true) or FontStyle._oBlack;
+                    local nFontColor, sFontColorPath = FontStyle.ResolveColor(val("Color"));
+                    nFontColor = nFontColor or FontStyle._oBlack;
 
                     local tFontOptions = {
                         Bold        = toboolean(val("Bold"))      and true or false,
@@ -507,6 +553,7 @@ namespace CFS
                         FontFamily          = sFontFamily,
                         FontSize            = nFontSize,
                         FontColor           = nFontColor,
+                        FontColorPath       = sFontColorPath,
                         FontOptions         = tFontOptions,
                         LetterSpacing       = tonumber(val("LetterSpacing")) or 0,
                         BackgroundEnabled   = toboolean(val("BackgroundEnabled")) and true or false,
@@ -752,6 +799,7 @@ namespace CFS
             return this.Font;
         }
         private Color = FontStyle._oBlack;
+        private ColorPath = "";
         private LetterSpacing = 0;
         private BackgroundEnabled = false;
         private BackgroundColor = FontStyle._oClear;
@@ -1131,6 +1179,7 @@ namespace CFS
                 end
 
                 pri.Color               = tParsed.FontColor or FontStyle._oBlack;
+                pri.ColorPath           = tParsed.FontColorPath or "";
                 pri.LetterSpacing       = tParsed.LetterSpacing or 0;
                 pri.BackgroundEnabled   = tParsed.BackgroundEnabled and true or false;
                 pri.BackgroundColor     = tParsed.BackgroundColor or FontStyle._oClear;
@@ -1220,6 +1269,11 @@ namespace CFS
         {
             local pri = this;
             local nAngle = FontStyle.isnumber(vAngle) and FontStyle.floor(FontStyle.clamp(vAngle, 0, 360)) or nil;
+            local nColor = pri.Color;
+
+            if (pri.ColorPath ~= "") then
+                nColor = FontStyle.ResolveColor(pri.ColorPath) or FontStyle._oBlack;
+            end
 
             D.SetDrawingFont(pri.Font);
             D.SetFilteringMode(DRAW_BLEND_ALPHABLEND, DRAW_BLEND_TEXT_TRANSPARENT);
@@ -1250,9 +1304,9 @@ namespace CFS
             end
 
             if (nAngle) then
-                FontStyle.DrawTextRun(pri, D, nX, nY, sText, nAngle, pri.Color);
+                FontStyle.DrawTextRun(pri, D, nX, nY, sText, nAngle, nColor);
             else
-                FontStyle.DrawTextRun(pri, D, nX, nY, sText, nil, pri.Color);
+                FontStyle.DrawTextRun(pri, D, nX, nY, sText, nil, nColor);
             end
         }
 

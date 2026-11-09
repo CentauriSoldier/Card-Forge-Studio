@@ -50,12 +50,20 @@ end
 
 --[[!
 @fqxn CFS.Windows.StyleEditor.Private.Functions.channels
-@desc Parses hexadecimal or channel-list color text into color components.
+@desc Parses hexadecimal or channel-list color text into color components. Text Color may additionally resolve a dotted CFG reference; missing references preview as black without replacing their source text.
 @param any sValue Value.
+@param boolean bAllowCFG True only for the text Color field.
 @vis private
 !]]
-local function channels(sValue)
+local function channels(sValue, bAllowCFG)
     local tColor = {};
+    if (bAllowCFG) then
+        local nColor, sPath = FontStyle.ResolveColor(sValue);
+        if (sPath) then
+            nColor = nColor or 0x000000FF;
+            return {(nColor >> 24) & 255, (nColor >> 16) & 255, (nColor >> 8) & 255, nColor & 255};
+        end
+    end
     local sHex = sValue:match("^%s*#?(%x+)%s*$");
     if (sHex and (#sHex == 6 or #sHex == 8)) then
         for nIndex = 1, #sHex, 2 do tColor[#tColor + 1] = tonumber(sHex:sub(nIndex, nIndex + 1), 16); end
@@ -132,7 +140,7 @@ function StyleEditor.model(pFile)
         local tField = tFields[sKey];
         local sValue = tModel.resolve(sName, sKey);
         if (not tField or sValue == "") then return; end
-        if (tField[3] == "color") then channels(sValue);
+        if (tField[3] == "color") then channels(sValue, sKey == "Color");
         elseif (tField[3] == "boolean") then assert(sValue:lower() == "true" or sValue:lower() == "false", "Use true or false for "..sKey..".");
         elseif (tField[3] == "number") then
             local nValue = tonumber(sValue);
@@ -647,6 +655,8 @@ function StyleEditor.create(dParent, pFile, tOptions)
         for _, tField in ipairs(tGroup[2]) do
             local sKey, sKind = tField[1], tField[3];
             local oInput, oAlpha;
+            local oCFGPath, oApplyCFG, oFixedColor, oColorSource;
+            local oColorLayout;
             local oCell = wx.wxBoxSizer(wx.wxHORIZONTAL);
             if (sKind == "boolean") then
                 oInput = wx.wxCheckBox(dPage, wx.wxID_ANY, "");
@@ -674,6 +684,68 @@ function StyleEditor.create(dParent, pFile, tOptions)
                 oCell:Add(wx.wxStaticText(dPage, wx.wxID_ANY, "Opacity"), 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT + wx.wxRIGHT, 6);
                 oCell:Add(oAlpha, 0);
             end
+            if (sKey == "Color") then
+                --Keep the resolved swatch visible, with an explicit editor for its live source.
+                oColorLayout = wx.wxBoxSizer(wx.wxVERTICAL);
+                oColorLayout:Add(oCell, 0, wx.wxEXPAND);
+                local oPathRow = wx.wxBoxSizer(wx.wxHORIZONTAL);
+                oCFGPath = wx.wxTextCtrl(dPage, wx.wxID_ANY, "", wx.wxDefaultPosition, wx.wxDefaultSize, wx.wxTE_PROCESS_ENTER);
+                oCFGPath:SetToolTip("Case-sensitive dotted path, for example CFG.Color.Tint.Air. Apply CFG to use it.");
+                oApplyCFG = wx.wxButton(dPage, wx.wxID_ANY, "Apply CFG");
+                oFixedColor = wx.wxButton(dPage, wx.wxID_ANY, "Use fixed color");
+                oPathRow:Add(wx.wxStaticText(dPage, wx.wxID_ANY, "CFG path:"), 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 6);
+                oPathRow:Add(oCFGPath, 1, wx.wxEXPAND + wx.wxRIGHT, 6);
+                oPathRow:Add(oApplyCFG, 0, wx.wxRIGHT, 6);
+                oPathRow:Add(oFixedColor, 0);
+                oColorLayout:Add(oPathRow, 0, wx.wxEXPAND + wx.wxTOP, 6);
+                oColorSource = wx.wxStaticText(dPage, wx.wxID_ANY, "");
+                oColorLayout:Add(oColorSource, 0, wx.wxEXPAND + wx.wxTOP, 4);
+
+                --[[!
+                @fqxn CFS.Windows.StyleEditor.Private.Functions.fApplyCFGPath
+                @desc Applies a syntactically valid CFG path as an own text color. Missing values remain references and are visibly marked unresolved; malformed paths leave the existing source unchanged.
+                @ret void none No values returned.
+                @vis private
+                !]]
+                local function fApplyCFGPath()
+                    if (bLoading) then return; end
+                    local sPath = oCFGPath:GetValue():match("^%s*(.-)%s*$");
+                    local _, sReference = FontStyle.ResolveColor(sPath);
+                    if (not sReference) then
+                        oMessage:SetLabel("Enter a dotted CFG path such as CFG.Color.Tint.Air, then Apply CFG.");
+                        dPanel:Layout();
+                        return;
+                    end
+                    edited(sKey, sReference);
+                end
+
+                --[[!
+                @fqxn CFS.Windows.StyleEditor.Private.Functions.fUseFixedColor
+                @desc Explicitly replaces an own CFG reference with its current resolved swatch and opacity. Ordinary picker edits remain disabled until this action is chosen.
+                @ret void none No values returned.
+                @vis private
+                !]]
+                local function fUseFixedColor()
+                    if (bLoading) then return; end
+                    local oColor = oInput:GetColour();
+                    edited(sKey, table.concat({oColor:Red(), oColor:Green(), oColor:Blue(), oAlpha:GetValue()}, ","));
+                end
+
+                oCFGPath:Connect(wx.wxEVT_COMMAND_TEXT_UPDATED, function()
+                    if (bLoading) then return; end
+                    local tControl = tControls[sKey];
+                    if (not tControl) then return; end
+                    local _, sActivePath = FontStyle.ResolveColor(tModel.resolve(sSelected, sKey));
+                    local sDraftPath = oCFGPath:GetValue():match("^%s*(.-)%s*$");
+                    local sPending = sDraftPath ~= (sActivePath or "") and "; path edit not applied" or "";
+                    oColorSource:SetLabel((tControl.sourceText or "")..sPending);
+                    oColorSource:Wrap(500);
+                    dPanel:Layout();
+                end);
+                oApplyCFG:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(fApplyCFGPath));
+                oCFGPath:Connect(wx.wxEVT_COMMAND_TEXT_ENTER, protect(fApplyCFGPath));
+                oFixedColor:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(fUseFixedColor));
+            end
             local tChoices = {"Own value"};
             for _, sName in ipairs(tModel.names) do tChoices[#tChoices + 1] = sName; end
             local oLink = wx.wxChoice(dPage, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(170, -1), tChoices);
@@ -683,9 +755,12 @@ function StyleEditor.create(dParent, pFile, tOptions)
                 edited(sKey, sSource == "Own value" and (tModel.resolve(sSelected, sKey) ~= "" and tModel.resolve(sSelected, sKey) or tField[4]) or "<"..sSource..">");
             end));
             oGrid:Add(wx.wxStaticText(dPage, wx.wxID_ANY, tField[2]), 0, wx.wxALIGN_CENTER_VERTICAL);
-            oGrid:Add(oCell, 1, wx.wxEXPAND);
+            oGrid:Add(oColorLayout or oCell, 1, wx.wxEXPAND);
             oGrid:Add(oLink, 0, wx.wxEXPAND);
-            tControls[sKey] = {input = oInput, alpha = oAlpha, link = oLink, field = tField,};
+            tControls[sKey] = {
+                input = oInput, alpha = oAlpha, link = oLink, field = tField,
+                cfgPath = oCFGPath, applyCFG = oApplyCFG, fixedColor = oFixedColor, colorSource = oColorSource,
+            };
         end
         local oPageLayout = wx.wxBoxSizer(wx.wxVERTICAL);
         oPageLayout:Add(oGrid, 1, wx.wxEXPAND + wx.wxALL, 12);
@@ -765,12 +840,31 @@ function StyleEditor.create(dParent, pFile, tOptions)
             local sKind = tControl.field[3];
             if (sKind == "boolean") then tControl.input:SetValue(sValue:lower() == "true");
             elseif (sKind == "color") then
-                local tColor = channels(sValue);
+                local tColor = channels(sValue, sKey == "Color");
                 tControl.input:SetColour(wx.wxColour(tColor[1], tColor[2], tColor[3]));
                 tControl.alpha:SetValue(tColor[4]);
+                if (sKey == "Color") then
+                    local nResolved, sPath = FontStyle.ResolveColor(sValue);
+                    local sStatus = sPath and ("CFG -> "..sPath) or "Fixed color";
+                    if (sPath and not nResolved) then sStatus = "Unresolved CFG path -> "..sPath.." (black preview)"; end
+                    if (sSource) then
+                        sStatus = "Inherited from "..table.concat(tChain, " -> ", 2).." -> "..sStatus;
+                    end
+                    tControl.cfgPath:ChangeValue(sPath or "");
+                    tControl.cfgPath:Enable(not sSource);
+                    tControl.applyCFG:Enable(not sSource);
+                    tControl.fixedColor:Enable(not sSource and sPath ~= nil);
+                    tControl.input:Enable(not sSource and not sPath);
+                    tControl.alpha:Enable(not sSource and not sPath);
+                    tControl.sourceText = sStatus;
+                    tControl.colorSource:SetLabel(sStatus);
+                    tControl.colorSource:Wrap(500);
+                    tControl.colorSource:SetForegroundColour(sPath and not nResolved and wx.wxColour(175, 55, 25) or wx.wxColour(50, 65, 85));
+                end
             elseif (sKey ~= sEditedKey) then tControl.input:ChangeValue(sValue); end
         end
         bLoading = false;
+        dBook:Layout(); dPanel:Layout();
         local tParsed = assert(tModel.parsed(sSelected), "Could not parse selected style.");
         local sFont = tParsed.FontFamily..":"..tParsed.FontSize..":"..tostring(tParsed.FontOptions.Bold)..":"..tostring(tParsed.FontOptions.Italic)..":"..tostring(tParsed.FontOptions.Underline)..":"..tostring(tParsed.FontOptions.StrikeOut);
         if (oPreview) then oPreview.ApplyParsed(tParsed, sFont ~= sPreviewFont); else oPreview = FontStyle("STYLE_EDITOR_PREVIEW", tParsed); end

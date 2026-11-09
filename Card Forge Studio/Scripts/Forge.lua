@@ -1355,6 +1355,8 @@ local FontStyle     = CFS.FontStyle;
 local GetFontStyle  = FontStyle.Get;
 local floor         = math.floor;
 local Forge         = {};
+--Native graphics surfaces follow their source bitmap lifetimes.
+local _tGraphicsBitmaps = setmetatable({}, {__mode = "k"});
 local _tImages      = {};
 local _tActiveRow;
 local _oBitmap;
@@ -1539,8 +1541,18 @@ local function drawingContext(oGC, oDC)
     @param any nHeight Value supplied as nHeight.
     @vis private
     !]]
-    function tContext.DrawImage(oImage, nX, nY, nWidth, nHeight)
-        oGC:DrawBitmap(oImage, nX, nY, nWidth or oImage:GetWidth(), nHeight or oImage:GetHeight());
+    function tContext.DrawImage(oImage, nX, nY, nWidth, nHeight, bCacheSurface)
+        --Direct callers may mutate their wxBitmap. Only Forge-owned immutable images opt in.
+        if (not bCacheSurface) then
+            oGC:DrawBitmap(oImage, nX, nY, nWidth or oImage:GetWidth(), nHeight or oImage:GetHeight());
+            return;
+        end
+        local oSurface = _tGraphicsBitmaps[oImage];
+        if (not oSurface) then
+            oSurface = oGC:CreateBitmap(oImage);
+            _tGraphicsBitmaps[oImage] = oSurface;
+        end
+        oGC:DrawBitmap(oSurface, nX, nY, nWidth or oImage:GetWidth(), nHeight or oImage:GetHeight());
     end
 
     return tContext;
@@ -1657,7 +1669,7 @@ function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight)
         _tImages[pImage] = {bitmap = oImage, stamp = imageStamp(pImage),};
     end
 
-    _D.DrawImage(oImage, nX, nY, nWidth, nHeight);
+    _D.DrawImage(oImage, nX, nY, nWidth, nHeight, true);
 end
 
 -- Circular variants follow the source cache lifetime and never alter source artwork.
@@ -1738,7 +1750,7 @@ function Forge.DrawImageCircular(sPath, nX, nY, nDiameter)
 
     -- 4. Translate the shared center only at the final bitmap draw.
     local nSize = nDiameter or oBitmap:GetWidth();
-    _D.DrawImage(oBitmap, nX - nSize / 2, nY - nSize / 2, nSize, nSize);
+    _D.DrawImage(oBitmap, nX - nSize / 2, nY - nSize / 2, nSize, nSize, true);
 end
 
 
@@ -1836,7 +1848,7 @@ function Forge.DrawImageOval(sPath, nX, nY, nWidth, nHeight)
     end
 
     -- 4. Draw around the shared center; source cropping keeps portrait proportions.
-    _D.DrawImage(oBitmap, nX - nWidth / 2, nY - nHeight / 2, nWidth, nHeight);
+    _D.DrawImage(oBitmap, nX - nWidth / 2, nY - nHeight / 2, nWidth, nHeight, true);
 end
 
 
@@ -1909,7 +1921,7 @@ function Forge.DrawImageCropped(sPath, nX, nY, nWidth, nHeight)
     end
 
     -- 4. Translate the shared center only at the final bitmap draw.
-    _D.DrawImage(oBitmap, nX - nWidth / 2, nY - nHeight / 2, nWidth, nHeight);
+    _D.DrawImage(oBitmap, nX - nWidth / 2, nY - nHeight / 2, nWidth, nHeight, true);
 end
 
 
@@ -1918,21 +1930,56 @@ end
 local _tTintedImages = setmetatable({}, {__mode = "k"});
 
 --[[!
+@fqxn CFS.Modules.Forge.Private.Functions.selectiveTintWeight
+@desc Returns a soft HSV selection weight for a source RGB triplet. Neutral pixels and colors outside the selected hue range receive zero weight.
+@param number nR Source red byte.
+@param number nG Source green byte.
+@param number nB Source blue byte.
+@param table tSelection Validated Hue, Range, Feather and Saturation values.
+@ret number nWeight Selection coverage from zero through one.
+@vis private
+!]]
+local function selectiveTintWeight(nR, nG, nB, tSelection)
+    local nMax, nMin = math.max(nR, nG, nB), math.min(nR, nG, nB);
+    local nDelta = nMax - nMin;
+    if (nMax == 0 or nDelta == 0) then return 0; end
+    local nSaturation = nDelta / nMax;
+    if (nSaturation <= tSelection.Saturation) then return 0; end
+    local nHue;
+    if (nMax == nR) then nHue = 60 * ((nG - nB) / nDelta % 6);
+    elseif (nMax == nG) then nHue = 60 * ((nB - nR) / nDelta + 2);
+    else nHue = 60 * ((nR - nG) / nDelta + 4); end
+    local nDistance = math.abs((nHue - tSelection.Hue + 180) % 360 - 180);
+    local nHueWeight = 1;
+    if (nDistance > tSelection.Range) then
+        if (tSelection.Feather == 0) then return 0; end
+        nHueWeight = math.max(0, 1 - (nDistance - tSelection.Range) / tSelection.Feather);
+    end
+    nHueWeight = nHueWeight * nHueWeight * (3 - 2 * nHueWeight);
+    local nSaturationWeight = math.min(1, (nSaturation - tSelection.Saturation) / 0.15);
+    nSaturationWeight = nSaturationWeight * nSaturationWeight * (3 - 2 * nSaturationWeight);
+    return nHueWeight * nSaturationWeight;
+end
+
+--[[!
 @fqxn CFS.Modules.Forge.Functions.DrawImageTinted
 @pulsarlua function Forge.DrawImageTinted
-@desc Draws an image with multiplicative RGBA tinting during an active render pass. Each source RGB channel is multiplied by the matching tint channel divided by 255; source alpha is multiplied by tint alpha. White with full opacity preserves the image. Uses the same relative path checks and missing-art fallback as DrawImage. Source artwork is never modified. Tinted bitmaps are cached separately, with at most 64 variants per cached source; normal source invalidation discards its variants. Preview and PNG export use the same draw function.
+@desc Draws an image with multiplicative RGBA tinting during an active render pass. Optional selective mode replaces the hue/saturation of matching source pixels while retaining HSV brightness, texture and unselected RGB/alpha. Pass true for amber (Hue=40, Range=20, Feather=10, Saturation=0.2), or a table overriding those fields. Hue and Range/Feather are degrees; Saturation is 0..1 with a soft 0.15 transition above the threshold. Tint RGB supplies the replacement hue/saturation; black produces black. Tint alpha affects only the selection. Selection parameters are included in the existing variant cache key. Each source RGB channel is multiplied by the matching tint channel divided by 255; source alpha is multiplied by tint alpha. In whole-image mode, white with full opacity preserves the image. Uses the same relative path checks and missing-art fallback as DrawImage. Source artwork is never modified. Tinted bitmaps are cached separately, with at most 64 variants per cached source; normal source invalidation discards its variants. Preview and PNG export use the same draw function.
 @param string sPath Image path relative to the active resource root.
 @param number nX Horizontal card-space position.
 @param number nY Vertical card-space position.
 @param number nWidth Draw width, or nil for native width.
 @param number nHeight Draw height, or nil for native height.
 @param wxColour oTint Native color, such as Color.RGBA(255, 80, 80, 255).
+@param boolean|table vSelective Optional; nil/false retains whole-image multiplication, true selects amber, or use {Hue=40, Range=20, Feather=10, Saturation=0.2}.
 @ret void none No values returned.
 
 @example
 Forge.DrawImageTinted("Images/Icon.png", 10, 10, 64, 64, Color.RGBA(255, 80, 80, 255));
+--Recolor only amber while retaining neutral steel.
+Forge.DrawImageTinted("Images/Frame.png", 10, 10, 300, 100, Color.RGBA(100, 155, 255, 255), true);
 !]]
-function Forge.DrawImageTinted(sPath, nX, nY, nWidth, nHeight, oTint)
+function Forge.DrawImageTinted(sPath, nX, nY, nWidth, nHeight, oTint, vSelective)
     assert(_D, "Forge drawing is only available during a render pass.");
     assert(wxlua.type(oTint) == "wxColour" and oTint:IsOk(), "Image tint must be a valid native color.");
     local pImage = resolveImage(sPath);
@@ -1952,7 +1999,22 @@ function Forge.DrawImageTinted(sPath, nX, nY, nWidth, nHeight, oTint)
     end
 
     local nRed, nGreen, nBlue, nAlpha = oTint:Red(), oTint:Green(), oTint:Blue(), oTint:Alpha();
+    local tSelection;
+    if (vSelective ~= nil and vSelective ~= false) then
+        assert(vSelective == true or rawtype(vSelective) == "table", "Selective tint must be true, false, nil or a selection table.");
+        local tInput = vSelective == true and {} or vSelective;
+        tSelection = {};
+        for sField, tLimits in pairs({Hue = {40, 0, 360}, Range = {20, 0, 180}, Feather = {10, 0, 180}, Saturation = {0.2, 0, 1}}) do
+            local nValue = tInput[sField];
+            if (nValue == nil) then nValue = tLimits[1]; end
+            assert(rawtype(nValue) == "number" and nValue >= tLimits[2] and nValue <= tLimits[3], "Invalid selective tint "..sField..".");
+            tSelection[sField] = nValue;
+        end
+    end
     local sKey = string.char(nRed, nGreen, nBlue, nAlpha);
+    if (tSelection) then
+        sKey = sKey..":"..table.concat({tSelection.Hue, tSelection.Range, tSelection.Feather, tSelection.Saturation}, ":");
+    end
     local tVariants = _tTintedImages[tImage];
 
     if (not tVariants or tVariants.count >= 64 and not tVariants[sKey]) then
@@ -1967,22 +2029,77 @@ function Forge.DrawImageTinted(sPath, nX, nY, nWidth, nHeight, oTint)
         local bOK, vError = xpcall(function()
             -- InitAlpha also converts a color-key mask to alpha before RGB changes.
             if (not oImage:HasAlpha()) then oImage:InitAlpha(); end
-            local tRed, tGreen, tBlue, tAlpha = {}, {}, {}, {};
-
-            for nByte = 0, 255 do
-                local sByte = string.char(nByte);
-                tRed[sByte] = string.char(floor(nByte * nRed / 255));
-                tGreen[sByte] = string.char(floor(nByte * nGreen / 255));
-                tBlue[sByte] = string.char(floor(nByte * nBlue / 255));
-                tAlpha[sByte] = string.char(floor(nByte * nAlpha / 255));
+            if (tSelection) then
+                local nPeak = math.max(nRed, nGreen, nBlue);
+                local nColors = 0;
+                local tWeights = {};
+                local tColors = setmetatable({}, {
+                    __index = function(t, sRGB)
+                        local nR, nG, nB = sRGB:byte(1, 3);
+                        local nWeight = selectiveTintWeight(nR, nG, nB, tSelection);
+                        local sTint = sRGB;
+                        if (nWeight > 0) then
+                            local nValue = math.max(nR, nG, nB);
+                            local nFactor = nPeak > 0 and nValue / nPeak or 0;
+                            sTint = string.char(
+                                floor(nR + (nRed * nFactor - nR) * nWeight + 0.5),
+                                floor(nG + (nGreen * nFactor - nG) * nWeight + 0.5),
+                                floor(nB + (nBlue * nFactor - nB) * nWeight + 0.5)
+                            );
+                        end
+                        if (nColors < 4096) then
+                            rawset(t, sRGB, sTint);
+                            tWeights[sRGB] = nWeight;
+                            nColors = nColors + 1;
+                        end
+                        return sTint;
+                    end,
+                });
+                local sSourceRGB = oImage:GetData();
+                local sTintedRGB = sSourceRGB:gsub("...", tColors);
+                oImage:SetData(sTintedRGB);
+                --Opacity changes apply only to the selected material; neutral steel keeps its alpha.
+                if (nAlpha ~= 255) then
+                    local nPixel = 0;
+                    local sAlpha = oImage:GetAlpha():gsub(".", function(sByte)
+                        local nStart = nPixel * 3 + 1;
+                        nPixel = nPixel + 1;
+                        local sRGB = sSourceRGB:sub(nStart, nStart + 2);
+                        local nWeight = tWeights[sRGB];
+                        if (nWeight == nil) then nWeight = selectiveTintWeight(sRGB:byte(1), sRGB:byte(2), sRGB:byte(3), tSelection); end
+                        return string.char(floor(sByte:byte() * (1 + (nAlpha / 255 - 1) * nWeight) + 0.5));
+                    end);
+                    oImage:SetAlpha(sAlpha);
+                end
+            else
+                local tRed, tGreen, tBlue, tAlpha = {}, {}, {}, {};
+    
+                for nByte = 0, 255 do
+                    local sByte = string.char(nByte);
+                    tRed[sByte] = string.char(floor(nByte * nRed / 255));
+                    tGreen[sByte] = string.char(floor(nByte * nGreen / 255));
+                    tBlue[sByte] = string.char(floor(nByte * nBlue / 255));
+                    tAlpha[sByte] = string.char(floor(nByte * nAlpha / 255));
+                end
+    
+                --PNG icons reuse many RGB triplets. Table substitution avoids a Lua callback
+                --and three concatenations for every repeated pixel. Bound the per-tint lookup.
+                local nColors = 0;
+                local tColors = setmetatable({}, {
+                    __index = function(t, sRGB)
+                        local sTint = tRed[sRGB:sub(1, 1)]..tGreen[sRGB:sub(2, 2)]..tBlue[sRGB:sub(3, 3)];
+                        if (nColors < 4096) then
+                            rawset(t, sRGB, sTint);
+                            nColors = nColors + 1;
+                        end
+                        return sTint;
+                    end,
+                });
+                local sRGB = oImage:GetData():gsub("...", tColors);
+                local sAlpha = oImage:GetAlpha():gsub(".", tAlpha);
+                oImage:SetData(sRGB);
+                oImage:SetAlpha(sAlpha);
             end
-
-            local sRGB = oImage:GetData():gsub("(.)(.)(.)", function(sR, sG, sB)
-                return tRed[sR]..tGreen[sG]..tBlue[sB];
-            end);
-            local sAlpha = oImage:GetAlpha():gsub(".", tAlpha);
-            oImage:SetData(sRGB);
-            oImage:SetAlpha(sAlpha);
             oBitmap = wx.wxBitmap(oImage);
             assert(oBitmap:IsOk(), "Could not create tinted card image: "..pImage);
         end, debug.traceback);
@@ -1992,7 +2109,7 @@ function Forge.DrawImageTinted(sPath, nX, nY, nWidth, nHeight, oTint)
         tVariants.count = tVariants.count + 1;
     end
 
-    _D.DrawImage(oBitmap, nX, nY, nWidth, nHeight);
+    _D.DrawImage(oBitmap, nX, nY, nWidth, nHeight, true);
 end
 
 --[[!
@@ -2238,6 +2355,8 @@ end
 !]]
 function Forge.Release()
     _tImages, _tActiveRow, _oBitmap = {}, nil, nil;
+    _tGraphicsBitmaps = setmetatable({}, {__mode = "k"});
+    require("TextEffects").Clear();
     _bRedrawCard, _bRedrawUtil, _bRedrawCanvas = false, false, false;
 end
 --[[!
@@ -2341,6 +2460,48 @@ Forge.DrawText = function(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, vAngl
 
     return nLastX, nLastY, nLastWidth, nLastHeight;
 end
+--Named material processors share native font layout and a bounded bitmap cache.
+local TextEffects = require("TextEffects");
+
+--[[!
+@fqxn CFS.Modules.Forge.Functions.DrawTextEffect
+@pulsarlua function Forge.DrawTextEffect
+@desc Draws a native UTF-8 font run with a named material effect. Font family, size, weight, italic and letter spacing come from the Style as-is; there is no fitting, shrinking or glyph normalization. Zero letter spacing uses native run shaping; nonzero spacing follows FontStyle's code-point layout. Material replaces Style color, shadow, outline, glow and background. Built-in Stamped adds steel shading, edge bevels and a dark extrusion. Game processors are loaded from FS.Game.Effects in UserEnv and take precedence over built-ins. Changed game source reloads on the next draw. Centering uses the complete run raster including processor padding. Completed runs are cached; effects must be deterministic.
+@param string sStyle Existing Style using any installed font.
+@param number nX Left edge, or horizontal center when bCenterX is true.
+@param number nY Top edge, or vertical center when bCenterY is true.
+@param string sText Single-line valid UTF-8 text, at most 4096 bytes.
+@param string sEffect Case-sensitive effect name, such as Stamped or a name returned by Scripts/Effects.lua.
+@param boolean bCenterX Optional horizontal centering; defaults to false.
+@param boolean bCenterY Optional vertical centering; defaults to false.
+@ret number nLeft Left edge of the rendered raster.
+@ret number nTop Top edge of the rendered raster.
+@ret number nWidth Rendered raster width including effect padding.
+@ret number nHeight Rendered raster height including effect padding.
+@error Requires an active render pass, valid Style/effect, finite coordinates and valid UTF-8 without line breaks. Invalid processors and rasters larger than two million pixels are rejected. No wrapping or rotation is performed.
+@ex Forge.DrawTextEffect("NAME", 412.5, 100, "Example", "Stamped", true, true);
+!]]
+function Forge.DrawTextEffect(sStyle, nX, nY, sText, sEffect, bCenterX, bCenterY)
+    assert(_D, "Forge drawing is only available during a render pass.");
+    assert(rawtype(sText) == "string" and #sText <= 4096 and utf8.len(sText) and not sText:find("[%z\r\n]"), "Text effects require valid single-line UTF-8 text of at most 4096 bytes.");
+    assert(rawtype(sEffect) == "string" and sEffect ~= "", "A named text effect is required.");
+    assert(rawtype(nX) == "number" and math.abs(nX) < math.huge and rawtype(nY) == "number" and math.abs(nY) < math.huge, "Text effect coordinates must be finite.");
+    if (sText == "" or not sText:find("%S")) then return nX, nY, 0, 0; end
+    local oStyle = assert(GetFontStyle(sStyle), "Text effects require an existing Style.");
+    if (_bAutoUpdateStyle) then oStyle.Update(); end
+    local pEffects = FS.Game.Effects;
+    if (pEffects == "") then pEffects = nil; end
+    local sStamp = pEffects and imageStamp(pEffects) or "missing";
+    local tEffect = TextEffects.Get(sEffect, pEffects, sStamp, UserEnv.Get());
+    local tMeasure = {SetDrawingFont = function() end, SetFilteringMode = function() end, GetTextWidth = function() return 0; end, GetTextHeight = function() return 0; end};
+    local nSpacing = oStyle.Prep(tMeasure, "AA") - oStyle.Prep(tMeasure, "");
+    local oBitmap, nWidth, nHeight = TextEffects.Render(oStyle.GetFont(), nSpacing, sText, sEffect, tEffect);
+    local nLeft = bCenterX == true and nX - nWidth / 2 or nX;
+    local nTop = bCenterY == true and nY - nHeight / 2 or nY;
+    if (oBitmap) then _D.DrawImage(oBitmap, nLeft, nTop, nWidth, nHeight, true); end
+    return nLeft, nTop, nWidth, nHeight;
+end
+
 --[[!
 @fqxn CFS.Modules.Forge.Functions.DrawTextCurved
 @pulsarlua function Forge.DrawTextCurved

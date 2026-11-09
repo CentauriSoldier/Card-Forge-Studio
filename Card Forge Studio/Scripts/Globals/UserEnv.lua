@@ -613,13 +613,14 @@ InjectEnv("Forge", {
     --[[!
     @fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawImageTinted
     @pulsarlua function Forge.DrawImageTinted
-    @desc Draws an image with multiplicative RGBA tinting during an active render pass. Each source RGB channel is multiplied by the matching tint channel divided by 255; source alpha is multiplied by tint alpha. White with full opacity preserves the image. Uses the same relative path checks and missing-art fallback as DrawImage. Source artwork is never modified. Tinted bitmaps are cached separately, with at most 64 variants per cached source; normal source invalidation discards its variants. Preview and PNG export use the same draw function.
+    @desc Draws an image with multiplicative RGBA tinting during an active render pass. Optional selective mode replaces the hue/saturation of matching source pixels while retaining HSV brightness, texture and unselected RGB/alpha. Pass true for amber (Hue=40, Range=20, Feather=10, Saturation=0.2), or a table overriding those fields. Hue and Range/Feather are degrees; Saturation is 0..1 with a soft 0.15 transition above the threshold. Tint RGB supplies the replacement hue/saturation; black produces black. Tint alpha affects only the selection. Selection parameters are included in the existing variant cache key. Each source RGB channel is multiplied by the matching tint channel divided by 255; source alpha is multiplied by tint alpha. In whole-image mode, white with full opacity preserves the image. Uses the same relative path checks and missing-art fallback as DrawImage. Source artwork is never modified. Tinted bitmaps are cached separately, with at most 64 variants per cached source; normal source invalidation discards its variants. Preview and PNG export use the same draw function.
     @param string sPath Image path relative to the active resource root.
     @param number nX Horizontal card-space position.
     @param number nY Vertical card-space position.
     @param number nWidth Draw width, or nil for native width.
     @param number nHeight Draw height, or nil for native height.
     @param wxColour oTint Native color, such as Color.RGBA(255, 80, 80, 255).
+    @param boolean|table vSelective Optional; nil/false retains whole-image multiplication, true selects amber, or use {Hue=40, Range=20, Feather=10, Saturation=0.2}.
     @ret void none No values returned.
     !]]
     DrawImageTinted = Forge.DrawImageTinted,
@@ -663,6 +664,25 @@ InjectEnv("Forge", {
     @ret number nHeight  Height of the rendered text block.
     !]]
     DrawText        = Forge.DrawText,
+    --[[!
+    @fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawTextEffect
+    @pulsarlua function Forge.DrawTextEffect
+    @desc Draws a native UTF-8 font run with a named material effect. Font family, size, weight, italic and letter spacing come from the Style as-is; there is no fitting, shrinking or glyph normalization. Zero letter spacing uses native run shaping; nonzero spacing follows FontStyle's code-point layout. Material replaces Style color, shadow, outline, glow and background. Built-in Stamped adds steel shading, edge bevels and a dark extrusion. Game processors are loaded from FS.Game.Effects in UserEnv and take precedence over built-ins. Changed game source reloads on the next draw. Centering uses the complete run raster including processor padding. Completed runs are cached; effects must be deterministic.
+    @param string sStyle Existing Style using any installed font.
+    @param number nX Left edge, or horizontal center when bCenterX is true.
+    @param number nY Top edge, or vertical center when bCenterY is true.
+    @param string sText Single-line valid UTF-8 text, at most 4096 bytes.
+    @param string sEffect Case-sensitive effect name, such as Stamped or a name returned by Scripts/Effects.lua.
+    @param boolean bCenterX Optional horizontal centering; defaults to false.
+    @param boolean bCenterY Optional vertical centering; defaults to false.
+    @ret number nLeft Left edge of the rendered raster.
+    @ret number nTop Top edge of the rendered raster.
+    @ret number nWidth Rendered raster width including effect padding.
+    @ret number nHeight Rendered raster height including effect padding.
+    @error Requires an active render pass, valid Style/effect, finite coordinates and valid UTF-8 without line breaks. Invalid processors and rasters larger than two million pixels are rejected. No wrapping or rotation is performed.
+    @ex Forge.DrawTextEffect("NAME", 412.5, 100, "Example", "Stamped", true, true);
+    !]]
+    DrawTextEffect  = Forge.DrawTextEffect,
     --[[!
     @fqxn CFS.UserEnv.Namespaces.Forge.Functions.DrawTextCurved
     @pulsarlua function Forge.DrawTextCurved

@@ -156,7 +156,11 @@ function Options.create(dParent, tContext)
         local oControl = wx.wxTextCtrl(dPage, wx.wxID_ANY, tostring(sValue or ""));
         oPage:Add(oControl, 0, wx.wxEXPAND + wx.wxBOTTOM, 14); return oControl;
     end
-    local dPage, oPage = page("General", "Choose how external data changes are handled.");
+    local dPage, oPage = page("General", "Choose startup behavior and how external data changes are handled.");
+    tControls.loadLastGame = check(dPage, oPage, "Load last game automatically at startup",
+        INIFile.GetValue(FS.AppCFG, "Settings", "LoadLastGame") ~= "0");
+    tControls.loadLastCardSet = check(dPage, oPage, "Load last card set automatically after restoring its game",
+        INIFile.GetValue(FS.AppCFG, "Settings", "LoadLastCardSet") ~= "0");
     tControls.csv = check(dPage, oPage, "Automatically reload external CSV changes",
         INIFile.GetValue(FS.AppCFG, "Settings", "ExternalCSVChanges") == "automatic");
     local oWarning = wx.wxStaticText(dPage, wx.wxID_ANY, "Automatic reload replaces unsaved Base Data edits. Turn it off to ask before reloading.");
@@ -501,6 +505,8 @@ function Options.create(dParent, tContext)
         tModel.save();
         local bAutomatic = tControls.csv:GetValue();
         INIFile.SetValue(FS.AppCFG, "Settings", "ExternalCSVChanges", bAutomatic and "automatic" or "prompt");
+        INIFile.SetValue(FS.AppCFG, "Settings", "LoadLastGame", tControls.loadLastGame:GetValue() and "1" or "0");
+        INIFile.SetValue(FS.AppCFG, "Settings", "LoadLastCardSet", tControls.loadLastCardSet:GetValue() and "1" or "0");
         WindowState.setRaiseTogether(tControls.raise:GetValue());
         if (tContext.state and tContext.cardSet) then
             for sKey, sSetting in pairs({overlay = "UtilityOverlay", horizontalCenter = "HorizontalCenterline", verticalCenter = "VerticalCenterline"}) do
