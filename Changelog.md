@@ -7,6 +7,7 @@
 
 ### Added
 
+- Optional clockwise image rotation around the drawn rectangle's center through the sixth `Forge.DrawImage` argument, shared by preview and PNG export. Calls without an angle retain their existing rendering path.
 - Atlas export with shared sheet generation, Generic format 1 and LÖVE 11.5 targets, explicit target-version labels, and documented version-specific target functions.
 - CSV, JSON, and Lua exports of finalized card data, preserving text values and source column order.
 - One interactive HTML exporter with 20 selectable themes, search, filtering, enlarged card viewing, front/back switching, and embedded card data.

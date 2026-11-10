@@ -1523,6 +1523,25 @@ local function drawingContext(oGC, oDC)
     end
 
     --[[!
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_WithRotation
+    @desc Draws around a card-space pivot in a temporary clockwise rotation and restores the graphics state after errors.
+    @param number nX Horizontal pivot in card pixels.
+    @param number nY Vertical pivot in card pixels.
+    @param number nAngle Clockwise angle in degrees.
+    @param function fDraw Draw callback using pivot-relative coordinates.
+    @ret void none No values returned.
+    @vis private
+    !]]
+    function tContext.WithRotation(nX, nY, nAngle, fDraw)
+        oGC:PushState();
+        oGC:Translate(nX, nY);
+        oGC:Rotate(math.rad(nAngle));
+        local bOK, vError = pcall(fDraw);
+        oGC:PopState();
+        if (not bOK) then error(vError, 0); end
+    end
+
+    --[[!
     @fqxn CFS.Modules.Forge.Private.Functions.tContext_GetOutputInfo
     @desc Returns native card width and height to drawing scripts.
     @vis private
@@ -1642,15 +1661,19 @@ end
 @param number nY Vertical card-space position.
 @param number nWidth Optional draw width; defaults to the native image width.
 @param number nHeight Optional draw height; defaults to the native image height.
+@param number nAngle Optional clockwise rotation in degrees around the drawn rectangle's center; defaults to zero. X/Y still identify the unrotated top-left corner. The full canvas, including transparent padding, rotates without changing the source image. Graphics state is restored after drawing errors. Preview and PNG export use the same transform.
 @ret void none No values returned.
 
 @ex
 -- Draw an image asset onto the card at a fixed position
 local pOgre = "Images/Ogre.png";
 Forge.DrawImage(pOgre, 100, 100, 32, 32);
+-- Rotate a transparent square needle clockwise around its center at (730, 613).
+Forge.DrawImage("Cards/Needle.png", 698, 581, 64, 64, 110);
         !]]
-function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight)
+function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight, nAngle)
     assert(_D, "Forge drawing is only available during a render pass.");
+    assert(nAngle == nil or (rawtype(nAngle) == "number" and math.abs(nAngle) < math.huge), "Image angle must be finite.");
     local pImage = resolveImage(sPath);
 
     -- Missing artwork uses the application placeholder in preview and export.
@@ -1669,7 +1692,15 @@ function Forge.DrawImage(sPath, nX, nY, nWidth, nHeight)
         _tImages[pImage] = {bitmap = oImage, stamp = imageStamp(pImage),};
     end
 
-    _D.DrawImage(oImage, nX, nY, nWidth, nHeight, true);
+    if (nAngle and nAngle ~= 0) then
+        local nDrawWidth  = nWidth or oImage:GetWidth();
+        local nDrawHeight = nHeight or oImage:GetHeight();
+        _D.WithRotation(nX + nDrawWidth / 2, nY + nDrawHeight / 2, nAngle, function()
+            _D.DrawImage(oImage, -nDrawWidth / 2, -nDrawHeight / 2, nDrawWidth, nDrawHeight, true);
+        end);
+    else
+        _D.DrawImage(oImage, nX, nY, nWidth, nHeight, true);
+    end
 end
 
 -- Circular variants follow the source cache lifetime and never alter source artwork.

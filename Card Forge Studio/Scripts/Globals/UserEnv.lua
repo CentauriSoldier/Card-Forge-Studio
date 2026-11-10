@@ -562,6 +562,7 @@ InjectEnv("Forge", {
     @param number nY Vertical card-space position.
     @param number nWidth Optional draw width; defaults to native image width.
     @param number nHeight Optional draw height; defaults to native image height.
+    @param number nAngle Optional finite clockwise angle in degrees around the drawn rectangle's center; defaults to zero. X/Y remain the unrotated top-left corner. Transparent padding rotates with the image; source pixels are unchanged. Preview and PNG export share the transform, and drawing restores graphics state after errors. Existing calls without an angle retain their behavior.
     @ret void none No values returned.
 
     !]]
