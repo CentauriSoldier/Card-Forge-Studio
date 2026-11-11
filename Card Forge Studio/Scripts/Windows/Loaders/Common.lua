@@ -148,7 +148,8 @@ function Common.Show(dParent, tGames, tOptions)
         for _, dTarget in ipairs({dCard, oLogo, oName, oHint}) do
             dTarget:Connect(wx.wxEVT_LEFT_DOWN, function()
                 select(nCard);
-                dList:SetFocus();
+                --Keep focus on the list; focusing its first child can scroll back to the top.
+                dList:SetFocusIgnoringChildren();
             end);
             dTarget:Connect(wx.wxEVT_LEFT_DCLICK, function()
                 select(nCard);
