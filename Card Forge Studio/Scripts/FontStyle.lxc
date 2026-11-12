@@ -141,73 +141,12 @@ namespace CFS
         @fqxn CFS.Classes.FontStyle.Private.Functions.Ini
         @desc Creates an INI-reader adapter for style sections and inherited values.
         @param any pFile File.
+        @param boolean bCaseSensitive Optional; defaults to true. False matches section/key names without case.
         @vis private
         !]]
-        private static Ini(pFile)
+        private static Ini(pFile, bCaseSensitive)
         {
-            local tSections = {};
-            local tNames    = {};
-            local oConfig   = FontStyle.wx.wxFileConfig("", "", pFile, "", FontStyle.wx.wxCONFIG_USE_LOCAL_FILE);
-            oConfig:DisableAutoSave();
-            oConfig:SetExpandEnvVars(false);
-            local bOK, sError = xpcall(function()
-                local bGroup, sSection, nGroup = oConfig:GetFirstGroup();
-                while (bGroup) do
-                    tNames[#tNames + 1] = sSection;
-                    tSections[sSection] = {};
-                    oConfig:SetPath("/"..sSection);
-                    local bEntry, sKey, nEntry = oConfig:GetFirstEntry();
-                    while (bEntry) do
-                        local bFound, sValue = oConfig:Read(sKey, "");
-                        tSections[sSection][sKey] = bFound and sValue or "";
-                        bEntry, sKey, nEntry = oConfig:GetNextEntry(nEntry);
-                    end
-                    oConfig:SetPath("/");
-                    bGroup, sSection, nGroup = oConfig:GetNextGroup(nGroup);
-                end
-            end, debug.traceback);
-            oConfig:delete();
-            assert(bOK, sError);
-
-            return {
-                --[[!
-                @fqxn CFS.Classes.FontStyle.Private.Functions.GetValue
-                @desc Reads a style key, following inheritance until a value is found or a section repeats.
-                @param any sSection Section.
-                @param any sKey Key.
-                @param any bInherit Inherit.
-                @vis private
-                !]]
-                GetValue = function(sSection, sKey, bInherit)
-                    local tSeen = {};
-                    while (not tSeen[sSection]) do
-                        tSeen[sSection] = true;
-                        local sValue = tSections[sSection] and tSections[sSection][sKey] or "";
-                        local sReference = sValue:match("^%s*<%s*(.-)%s*>%s*$");
-                        if (not bInherit or not sReference) then return sValue end
-                        sSection = sReference;
-                    end
-                    return "";
-                end,
-                --[[!
-                @fqxn CFS.Classes.FontStyle.Private.Functions.GetValueNames
-                @desc Returns sorted keys for a style section.
-                @param any sSection Section.
-                @vis private
-                !]]
-                GetValueNames = function(sSection)
-                    local tKeys = {};
-                    for sKey in pairs(tSections[sSection] or {}) do tKeys[#tKeys + 1] = sKey; end
-                    table.sort(tKeys);
-                    return tKeys;
-                end,
-                --[[!
-                @fqxn CFS.Classes.FontStyle.Private.Functions.GetSectionNames
-                @desc Returns the style section names.
-                @vis private
-                !]]
-                GetSectionNames = function() return tNames end,
-            };
+            return FontStyle.INI.CreateReader(pFile, bCaseSensitive);
         }
 
         --[[!
@@ -284,6 +223,415 @@ namespace CFS
             end
 
             return nMinX, nMinY, nMaxX - nMinX, nMaxY - nMinY;
+        }
+
+        -- Gradient stops use position:#RRGGBB[AA], separated by semicolons.
+        -- Positions increase strictly from 0 to 1; all styles use the same parser.
+        public static ParseGradientStops(sValue)
+        {
+            local tStops = {};
+            for sStop in (sValue..";"):gmatch("(.-);") do
+                local sPosition, sHex = sStop:match("^%s*([%d%.]+)%s*:%s*#?(%x+)%s*$");
+                local nPosition = tonumber(sPosition);
+                assert(nPosition and nPosition >= 0 and nPosition <= 1 and (#sHex == 6 or #sHex == 8),
+                    "GradientStops: use 0:#RRGGBB; 0.5:#RRGGBB; 1:#RRGGBB (optional alpha)." );
+                assert(#tStops == 0 or nPosition > tStops[#tStops].Position, "Gradient stop positions must increase strictly.");
+                local nColor = tonumber(sHex, 16);
+                if (#sHex == 6) then nColor = (nColor << 8) | 255; end
+                tStops[#tStops + 1] = {Position = nPosition, Color = nColor};
+            end
+            assert(#tStops >= 2 and tStops[1].Position == 0 and tStops[#tStops].Position == 1,
+                "GradientStops requires at least two stops, starting at 0 and ending at 1.");
+            return tStops;
+        }
+
+        -- Draw the main fill in clipped bands; effect layers keep their own colors.
+        private static DrawGradientRun(pri, D, nX, nY, sText, nAngle)
+        {
+            local nWidth		= FontStyle.MeasureTextRun(pri, D, sText);
+            local nHeight		= D.GetTextHeight(sText);
+            local bHorizontal	= pri.GradientDirection == "Horizontal";
+            local nLength		= bHorizontal and nWidth or nHeight;
+            if (nLength <= 0 or sText == "") then return; end
+            local tStops = pri.GradientStops;
+            local nStop = 1;
+            D.WithTextTransform(nX, nY, nAngle or 0, function()
+                -- Extend the first/last color over glyph overhangs without cropping them.
+                for nBand = -math.ceil(nHeight), math.ceil(nLength + nHeight) - 1 do
+                    local nPosition = FontStyle.clamp((nBand + 0.5) / nLength, 0, 1);
+                    while (nStop < #tStops - 1 and nPosition > tStops[nStop + 1].Position) do nStop = nStop + 1; end
+                    local tLeft		= tStops[nStop];
+                    local tRight	= tStops[nStop + 1];
+                    local nMix		= (nPosition - tLeft.Position) / (tRight.Position - tLeft.Position);
+                    local nColor	= 0;
+                    for nShift = 24, 0, -8 do
+                        local nLeft = (tLeft.Color >> nShift) & 255;
+                        local nRight = (tRight.Color >> nShift) & 255;
+                        nColor = nColor | (FontStyle.floor(nLeft + (nRight - nLeft) * nMix + 0.5) << nShift);
+                    end
+                    local nClipX	= bHorizontal and nBand or -nHeight;
+                    local nClipY	= bHorizontal and -nHeight or nBand;
+                    local nClipW	= bHorizontal and 1 or nWidth + 2 * nHeight;
+                    local nClipH	= bHorizontal and 3 * nHeight or 1;
+                    D.WithTextClip(nClipX, nClipY, nClipW, nClipH, function()
+                        FontStyle.DrawTextRun(pri, D, 0, 0, sText, nil, nColor);
+                    end);
+                end
+            end);
+        }
+
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.ParseBevelSettings
+        @desc Validates Bevel/Emboss settings and builds a cache signature. Native pixel sizes
+        follow text scaling. Light angle 0 points right, 90 up; edges are selected by their
+        outward contour normals, independently of lighting. All edges default on. Raised
+        and Inset stay inside the glyph; Emboss/Stamp also shade a padded outside contour.
+        @param table tParsed Optional Bevel-prefixed settings (INI strings or parsed values).
+        @ret table tBevel Normalized settings, Outside flag, padding and cache signature.
+        !]]
+        public static ParseBevelSettings(tParsed)
+        {
+            local function number(sKey, nDefault, nMin, nMax)
+                local vValue	= tParsed["Bevel"..sKey];
+                local nValue	= tonumber(vValue);
+                if (vValue == nil or vValue == "") then nValue = nDefault; end
+                assert(type(nValue) == "number" and nValue == nValue and nValue % 1 == 0 and nValue >= nMin and nValue <= nMax,
+                    "Bevel"..sKey.." must be an integer from "..nMin.." to "..nMax..".");
+                return nValue;
+            end
+            local function boolean(sKey, bDefault)
+                local vValue = tParsed["Bevel"..sKey];
+                if (vValue == nil or vValue == "") then return bDefault; end
+                assert(vValue == true or vValue == false or vValue == "true" or vValue == "false", "Bevel"..sKey.." must be true or false.");
+                return vValue == true or vValue == "true";
+            end
+            local function choice(sKey, sDefault, tChoices)
+                local sValue = tParsed["Bevel"..sKey];
+                if (sValue == nil or sValue == "") then sValue = sDefault; end
+                for _, sChoice in ipairs(tChoices) do if (sChoice == sValue) then return sValue; end end
+                error("Bevel"..sKey.." must be "..table.concat(tChoices, ", ")..".");
+            end
+            local function color(sKey, nDefault)
+                local vValue = tParsed["Bevel"..sKey];
+                if (vValue == nil or vValue == "") then return nDefault; end
+                if (type(vValue) == "number") then
+                    assert(vValue >= 0 and vValue <= 0xFFFFFFFF and vValue % 1 == 0, "Invalid Bevel"..sKey.." RGBA value.");
+                    return vValue;
+                end
+                return assert(FontStyle._tColor.TryFromString(vValue, true), "Invalid Bevel"..sKey.." color.");
+            end
+            local tBevel			= {
+                Enabled				= boolean("Enabled", false),
+                Mode				= choice("Mode", "Raised", {"Raised", "Inset", "Emboss", "Stamp"}),
+                Profile				= choice("Profile", "Chamfer", {"Chamfer", "Round", "Sharp"}),
+                Width				= number("Width", 2, 1, 16),
+                Depth				= number("Depth", 2, 1, 16),
+                Softness			= number("Softness", 1, 0, 8),
+                EdgeTop				= boolean("EdgeTop", true),
+                EdgeBottom			= boolean("EdgeBottom", true),
+                EdgeLeft			= boolean("EdgeLeft", true),
+                EdgeRight			= boolean("EdgeRight", true),
+                LightAngle			= number("LightAngle", 135, 0, 359),
+                LightElevation		= number("LightElevation", 45, 0, 90),
+                HighlightColor		= color("HighlightColor", 0xFFFFFFFF),
+                ShadowColor			= color("ShadowColor", 0x101820FF),
+                HighlightStrength	= number("HighlightStrength", 180, 0, 255),
+                ShadowStrength		= number("ShadowStrength", 180, 0, 255),
+                SpecularStrength	= number("SpecularStrength", 80, 0, 255),
+                SpecularPower		= number("SpecularPower", 16, 1, 128),
+                Opacity				= number("Opacity", 220, 0, 255),
+            };
+            tBevel.Outside = tBevel.Mode == "Emboss" or tBevel.Mode == "Stamp";
+            tBevel.Padding = tBevel.Width + tBevel.Softness + 2;
+            local tSignature = {};
+            for _, sKey in ipairs({"Enabled", "Mode", "Profile", "Width", "Depth", "Softness", "EdgeTop", "EdgeBottom", "EdgeLeft", "EdgeRight",
+                "LightAngle", "LightElevation", "HighlightColor", "ShadowColor", "HighlightStrength", "ShadowStrength", "SpecularStrength", "SpecularPower", "Opacity"}) do
+                tSignature[#tSignature + 1] = tostring(tBevel[sKey]);
+            end
+            tBevel.Signature = table.concat(tSignature, ":");
+            return tBevel;
+        }
+
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.Functions.BevelShader
+        @desc Creates a translucent highlight/shadow overlay from signed mask distances.
+        It does not supply a replacement face color. Edge switches select contour-normal
+        components (including curves); lighting is independent. Inset/Stamp reverse the
+        surface slope. Emboss/Stamp add an outside rim; other modes preserve glyph coverage.
+        @vis private
+        !]]
+        private static BevelShader(tBevel)
+        {
+            local nAzimuth		= math.rad(tBevel.LightAngle);
+            local nElevation	= math.rad(tBevel.LightElevation);
+            local nLightX		= math.cos(nAzimuth) * math.cos(nElevation);
+            local nLightY		= -math.sin(nAzimuth) * math.cos(nElevation);
+            local nLightZ		= math.sin(nElevation);
+            local nHalfLength	= math.sqrt(nLightX * nLightX + nLightY * nLightY + (nLightZ + 1) ^ 2);
+            local nHalfX		= nLightX / nHalfLength;
+            local nHalfY		= nLightY / nHalfLength;
+            local nHalfZ		= (nLightZ + 1) / nHalfLength;
+            local nSign			= (tBevel.Mode == "Inset" or tBevel.Mode == "Stamp") and -1 or 1;
+            return function(tMask, nX, nY)
+                local nDistance	= tMask.SignedDistance(nX, nY);
+                local nAlpha	= tMask.Alpha(nX, nY) / 255;
+                local nInside	= nAlpha > 0;
+                if (not nInside and not tBevel.Outside) then return 0, 0, 0, 0; end
+                local nD = math.abs(nDistance);
+                if (nInside) then nD = math.max(0, nDistance); end
+                local nFade = FontStyle.clamp((tBevel.Width + tBevel.Softness / 2 - nD) / math.max(0.5, tBevel.Softness), 0, 1);
+                if (nFade <= 0) then return 0, 0, 0, 0; end
+                local nDX = (tMask.SignedDistance(nX + 1, nY - 1) + 2 * tMask.SignedDistance(nX + 1, nY) + tMask.SignedDistance(nX + 1, nY + 1)
+                    - tMask.SignedDistance(nX - 1, nY - 1) - 2 * tMask.SignedDistance(nX - 1, nY) - tMask.SignedDistance(nX - 1, nY + 1)) / 8;
+                local nDY = (tMask.SignedDistance(nX - 1, nY + 1) + 2 * tMask.SignedDistance(nX, nY + 1) + tMask.SignedDistance(nX + 1, nY + 1)
+                    - tMask.SignedDistance(nX - 1, nY - 1) - 2 * tMask.SignedDistance(nX, nY - 1) - tMask.SignedDistance(nX + 1, nY - 1)) / 8;
+                local nNormalLength = math.sqrt(nDX * nDX + nDY * nDY);
+                if (nNormalLength < 0.0001) then return 0, 0, 0, 0; end
+                local nOutX		= -nDX / nNormalLength;
+                local nOutY		= -nDY / nNormalLength;
+                local nSelected	= (tBevel.EdgeLeft and math.max(0, -nOutX) or 0) + (tBevel.EdgeRight and math.max(0, nOutX) or 0)
+                    + (tBevel.EdgeTop and math.max(0, -nOutY) or 0) + (tBevel.EdgeBottom and math.max(0, nOutY) or 0);
+                nSelected = nSelected / (math.abs(nOutX) + math.abs(nOutY));
+                if (nSelected <= 0) then return 0, 0, 0, 0; end
+                local nPosition	= FontStyle.clamp(nD / tBevel.Width, 0, 1);
+                local nSlope	= tBevel.Depth / tBevel.Width;
+                if (tBevel.Profile == "Round") then nSlope = nSlope * math.pi / 2 * math.cos(nPosition * math.pi / 2);
+                elseif (tBevel.Profile == "Sharp") then nSlope = nSlope * 3 * (1 - nPosition) ^ 2; end
+                nSlope				= nSlope * nSign;
+                local nLength		= math.sqrt(nSlope * nSlope + 1);
+                local nNX			= nOutX * nSlope / nLength;
+                local nNY			= nOutY * nSlope / nLength;
+                local nNZ			= 1 / nLength;
+                local nDiffuse		= nNX * nLightX + nNY * nLightY + nNZ * nLightZ - nLightZ;
+                local nSpecular		= math.max(0, nNX * nHalfX + nNY * nHalfY + nNZ * nHalfZ) ^ tBevel.SpecularPower;
+                local nCoverage		= (nInside and nAlpha or 1 - nAlpha) * nFade * nSelected * tBevel.Opacity / 255;
+                local nHighlight	= FontStyle.clamp((math.max(0, nDiffuse) * tBevel.HighlightStrength + nSpecular * tBevel.SpecularStrength) / 255, 0, 1)
+                    * (tBevel.HighlightColor & 255) / 255 * nCoverage;
+                local nShadow = FontStyle.clamp(math.max(0, -nDiffuse) * tBevel.ShadowStrength / 255, 0, 1)
+                    * (tBevel.ShadowColor & 255) / 255 * nCoverage;
+                local nTotal = nHighlight + nShadow * (1 - nHighlight);
+                if (nTotal <= 0) then return 0, 0, 0, 0; end
+                local function channel(nShift)
+                    local nLight	= (tBevel.HighlightColor >> nShift) & 255;
+                    local nDark		= (tBevel.ShadowColor >> nShift) & 255;
+                    return FontStyle.clamp((nLight * nHighlight + nDark * nShadow * (1 - nHighlight)) / nTotal, 0, 255);
+                end
+                return channel(24), channel(16), channel(8), nTotal * 255;
+            end;
+        }
+
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.Functions.DrawBevelRun
+        @desc Reuses the native TextEffects mask/cache internally, without looking up or
+        registering a named effect. The cached overlay includes every normalized Bevel
+        setting in its identity. Cropped mask offsets preserve text origins and overhangs.
+        The caller's rotation/scaling remains active; the cached bitmap is not owned here.
+        @vis private
+        !]]
+        private static DrawBevelRun(pri, D, nX, nY, sText, nAngle)
+        {
+            local tBevel = pri.Bevel;
+            if (not tBevel.Enabled or tBevel.Opacity == 0 or not sText:find("%S") or
+                not (tBevel.EdgeTop or tBevel.EdgeBottom or tBevel.EdgeLeft or tBevel.EdgeRight)) then return; end
+            local tRenderer	= require("TextEffects");
+            local tEffect	= {Padding = tBevel.Padding, NeedsSignedDistance = true, Shade = FontStyle.BevelShader(tBevel)};
+            local oBitmap, nWidth, nHeight, nOffsetX, nOffsetY = tRenderer.Render(pri.Font, pri.LetterSpacing, sText,
+                "\1StyleBevel\1"..tBevel.Signature, tEffect);
+            if (oBitmap) then
+                D.WithTextTransform(nX, nY, nAngle or 0, function()
+                    D.DrawTextOverlay(oBitmap, nOffsetX, nOffsetY, nWidth, nHeight);
+                end);
+            end
+        }
+
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Methods.ParseWearSettings
+        @desc Normalizes built-in Wear settings. Lengths are percentages of font line height;
+        width/highlight offset are native text pixels and scale with fitted text. Density is
+        approximate scratches per eight em-squares, bounded at 128 scratches per text run.
+        A private seeded generator never changes the game's RNG. Wear colors support RGBA.
+        @param table tParsed Parsed Style fields with optional Wear-prefixed settings.
+        @ret table tWear Validated settings; missing fields use the same defaults as the editor.
+        !]]
+        public static ParseWearSettings(tParsed)
+        {
+            local function number(sKey, nDefault, nMin, nMax)
+                local vValue	= tParsed["Wear"..sKey];
+                local nValue	= tonumber(vValue);
+                if (vValue == nil or vValue == "") then nValue = nDefault; end
+                assert(type(nValue) == "number" and nValue == nValue and nValue % 1 == 0 and nValue >= nMin and nValue <= nMax,
+                    "Wear"..sKey.." must be an integer from "..nMin.." to "..nMax..".");
+                return nValue;
+            end
+            local tWear				= {
+                Enabled				= tParsed.WearEnabled == true,
+                Density				= number("Density", 18, 0, 100),
+                Pattern				= tParsed.WearPattern ~= nil and tParsed.WearPattern ~= "" and tParsed.WearPattern or "Scratches",
+                ChipSizeMin			= number("ChipSizeMin", 3, 1, 20),
+                ChipSizeMax			= number("ChipSizeMax", 9, 1, 20),
+                ChipRoughness		= number("ChipRoughness", 65, 0, 100),
+                LengthMin			= number("LengthMin", 8, 1, 200),
+                LengthMax			= number("LengthMax", 45, 1, 200),
+                Width				= number("Width", 1, 1, 8),
+                Angle				= number("Angle", -15, -180, 180),
+                AngleSpread			= number("AngleSpread", 25, 0, 180),
+                Opacity				= number("Opacity", 100, 0, 255),
+                Color				= tParsed.WearColor or 0x302A20FF,
+                HighlightEnabled	= tParsed.WearHighlightEnabled ~= false,
+                HighlightColor		= tParsed.WearHighlightColor or 0xFFF4CBFF,
+                HighlightOffset		= number("HighlightOffset", 1, 0, 8),
+                Seed				= number("Seed", 1, 0, 2147483646),
+            };
+            assert(tWear.LengthMin <= tWear.LengthMax, "WearLengthMin must not exceed WearLengthMax.");
+            assert(tWear.Pattern == "Scratches" or tWear.Pattern == "Chips" or tWear.Pattern == "Mixed", "WearPattern must be Scratches, Chips or Mixed.");
+            assert(tWear.ChipSizeMin <= tWear.ChipSizeMax, "WearChipSizeMin must not exceed WearChipSizeMax.");
+            return tWear;
+        }
+
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.Functions.DrawChipsRun
+        @desc Distributes small irregular paint chips per non-space glyph, with stratified
+        placement instead of word-wide random clustering. Chip dimensions are percentages
+        of font height and capped relative to each glyph advance; they never form full
+        scratch strokes. Dark chip interiors and optional offset exposed-metal edges use
+        WearColor/HighlightColor. Original text coverage clips every chip. At most 512 chips
+        are allocated proportionally across the glyphs; each chip has at most 12 row bands.
+        @vis private
+        !]]
+        private static DrawChipsRun(pri, D, nX, nY, sText, nAngle)
+        {
+            local tWear		= pri.Wear;
+            local nHeight	= D.GetTextHeight(sText);
+            if (nHeight <= 0) then return; end
+            local tGlyphs	= {};
+            local sPrefix	= "";
+            local nOffset	= 0;
+            for _, nCodePoint in utf8.codes(sText) do
+                local sCharacter	= utf8.char(nCodePoint);
+                local nWidth		= D.GetTextWidth(sCharacter);
+                sPrefix				= sPrefix..sCharacter;
+                local nStart		= pri.LetterSpacing == 0 and D.GetTextWidth(sPrefix) - nWidth or nOffset;
+                if (sCharacter:match("%S") and nWidth > 0) then
+                    tGlyphs[#tGlyphs + 1] = {X = nStart, Width = nWidth};
+                end
+                nOffset = nOffset + nWidth + pri.LetterSpacing;
+            end
+            if (#tGlyphs == 0) then return; end
+            local nState = tWear.Seed;
+            for nIndex = 1, #sText do nState = (nState * 131 + sText:byte(nIndex)) % 2147483647; end
+            local function random()
+                nState = (nState * 48271 + 1) % 2147483647;
+                return nState / 2147483647;
+            end
+            local function opacity(nColor)
+                return (nColor & 0xFFFFFF00) | FontStyle.floor((nColor & 255) * tWear.Opacity / 255 + 0.5);
+            end
+            local nColor		= opacity(tWear.Color);
+            local nHighlight	= opacity(tWear.HighlightColor);
+            local nDensity		= tWear.Pattern == "Mixed" and tWear.Density / 2 or tWear.Density;
+            local nBudget		= math.min(512, #tGlyphs * math.max(1, math.ceil(nDensity / 12)));
+            D.WithTextTransform(nX, nY, nAngle or 0, function()
+                for nGlyph, tGlyph in ipairs(tGlyphs) do
+                    local nCount	= math.floor(nGlyph * nBudget / #tGlyphs) - math.floor((nGlyph - 1) * nBudget / #tGlyphs);
+                    local nColumns	= math.max(1, math.ceil(math.sqrt(nCount * tGlyph.Width / nHeight)));
+                    local nRows		= math.max(1, math.ceil(nCount / nColumns));
+                    for nChip = 1, nCount do
+                        local nColumn		= (nChip - 1) % nColumns;
+                        local nRow			= math.floor((nChip - 1) / nColumns);
+                        local nCenterX		= tGlyph.X + (nColumn + 0.25 + random() * 0.5) * tGlyph.Width / nColumns;
+                        local nCenterY		= (nRow + 0.25 + random() * 0.5) * nHeight / nRows;
+                        local nSize			= nHeight * (tWear.ChipSizeMin + random() * (tWear.ChipSizeMax - tWear.ChipSizeMin)) / 100;
+                        local nWidth		= math.min(nSize, tGlyph.Width * 0.18);
+                        local nTall			= math.min(nSize * (0.6 + random() * 0.6), nHeight * 0.12);
+                        local nBands		= math.min(12, math.max(1, math.ceil(nTall)));
+                        local nBandHeight	= nTall / nBands;
+                        local tShape		= {};
+                        for nBand = 1, nBands do
+                            local nRough		= tWear.ChipRoughness / 100;
+                            local nInsetLeft	= random() * nWidth * 0.4 * nRough;
+                            local nInsetRight	= random() * nWidth * 0.4 * nRough;
+                            tShape[nBand] = {X = nCenterX - nWidth / 2 + nInsetLeft,
+                                Y		= nCenterY - nTall / 2 + (nBand - 1) * nBandHeight,
+                                Width	= nWidth - nInsetLeft - nInsetRight};
+                        end
+                        local function chip(nFill, nOffset)
+                            for _, tBand in ipairs(tShape) do
+                                D.WithTextClip(tBand.X, tBand.Y + nOffset, tBand.Width, nBandHeight, function()
+                                    FontStyle.DrawTextRun(pri, D, 0, 0, sText, nil, nFill);
+                                end);
+                            end
+                        end
+                        if (tWear.HighlightEnabled) then chip(nHighlight, tWear.HighlightOffset); end
+                        chip(nColor, 0);
+                    end
+                end
+            end);
+        }
+
+        --[[!
+        @fqxn CFS.Classes.FontStyle.Private.Functions.DrawWearRun
+        @desc Adds deterministic dark scratches and optional offset highlights over the main
+        fill only. Repainting the original text through each scratch clip confines wear to
+        glyph coverage; shadows, outline, extrusion, glow and background are unchanged.
+        Existing text transforms, fitting, spacing and alpha are preserved. Wear adds no
+        external geometry, so text bounds remain unchanged. Scratch count and segmentation
+        are bounded (128 scratches, at most 64 bands per stroke).
+        @vis private
+        !]]
+        private static DrawWearRun(pri, D, nX, nY, sText, nAngle)
+        {
+            local tWear = pri.Wear;
+            if (not tWear.Enabled or tWear.Density == 0 or tWear.Opacity == 0 or sText == "") then return; end
+            if (tWear.Pattern ~= "Scratches") then
+                FontStyle.DrawChipsRun(pri, D, nX, nY, sText, nAngle);
+                if (tWear.Pattern == "Chips") then return; end
+            end
+            local nWidth	= FontStyle.MeasureTextRun(pri, D, sText);
+            local nHeight	= D.GetTextHeight(sText);
+            if (nWidth <= 0 or nHeight <= 0) then return; end
+            local nState = tWear.Seed;
+            for nIndex = 1, #sText do nState = (nState * 131 + sText:byte(nIndex)) % 2147483647; end
+            local function random()
+                nState = (nState * 48271 + 1) % 2147483647;
+                return nState / 2147483647;
+            end
+            local function opacity(nColor)
+                local nAlpha = FontStyle.floor((nColor & 255) * tWear.Opacity / 255 + 0.5);
+                return (nColor & 0xFFFFFF00) | nAlpha;
+            end
+            local nScratchColor		= opacity(tWear.Color);
+            local nHighlightColor	= opacity(tWear.HighlightColor);
+            local nDensity			= tWear.Pattern == "Mixed" and tWear.Density / 2 or tWear.Density;
+            local nCount			= math.min(128, math.ceil(nWidth / nHeight * nDensity / 8));
+            D.WithTextTransform(nX, nY, nAngle or 0, function()
+                for nScratch = 1, nCount do
+                    local nStartX	= random() * nWidth;
+                    local nStartY	= random() * nHeight;
+                    local nLength	= nHeight * (tWear.LengthMin + random() * (tWear.LengthMax - tWear.LengthMin)) / 100;
+                    local nRadians	= math.rad(tWear.Angle + (random() * 2 - 1) * tWear.AngleSpread);
+                    local nDX		= math.cos(nRadians) * nLength;
+                    local nDY		= math.sin(nRadians) * nLength;
+                    -- Slice along the short axis to keep long shallow scratches inexpensive.
+                    local bHorizontal	= math.abs(nDX) >= math.abs(nDY);
+                    local nShort		= bHorizontal and math.abs(nDY) or math.abs(nDX);
+                    local nBands		= math.min(64, math.max(1, math.ceil(nShort)));
+                    local nStepX		= nDX / nBands;
+                    local nStepY		= nDY / nBands;
+                    local nClipW		= math.abs(nStepX) + tWear.Width;
+                    local nClipH		= math.abs(nStepY) + tWear.Width;
+                    local function stroke(nColor, nOffset)
+                        for nBand = 0, nBands - 1 do
+                            local nClipX	= nStartX + nBand * nStepX + math.min(0, nStepX);
+                            local nClipY	= nStartY + nBand * nStepY + math.min(0, nStepY) + nOffset;
+                            D.WithTextClip(nClipX, nClipY, nClipW, nClipH, function()
+                                FontStyle.DrawTextRun(pri, D, 0, 0, sText, nil, nColor);
+                            end);
+                        end
+                    end
+                    if (tWear.HighlightEnabled) then stroke(nHighlightColor, tWear.HighlightOffset); end
+                    stroke(nScratchColor, 0);
+                end
+            end);
         }
 
         --[[!
@@ -394,6 +742,45 @@ namespace CFS
             sRet = table.concat({
                 tostring(tParsed.FontColor),
                 tostring(tParsed.FontColorPath),
+                tostring(tParsed.GradientEnabled),
+                tostring(tParsed.GradientStopsText),
+                tostring(tParsed.GradientDirection),
+                tostring(tParsed.BevelEnabled),
+                tostring(tParsed.BevelMode),
+                tostring(tParsed.BevelProfile),
+                tostring(tParsed.BevelWidth),
+                tostring(tParsed.BevelDepth),
+                tostring(tParsed.BevelSoftness),
+                tostring(tParsed.BevelEdgeTop),
+                tostring(tParsed.BevelEdgeBottom),
+                tostring(tParsed.BevelEdgeLeft),
+                tostring(tParsed.BevelEdgeRight),
+                tostring(tParsed.BevelLightAngle),
+                tostring(tParsed.BevelLightElevation),
+                tostring(tParsed.BevelHighlightColor),
+                tostring(tParsed.BevelShadowColor),
+                tostring(tParsed.BevelHighlightStrength),
+                tostring(tParsed.BevelShadowStrength),
+                tostring(tParsed.BevelSpecularStrength),
+                tostring(tParsed.BevelSpecularPower),
+                tostring(tParsed.BevelOpacity),
+                tostring(tParsed.WearEnabled),
+                tostring(tParsed.WearDensity),
+                tostring(tParsed.WearLengthMin),
+                tostring(tParsed.WearLengthMax),
+                tostring(tParsed.WearWidth),
+                tostring(tParsed.WearAngle),
+                tostring(tParsed.WearAngleSpread),
+                tostring(tParsed.WearOpacity),
+                tostring(tParsed.WearColor),
+                tostring(tParsed.WearHighlightEnabled),
+                tostring(tParsed.WearHighlightColor),
+                tostring(tParsed.WearHighlightOffset),
+                tostring(tParsed.WearPattern),
+                tostring(tParsed.WearChipSizeMin),
+                tostring(tParsed.WearChipSizeMax),
+                tostring(tParsed.WearChipRoughness),
+                tostring(tParsed.WearSeed),
                 tostring(tParsed.LetterSpacing),
                 tostring(tParsed.BackgroundEnabled),
                 tostring(tParsed.BackgroundColor),
@@ -554,6 +941,45 @@ namespace CFS
                         FontSize            = nFontSize,
                         FontColor           = nFontColor,
                         FontColorPath       = sFontColorPath,
+                        GradientEnabled     = toboolean(val("GradientEnabled")) and true or false,
+                        GradientStopsText   = val("GradientStops") ~= "" and val("GradientStops") or "0:#EAF6FF; 0.45:#95BBD0; 0.5:#D7EEFA; 1:#52778E",
+                        GradientDirection   = val("GradientDirection") ~= "" and val("GradientDirection") or "Vertical",
+                        WearPattern				= val("WearPattern"),
+                        WearChipSizeMin			= val("WearChipSizeMin"),
+                        WearChipSizeMax			= val("WearChipSizeMax"),
+                        WearChipRoughness		= val("WearChipRoughness"),
+                        WearEnabled				= toboolean(val("WearEnabled")) and true or false,
+                        WearDensity				= val("WearDensity"),
+                        WearLengthMin			= val("WearLengthMin"),
+                        WearLengthMax			= val("WearLengthMax"),
+                        WearWidth				= val("WearWidth"),
+                        WearAngle				= val("WearAngle"),
+                        WearAngleSpread			= val("WearAngleSpread"),
+                        WearOpacity				= val("WearOpacity"),
+                        WearColor				= FontStyle._tColor.TryFromString(val("WearColor"), true) or 0x302A20FF,
+                        WearHighlightEnabled	= val("WearHighlightEnabled") == "" or toboolean(val("WearHighlightEnabled")) and true or false,
+                        WearHighlightColor		= FontStyle._tColor.TryFromString(val("WearHighlightColor"), true) or 0xFFF4CBFF,
+                        WearHighlightOffset		= val("WearHighlightOffset"),
+                        WearSeed				= val("WearSeed"),
+                        BevelEnabled			= val("BevelEnabled"),
+                        BevelMode				= val("BevelMode"),
+                        BevelProfile			= val("BevelProfile"),
+                        BevelWidth				= val("BevelWidth"),
+                        BevelDepth				= val("BevelDepth"),
+                        BevelSoftness			= val("BevelSoftness"),
+                        BevelEdgeTop			= val("BevelEdgeTop"),
+                        BevelEdgeBottom			= val("BevelEdgeBottom"),
+                        BevelEdgeLeft			= val("BevelEdgeLeft"),
+                        BevelEdgeRight			= val("BevelEdgeRight"),
+                        BevelLightAngle			= val("BevelLightAngle"),
+                        BevelLightElevation		= val("BevelLightElevation"),
+                        BevelHighlightColor		= val("BevelHighlightColor"),
+                        BevelShadowColor		= val("BevelShadowColor"),
+                        BevelHighlightStrength	= val("BevelHighlightStrength"),
+                        BevelShadowStrength		= val("BevelShadowStrength"),
+                        BevelSpecularStrength	= val("BevelSpecularStrength"),
+                        BevelSpecularPower		= val("BevelSpecularPower"),
+                        BevelOpacity			= val("BevelOpacity"),
                         FontOptions         = tFontOptions,
                         LetterSpacing       = tonumber(val("LetterSpacing")) or 0,
                         BackgroundEnabled   = toboolean(val("BackgroundEnabled")) and true or false,
@@ -769,11 +1195,12 @@ namespace CFS
         @pulsarlua function FontStyle.UpdateINI
         @desc Loads and synchronizes font styles from an INI file.
         @param string sINI The path to the INI file.
+        @param boolean bCaseSensitive Optional; defaults to true. False enables case-insensitive INI section/key lookup.
         !]]
-        public static UpdateINI(sINI)
+        public static UpdateINI(sINI, bCaseSensitive)
         {
             if (rawtype(sINI) == "string") then
-                FontStyle._tState.INI = FontStyle.Ini(sINI);
+                FontStyle._tState.INI = FontStyle.Ini(sINI, bCaseSensitive);
                 FontStyle.SyncStyles();
             end
         }
@@ -800,6 +1227,11 @@ namespace CFS
         }
         private Color = FontStyle._oBlack;
         private ColorPath = "";
+        private GradientEnabled = false;
+        private GradientStops = {};
+        private GradientDirection = "Vertical";
+        private Wear = {};
+        private Bevel = {};
         private LetterSpacing = 0;
         private BackgroundEnabled = false;
         private BackgroundColor = FontStyle._oClear;
@@ -1180,6 +1612,14 @@ namespace CFS
 
                 pri.Color               = tParsed.FontColor or FontStyle._oBlack;
                 pri.ColorPath           = tParsed.FontColorPath or "";
+                pri.GradientEnabled     = tParsed.GradientEnabled and true or false;
+                pri.GradientDirection   = tParsed.GradientDirection or "Vertical";
+                if (pri.GradientEnabled) then
+                    assert(pri.GradientDirection == "Vertical" or pri.GradientDirection == "Horizontal", "GradientDirection must be Vertical or Horizontal.");
+                    pri.GradientStops = FontStyle.ParseGradientStops(tParsed.GradientStopsText or "");
+                end
+                pri.Bevel = FontStyle.ParseBevelSettings(tParsed);
+                pri.Wear = FontStyle.ParseWearSettings(tParsed);
                 pri.LetterSpacing       = tParsed.LetterSpacing or 0;
                 pri.BackgroundEnabled   = tParsed.BackgroundEnabled and true or false;
                 pri.BackgroundColor     = tParsed.BackgroundColor or FontStyle._oClear;
@@ -1256,7 +1696,7 @@ namespace CFS
         --[[!
         @fqxn CFS.Classes.FontStyle.Methods.Draw
         @pulsarlua function FontStyle.Draw
-        @desc Draws the text background and enabled glow, shadow, extrusion, and outline layers before the main text.
+        @desc Draws the background, glow, shadow, extrusion and outline, then the solid/gradient face, optional Bevel/Emboss overlay and Wear. Disabled effects preserve the existing rendering path.
         @param any sObject Object.
         @param any D D.
         @param any hInternalDC H internal dc.
@@ -1303,11 +1743,15 @@ namespace CFS
                 pri.DrawOutline(sObject, D, hInternalDC, nX, nY, sText, nAngle);
             end
 
-            if (nAngle) then
+            if (pri.GradientEnabled) then
+                FontStyle.DrawGradientRun(pri, D, nX, nY, sText, nAngle);
+            elseif (nAngle) then
                 FontStyle.DrawTextRun(pri, D, nX, nY, sText, nAngle, nColor);
             else
                 FontStyle.DrawTextRun(pri, D, nX, nY, sText, nil, nColor);
             end
+            if (pri.Bevel.Enabled) then FontStyle.DrawBevelRun(pri, D, nX, nY, sText, nAngle); end
+            if (pri.Wear.Enabled) then FontStyle.DrawWearRun(pri, D, nX, nY, sText, nAngle); end
         }
 
         --[[!
@@ -1347,7 +1791,8 @@ namespace CFS
             local nPadding = pri.BackgroundEnabled and pri.BackgroundPadding or 0;
             local nShadowRadius = pri.ShadowEnabled and pri.ShadowRadius or 0;
             local nOutlineRadius = pri.OutlineEnabled and pri.OutlineThickness or 0;
-            local nExtra = math.max(nPadding, nShadowRadius, nOutlineRadius);
+            local nBevelRadius = pri.Bevel.Enabled and pri.Bevel.Outside and pri.Bevel.Padding or 0;
+            local nExtra = math.max(nPadding, nShadowRadius, nOutlineRadius, nBevelRadius);
             nMinX, nMinY = nMinX - nExtra, nMinY - nExtra;
             nTotalW, nTotalH = nTotalW + 2 * nExtra, nTotalH + 2 * nExtra;
             return nTotalW, nTotalH, nMinX, nMinY;

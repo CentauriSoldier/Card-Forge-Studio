@@ -4,6 +4,7 @@ local string        = string;
 local table         = table;
 local TextEffects   = {};
 local tCache        = {};
+local tCacheOrigins = {};
 local nCacheCount   = 0;
 local tCacheUse     = {};
 local nCacheClock   = 0;
@@ -133,6 +134,7 @@ tBuiltIn.StampedSilver = {
 function TextEffects.Clear()
     for _, oBitmap in pairs(tCache) do oBitmap:delete(); end
     tCache, nCacheCount, tCacheUse, nCacheClock = {}, 0, {}, 0;
+    tCacheOrigins = {};
     pLoadedFile, sLoadedStamp, tUserEffects = nil, nil, {};
 end
 
@@ -175,18 +177,22 @@ end
 @param number nSpacing Style letter spacing in pixels.
 @param string sText Valid UTF-8 text without line breaks.
 @param string sName Effect name for the cache.
-@param table tEffect Processor returned by Get.
+@param table tEffect Processor returned by Get, or an internal Style overlay. Optional NeedsSignedDistance adds a SignedDistance(x,y) sampler (positive inside, negative outside); legacy samplers and material output are unchanged.
 @ret wxBitmap|nil oBitmap Rendered material, or nil for whitespace.
 @ret number nWidth Visible material width.
 @ret number nHeight Visible material height.
+@ret number nOffsetX Cropped raster origin relative to the original text draw X; optional for legacy material callers.
+@ret number nOffsetY Cropped raster origin relative to the original text draw Y. Offsets are also returned on cache hits; the cached bitmap remains owned by TextEffects.
 !]]
 function TextEffects.Render(oFont, nSpacing, sText, sName, tEffect)
     local sKey = table.concat({oFont:GetNativeFontInfoDesc(), tostring(nSpacing), sName, sText}, "\0");
+    if (tEffect.NeedsSignedDistance) then sKey = sKey.."\0signed"; end
     local oCached = tCache[sKey];
     if (oCached) then
         nCacheClock = nCacheClock + 1;
         tCacheUse[sKey] = nCacheClock;
-        return oCached, oCached:GetWidth(), oCached:GetHeight();
+        local tOrigin = tCacheOrigins[sKey];
+        return oCached, oCached:GetWidth(), oCached:GetHeight(), tOrigin.X, tOrigin.Y;
     end
 
     local oDC = wx.wxMemoryDC();
@@ -237,7 +243,7 @@ function TextEffects.Render(oFont, nSpacing, sText, sName, tEffect)
             end
         end
     end
-    if (nRight < nLeft) then return nil, 0, 0; end
+    if (nRight < nLeft) then return nil, 0, 0, 0, 0; end
     local nPadding = tEffect.Padding * nRasterScale;
     nLeft, nTop = math.floor(nLeft / nRasterScale) * nRasterScale, math.floor(nTop / nRasterScale) * nRasterScale;
     nRight, nBottom = math.ceil((nRight + 1) / nRasterScale) * nRasterScale - 1, math.ceil((nBottom + 1) / nRasterScale) * nRasterScale - 1;
@@ -281,6 +287,37 @@ function TextEffects.Render(oFont, nSpacing, sText, sName, tEffect)
             return tAlpha[nY * nW + nX + 1];
         end,
     };
+    -- Optional outside distances share the same raster; legacy processors retain exactly
+    -- their existing Alpha/Distance samplers and skip these extra passes altogether.
+    if (tEffect.NeedsSignedDistance) then
+        local tOutside = {};
+        for nIndex, nAlpha in ipairs(tAlpha) do tOutside[nIndex] = nAlpha >= 128 and 0 or math.huge; end
+        local function outside(nX, nY)
+            if (nX < 0 or nY < 0 or nX >= nW or nY >= nH) then return math.huge; end
+            return tOutside[nY * nW + nX + 1];
+        end
+        for nY = 0, nH - 1 do
+            for nX = 0, nW - 1 do
+                local nI = nY * nW + nX + 1;
+                tOutside[nI] = math.min(tOutside[nI], outside(nX - 1, nY) + 1, outside(nX, nY - 1) + 1,
+                    outside(nX - 1, nY - 1) + 1.414214, outside(nX + 1, nY - 1) + 1.414214);
+            end
+        end
+        for nY = nH - 1, 0, -1 do
+            for nX = nW - 1, 0, -1 do
+                local nI = nY * nW + nX + 1;
+                tOutside[nI] = math.min(tOutside[nI], outside(nX + 1, nY) + 1, outside(nX, nY + 1) + 1,
+                    outside(nX + 1, nY + 1) + 1.414214, outside(nX - 1, nY + 1) + 1.414214);
+            end
+        end
+        tMask.SignedDistance = function(nX, nY)
+            nX, nY = math.floor(nX * nRasterScale + 0.5), math.floor(nY * nRasterScale + 0.5);
+            if (nX < 0 or nY < 0 or nX >= nW or nY >= nH) then return -math.max(nW, nH) / nRasterScale; end
+            local nIndex = nY * nW + nX + 1;
+            if (tAlpha[nIndex] >= 128) then return (tDistance[nIndex] - 0.5) / nRasterScale; end
+            return (0.5 - tOutside[nIndex]) / nRasterScale;
+        end;
+    end
     --These values depend on a row, column or font height, not on individual surface normals.
     --Only the built-in processor uses them; custom effects retain the existing mask contract.
     if (bStamped) then
@@ -335,13 +372,14 @@ function TextEffects.Render(oFont, nSpacing, sText, sName, tEffect)
             if (not nOldest or nUse < nOldest) then sOldest, nOldest = sCandidate, nUse; end
         end
         tCache[sOldest]:delete();
-        tCache[sOldest], tCacheUse[sOldest] = nil, nil;
+        tCache[sOldest], tCacheUse[sOldest], tCacheOrigins[sOldest] = nil, nil, nil;
         nCacheCount = nCacheCount - 1;
     end
     nCacheClock = nCacheClock + 1;
     tCache[sKey], tCacheUse[sKey] = oBitmap, nCacheClock;
+    tCacheOrigins[sKey] = {X = nLeft / nRasterScale - nGuard, Y = nTop / nRasterScale - nGuard};
     nCacheCount = nCacheCount + 1;
-    return oBitmap, oBitmap:GetWidth(), oBitmap:GetHeight();
+    return oBitmap, oBitmap:GetWidth(), oBitmap:GetHeight(), tCacheOrigins[sKey].X, tCacheOrigins[sKey].Y;
 end
 
 return TextEffects;

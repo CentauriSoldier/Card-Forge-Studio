@@ -910,6 +910,7 @@ return class("Forge",
             @vis private
             !]]
             local function BuildRuns(sIn)
+                local sTags = sIn:upper();
                 local tRuns  = {};
                 local sPlain = "";
 
@@ -944,7 +945,7 @@ return class("Forge",
 
                     local tag = sIn:sub(a + 1, b - 1):upper();
                     local close = "</" .. tag .. ">";
-                    local c = sIn:find(close, b + 1, true);
+                    local c = sTags:find(close, b + 1, true);
 
                     if not c then
                         local s = sIn:sub(a);
@@ -1405,6 +1406,24 @@ local function drawingContext(oGC, oDC)
     @param any oNewFont Value supplied as oNewFont.
     @vis private
     !]]
+    -- Preserve parent clipping/transforms, including fitted text scaling.
+    function tContext.WithTextTransform(nX, nY, nAngle, fDraw)
+        oGC:PushState();
+        oGC:Translate(nX, nY);
+        oGC:Rotate(-math.rad(nAngle));
+        local bOK, vError = pcall(fDraw);
+        oGC:PopState();
+        if (not bOK) then error(vError, 0); end
+    end
+
+    function tContext.WithTextClip(nX, nY, nWidth, nHeight, fDraw)
+        oGC:PushState();
+        oGC:Clip(nX, nY, nWidth, nHeight);
+        local bOK, vError = pcall(fDraw);
+        oGC:PopState();
+        if (not bOK) then error(vError, 0); end
+    end
+
     function tContext.SetDrawingFont(oNewFont)
         oFont = oNewFont;
         oGC:SetFont(oFont, oColour);
@@ -1440,6 +1459,15 @@ local function drawingContext(oGC, oDC)
     function tContext.GetTextHeight(sText)
         local nWidth, nHeight = oGC:GetTextExtent(tostring(sText));
         return nHeight;
+    end
+
+    --[[!
+    @fqxn CFS.Modules.Forge.Private.Functions.tContext_DrawTextOverlay
+    @desc Draws a cached Style overlay bitmap at its mask-relative origin. The caller supplies transforms; bitmap ownership remains with TextEffects.
+    @vis private
+    !]]
+    function tContext.DrawTextOverlay(oBitmap, nX, nY, nWidth, nHeight)
+        oGC:DrawBitmap(oBitmap, nX, nY, nWidth, nHeight);
     end
 
     --[[!
@@ -2512,6 +2540,85 @@ local TextEffects = require("TextEffects");
 @error Requires an active render pass, valid Style/effect, finite coordinates and valid UTF-8 without line breaks. Invalid processors and rasters larger than two million pixels are rejected. No wrapping or rotation is performed.
 @ex Forge.DrawTextEffect("NAME", 412.5, 100, "Example", "Stamped", true, true);
 !]]
+--[[
+TODO: Compose named TextEffects AFTER the complete Style render (deferred).
+
+Intent:
+- Keep TextEffects and Forge.DrawTextEffect available for user-defined effects.
+- sStyle is already required as the first argument; retain this signature and
+  validate the Style as other text drawing functions do. Do not add a second API
+  merely to pass a Style that the existing call already receives.
+- Currently only the Style font and letter spacing feed TextEffects.Render;
+  the processor shades a native glyph mask into its own material. The complete
+  Style appearance is not rendered first. This is the integration to change.
+- Render through the existing Style backend first, then apply the named effect
+  to that styled result. Preserve font, size, spacing, color (including live CFG
+  color sources), gradient fill, background, glow, shadow, outline, extrusion,
+  alpha, and future built-in Style effects such as wear/scuffs/scratches.
+- An overlay effect should retain the underlying styled appearance except where
+  its explicitly defined operation changes it. Do not silently replace the
+  styled fill with the processor's material or discard existing Style layers.
+- Keep expanding built-in Style effects independently. Users should not need
+  named TextEffects or ENV/Description changes to use built-in Style effects.
+
+Alternative architecture to evaluate before committing to this method:
+- Consider a registration API for custom Style effects, exposed in the Style
+  Editor alongside built-in effects, instead of requiring a separate text-effect
+  drawing method. Users could build an effect like the built-in Style effects
+  being developed here, register it, then configure/use it through normal Styles.
+- Game-provided effect definitions could live in a game folder and be discovered
+  or registered when that game loads. This is a possibility, not a decided path,
+  format, naming convention or automatic code-loading policy.
+- Decide the registration/discovery API, effect schema, editor control metadata,
+  defaults/ranges, validation, inheritance/INI serialization, composition order,
+  masks/styled-raster inputs, versioning, caching/invalidation, reload/unregister
+  and game-switch cleanup, errors and resource ownership together later.
+- Evaluate coexistence/migration with existing TextEffects processors and
+  Forge.DrawTextEffect; retain existing callers and user effects until an explicit
+  compatibility decision is approved. This note does not authorize removal or
+  choose registration over the existing method yet.
+- Keep the composition requirements below as inputs to that design discussion.
+  Resolve the details with the user before implementation.
+
+Implementation work to resolve before coding:
+- Read Forge.DrawTextEffect, TextEffects.Get/Render, FontStyle.Draw/Prep and the
+  drawing-context adapters. Reuse their existing rendering and caching paths.
+- Define the processor input/composition contract: provide the styled RGBA
+  raster as well as the original glyph Alpha/Distance mask and coordinates.
+  Specify whether an effect modifies the glyph face, adds outside geometry, or
+  intentionally replaces a material; distinguish glyph coverage from alpha
+  belonging to Style shadows/glow/background. Preserve antialiasing and alpha.
+- Retain the useful native-mask and cached processor implementation. Do not
+  create a parallel font renderer or duplicate Style rendering/effect logic.
+- Existing Shade(mask,x,y) processors return full RGBA materials, not overlays.
+  Design an explicit compatibility/version or mode contract before migration.
+  Preserve built-ins (including Stamped/StampedSilver), game-defined processors
+  such as FactoryMachined/DepositMachined, user overrides, case-sensitive names,
+  deterministic output, reload/error behavior, and current callers. Do not
+  silently reinterpret old processors as overlays or remove their API.
+- Include the resolved Style appearance and all render-affecting values in
+  cache identity/invalidation, including inherited settings, dynamic CFG colors,
+  gradients, future wear settings/seeds, and effect/source-file signatures.
+  Keep cache limits and resource cleanup; avoid stale output after Style edits.
+- Measure the combined Style/effect extents and padding accurately. Preserve
+  baseline/placement, centering, font size and spacing, return bounds, and PNG
+  export parity. Prevent clipping or applying a Style layer twice. Account for
+  parent transforms/scaling; retain current single-line/no-wrap/no-rotation
+  contract unless separately authorized to expand it.
+- Preserve validation and raster-size limits, bound temporary allocations and
+  processing cost, and restore drawing state/resources on success or failure.
+- Review affected callers and documentation; obtain file-specific permission
+  before changing TextEffects.lua, game Effects.lua, other consumers or APIs.
+
+Verification when authorized:
+- Isolated regression checks for legacy processors and explicit overlay mode;
+  styled fill/gradient preservation, alpha/mask handling, Style effect layering,
+  bounds/centering/overhangs, inherited/live color changes, cache invalidation,
+  effect reload/failure, deterministic wear, and resource/size limits.
+- Compare preview/export output and performance against existing name effects.
+  User handles app/visual verification unless they explicitly authorize otherwise.
+- This TODO changes no rendering behavior and does not authorize implementation.
+]]
 function Forge.DrawTextEffect(sStyle, nX, nY, sText, sEffect, bCenterX, bCenterY)
     assert(_D, "Forge drawing is only available during a render pass.");
     assert(rawtype(sText) == "string" and #sText <= 4096 and utf8.len(sText) and not sText:find("[%z\r\n]"), "Text effects require valid single-line UTF-8 text of at most 4096 bytes.");
@@ -2613,6 +2720,7 @@ local function drawStyledText(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, v
     @vis private
     !]]
     local function BuildRuns(sIn)
+        local sTags = sIn:upper();
         local tRuns  = {};
         local sPlain = "";
 
@@ -2647,7 +2755,7 @@ local function drawStyledText(sStyle, nRawX, nRawY, sText, vCenterX, vCenterY, v
 
             local tag = sIn:sub(a + 1, b - 1):upper();
             local close = "</" .. tag .. ">";
-            local c = sIn:find(close, b + 1, true);
+            local c = sTags:find(close, b + 1, true);
 
             if not c then
                 local s = sIn:sub(a);

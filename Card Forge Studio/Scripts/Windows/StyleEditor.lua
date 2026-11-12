@@ -22,8 +22,31 @@ local WindowState = require("Windows.WindowState");
 local StyleEditor = {};
 WindowState.register("StyleEditor", {savePosition = true, saveSize = true, saveVisible = false,});
 
+--[[
+TODO: Add a starter-preset dropdown to EACH editable Style effect/feature group,
+including Font, Gradient, Bevel/Emboss, Wear, Shadow, Outline, 3D, Highlight and Glow, plus future
+features. Deferred; no preset implementation is authorized by this note.
+- Offer clearly named starter presets and Custom; show the current draft values.
+  Scope applying a preset to that feature's settings, preserving all other groups.
+- Define where built-in presets live and whether user-created presets can be saved,
+  renamed/deleted/imported/exported. Confirm those choices before implementation.
+- Apply through the existing draft/model validation, inheritance and preview paths;
+  no direct writes to the active INI. Existing Save/discard/external-edit protection
+  must continue to apply. Never silently change an inherited parent or its users.
+- Define explicitly whether applying a preset creates own values or links a chain;
+  disclose which inherited values will be replaced before committing that action.
+- Refresh controls, enabled flags, links, resolved values and preview together.
+  Manual edits should indicate Custom without silently reapplying a preset.
+- Version/validate stored preset schemas, provide defaults for newer fields, and
+  preserve unrelated fields and backward-compatible INI/caller behavior.
+- Cover invalid presets, inheritance, isolated draft application, manual edits,
+  save/discard, import/export and preview parity. User handles visual verification.
+]]
 local tGroups = {
     {"Font", {{"Family", "Font family", "text", "Times New Roman"}, {"Size", "Size", "number", "12", 1, 300}, {"Color", "Text color", "color", "0,0,0,255"}, {"Bold", "Bold", "boolean", "false"}, {"Italic", "Italic", "boolean", "false"}, {"Underline", "Underline", "boolean", "false"}, {"StrikeOut", "Strikeout", "boolean", "false"}, {"HQ", "High quality", "boolean", "true"}, {"LetterSpacing", "Letter spacing", "number", "0", 0, 100},}},
+    {"Gradient", {{"GradientEnabled", "Enabled", "boolean", "false"}, {"GradientDirection", "Direction (Vertical/Horizontal)", "direction", "Vertical"}, {"GradientStops", "Stops (position:#RRGGBB[AA])", "stops", "0:#EAF6FF; 0.45:#95BBD0; 0.5:#D7EEFA; 1:#52778E"},}},
+    {"Bevel / Emboss", {{"BevelEnabled", "Enabled", "boolean", "false"}, {"BevelMode", "Mode", "choice", "Raised", {"Raised", "Inset", "Emboss", "Stamp"}}, {"BevelProfile", "Profile", "choice", "Chamfer", {"Chamfer", "Round", "Sharp"}}, {"BevelWidth", "Bevel width (pixels)", "number", "2", 1, 16}, {"BevelDepth", "Relief depth (pixels)", "number", "2", 1, 16}, {"BevelSoftness", "Edge softness (pixels)", "number", "1", 0, 8}, {"BevelEdgeTop", "Top-facing edges", "boolean", "true"}, {"BevelEdgeBottom", "Bottom-facing edges", "boolean", "true"}, {"BevelEdgeLeft", "Left-facing edges", "boolean", "true"}, {"BevelEdgeRight", "Right-facing edges", "boolean", "true"}, {"BevelLightAngle", "Light direction (0 right, 90 up)", "number", "135", 0, 359}, {"BevelLightElevation", "Light elevation (degrees)", "number", "45", 0, 90}, {"BevelHighlightColor", "Highlight color", "color", "255,255,255,255"}, {"BevelShadowColor", "Shadow color", "color", "16,24,32,255"}, {"BevelHighlightStrength", "Highlight strength (0–255)", "number", "180", 0, 255}, {"BevelShadowStrength", "Shadow strength (0–255)", "number", "180", 0, 255}, {"BevelSpecularStrength", "Specular strength (0–255)", "number", "80", 0, 255}, {"BevelSpecularPower", "Specular sharpness", "number", "16", 1, 128}, {"BevelOpacity", "Overall strength (0–255)", "number", "220", 0, 255},}},
+    {"Wear", {{"WearEnabled", "Enabled", "boolean", "false"}, {"WearPattern", "Pattern (Scratches/Chips/Mixed)", "wearpattern", "Scratches"}, {"WearChipSizeMin", "Minimum chip size (% of font height)", "number", "3", 1, 20}, {"WearChipSizeMax", "Maximum chip size (% of font height)", "number", "9", 1, 20}, {"WearChipRoughness", "Chip edge roughness (0–100)", "number", "65", 0, 100}, {"WearDensity", "Density (0–100)", "number", "18", 0, 100}, {"WearLengthMin", "Minimum length (% of font height)", "number", "8", 1, 200}, {"WearLengthMax", "Maximum length (% of font height)", "number", "45", 1, 200}, {"WearWidth", "Scratch thickness (pixels)", "number", "1", 1, 8}, {"WearAngle", "Scratch angle (degrees)", "number", "-15", -180, 180}, {"WearAngleSpread", "Angle variation (± degrees)", "number", "25", 0, 180}, {"WearOpacity", "Strength (0–255)", "number", "100", 0, 255}, {"WearColor", "Scratch color", "color", "48,42,32,255"}, {"WearHighlightEnabled", "Highlight enabled", "boolean", "true"}, {"WearHighlightColor", "Highlight color", "color", "255,244,203,255"}, {"WearHighlightOffset", "Highlight offset (pixels)", "number", "1", 0, 8}, {"WearSeed", "Pattern seed", "number", "1", 0, 2147483646},}},
     {"Shadow", {{"ShadowEnabled", "Enabled", "boolean", "false"}, {"ShadowX", "Horizontal offset", "number", "0", -500, 500}, {"ShadowY", "Vertical offset", "number", "0", -500, 500}, {"ShadowRadius", "Softness radius", "number", "2", 0, 15}, {"ShadowColor", "Color", "color", "0,0,0,128"},}},
     {"Outline", {{"OutlineEnabled", "Enabled", "boolean", "false"}, {"OutlineThickness", "Thickness", "number", "1", 0, 30}, {"OutlineColor", "Color", "color", "0,0,0,255"},}},
     {"3D", {{"3DEnabled", "Enabled", "boolean", "false"}, {"3DDepth", "Depth", "number", "1", 0, 50}, {"3DStepX", "Horizontal step", "number", "1", -50, 50}, {"3DStepY", "Vertical step", "number", "1", -50, 50}, {"3DColor", "Color", "color", "0,0,0,255"},}},
@@ -139,8 +162,32 @@ function StyleEditor.model(pFile)
     function tModel.validate(sName, sKey)
         local tField = tFields[sKey];
         local sValue = tModel.resolve(sName, sKey);
+        if (sKey:match("^Bevel")) then
+            local tBevel = {};
+            for sBevelKey in pairs(tFields) do
+                if (sBevelKey:match("^Bevel")) then tBevel[sBevelKey] = tModel.resolve(sName, sBevelKey); end
+            end
+            FontStyle.ParseBevelSettings(tBevel);
+        end
+        if (sKey:match("^Wear")) then
+            local tWear = {};
+            for sWearKey, tWearField in pairs(tFields) do
+                if (sWearKey:match("^Wear") and tWearField[3] == "number") then
+                    tWear[sWearKey] = tModel.resolve(sName, sWearKey);
+                end
+            end
+            tWear.WearPattern = tModel.resolve(sName, "WearPattern");
+            FontStyle.ParseWearSettings(tWear);
+        end
         if (not tField or sValue == "") then return; end
         if (tField[3] == "color") then channels(sValue, sKey == "Color");
+        elseif (tField[3] == "choice") then
+            local bFound = false;
+            for _, sChoice in ipairs(tField[5]) do if (sChoice == sValue) then bFound = true; break; end end
+            assert(bFound, "Invalid "..sKey.." choice.");
+        elseif (tField[3] == "wearpattern") then assert(sValue == "Scratches" or sValue == "Chips" or sValue == "Mixed", "WearPattern must be Scratches, Chips or Mixed.");
+        elseif (tField[3] == "stops") then FontStyle.ParseGradientStops(sValue);
+        elseif (tField[3] == "direction") then assert(sValue == "Vertical" or sValue == "Horizontal", "GradientDirection must be Vertical or Horizontal.");
         elseif (tField[3] == "boolean") then assert(sValue:lower() == "true" or sValue:lower() == "false", "Use true or false for "..sKey..".");
         elseif (tField[3] == "number") then
             local nValue = tonumber(sValue);
@@ -491,6 +538,24 @@ local function drawing(oGC, oDC)
     @param any oNewFont New font.
     @vis private
     !]]
+    -- Preserve parent clipping/transforms, including fitted text scaling.
+    function D.WithTextTransform(nX, nY, nAngle, fDraw)
+        oGC:PushState();
+        oGC:Translate(nX, nY);
+        oGC:Rotate(-math.rad(nAngle));
+        local bOK, vError = pcall(fDraw);
+        oGC:PopState();
+        if (not bOK) then error(vError, 0); end
+    end
+
+    function D.WithTextClip(nX, nY, nWidth, nHeight, fDraw)
+        oGC:PushState();
+        oGC:Clip(nX, nY, nWidth, nHeight);
+        local bOK, vError = pcall(fDraw);
+        oGC:PopState();
+        if (not bOK) then error(vError, 0); end
+    end
+
     D.SetDrawingFont = function(oNewFont) oFont = oNewFont; oDC:SetFont(oFont); oGC:SetFont(oFont, wx.wxBLACK); end
     --[[!
     @fqxn CFS.Windows.StyleEditor.Private.Functions.D_SetFilteringMode
@@ -512,6 +577,15 @@ local function drawing(oGC, oDC)
     @vis private
     !]]
     D.GetTextHeight = function(sText) local _, nH = oGC:GetTextExtent(sText); return nH; end
+    --[[!
+    @fqxn CFS.Windows.StyleEditor.Private.Functions.D_DrawTextOverlay
+    @desc Draws a cached Style overlay bitmap at its mask-relative origin. The caller supplies transforms; bitmap ownership remains with TextEffects.
+    @vis private
+    !]]
+    function D.DrawTextOverlay(oBitmap, nX, nY, nWidth, nHeight)
+        oGC:DrawBitmap(oBitmap, nX, nY, nWidth, nHeight);
+    end
+
     --[[!
     @fqxn CFS.Windows.StyleEditor.Private.Functions.D_DrawText
     @desc Draws preview text in the supplied packed color.
@@ -649,7 +723,9 @@ function StyleEditor.create(dParent, pFile, tOptions)
         refresh();
     end
     for _, tGroup in ipairs(tGroups) do
-        local dPage = wx.wxPanel(dBook, wx.wxID_ANY);
+        local bScroll = tGroup[1] == "Wear" or tGroup[1] == "Bevel / Emboss";
+        local dPage = bScroll and wx.wxScrolledWindow(dBook, wx.wxID_ANY) or wx.wxPanel(dBook, wx.wxID_ANY);
+        if (bScroll) then dPage:SetScrollRate(0, 12); end
         local oGrid = wx.wxFlexGridSizer(0, 3, 8, 10);
         oGrid:AddGrowableCol(1, 1);
         for _, tField in ipairs(tGroup[2]) do
@@ -661,6 +737,9 @@ function StyleEditor.create(dParent, pFile, tOptions)
             if (sKind == "boolean") then
                 oInput = wx.wxCheckBox(dPage, wx.wxID_ANY, "");
                 oInput:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, protect(function() edited(sKey, oInput:GetValue() and "true" or "false"); end));
+            elseif (sKind == "choice") then
+                oInput = wx.wxChoice(dPage, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxDefaultSize, tField[5]);
+                oInput:Connect(wx.wxEVT_COMMAND_CHOICE_SELECTED, protect(function() edited(sKey, oInput:GetStringSelection()); end));
             elseif (sKind == "color") then
                 oInput = wx.wxColourPickerCtrl(dPage, wx.wxID_ANY, wx.wxBLACK);
                 oAlpha = wx.wxSpinCtrl(dPage, wx.wxID_ANY, "255", wx.wxDefaultPosition, wx.wxSize(80, -1), wx.wxSP_ARROW_KEYS, 0, 255, 255);
@@ -765,6 +844,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
         local oPageLayout = wx.wxBoxSizer(wx.wxVERTICAL);
         oPageLayout:Add(oGrid, 1, wx.wxEXPAND + wx.wxALL, 12);
         dPage:SetSizer(oPageLayout);
+        if (bScroll) then dPage:FitInside(); end
         dBook:AddPage(dPage, tGroup[1]);
     end
     local oStyles = wx.wxBoxSizer(wx.wxVERTICAL);
@@ -839,6 +919,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
             if (tControl.alpha) then tControl.alpha:Enable(not sSource); end
             local sKind = tControl.field[3];
             if (sKind == "boolean") then tControl.input:SetValue(sValue:lower() == "true");
+            elseif (sKind == "choice") then tControl.input:SetStringSelection(sValue);
             elseif (sKind == "color") then
                 local tColor = channels(sValue, sKey == "Color");
                 tControl.input:SetColour(wx.wxColour(tColor[1], tColor[2], tColor[3]));
