@@ -89,7 +89,11 @@ end
 --[[!
     @fqxn LuaEx.Lua Hooks.math.Functions.convertbase
     @pulsarlua function math.convertbase
-    @desc Converts a signed integer string between bases 2 through 36, using uppercase output digits. Numeric input is accepted only for base 10. Values must lie in the exact integer range -9007199254740991 through 9007199254740991; invalid digits and overflow are rejected.
+    @desc Converts signed integers between bases 2 through 36 using uppercase output digits.
+        Accepts the full native Lua integer range, from math.mininteger through math.maxinteger.
+        Numeric input is accepted only for base 10 and must convert exactly to a Lua integer.
+        Use strings or native integers for large values; floats may already have lost precision.
+        Invalid digits, fractions, nonfinite values and integer overflow are rejected.
     @param string|number vInput The input integer.
     @param number nFromBase Input base.
     @param number nToBase Output base.
@@ -97,49 +101,70 @@ end
     @ex print(math.convertbase("FF", 16, 2)); -- 11111111
 !]]
 function math.convertbase(vInput, nFromBase, nToBase)
+    local nValue;
+    local bNegative;
+    local sRet = "";
+
+    -- 1. Validate and normalize bases so every subsequent operation is integer math.
     validateBase(nFromBase);
     validateBase(nToBase);
-    local nValue;
+    nFromBase = math.tointeger(nFromBase);
+    nToBase   = math.tointeger(nToBase);
 
     if (rawtype(vInput) == "number") then
         assert(nFromBase == 10, "Numeric base conversion input requires source base 10.");
-        validateInteger(vInput);
-        nValue = vInput;
+        validateFinite(vInput);
+        nValue = math.tointeger(vInput);
+        assert(nValue ~= nil, "Base conversion input must be an exact native Lua integer.");
+        bNegative = nValue < 0;
+
+        -- Keep the magnitude negative: the positive magnitude of mininteger
+        -- cannot be represented by a signed Lua integer.
+        if (nValue > 0) then
+            nValue = -nValue;
+        end
     else
         type.assert.string(vInput);
         local sInput = vInput:match("^%s*(.-)%s*$");
-        assert(sInput:match("^[+-]?[%w]+$"), "Invalid base conversion input.");
-        local bNegative = sInput:sub(1, 1) == "-";
-        sInput = sInput:gsub("^[+-]", ""):upper();
-        nValue = 0;
+        local nLimit;
 
-        -- Parse explicitly so tonumber's integer wrapping cannot conceal an
-        -- oversized source string before the range check.
+        assert(sInput:match("^[+-]?[%w]+$"), "Invalid base conversion input.");
+        bNegative = sInput:sub(1, 1) == "-";
+        nLimit    = bNegative and math.mininteger or -math.maxinteger;
+        sInput    = sInput:gsub("^[+-]", ""):upper();
+        nValue    = 0;
+
+        -- 2. Accumulate negative digits. Check the next operation's limit
+        -- before multiplying or subtracting, preventing native integer wrap.
         for x = 1, #sInput do
             local nPosition = _sDigits:find(sInput:sub(x, x), 1, true);
-            local nDigit = nPosition and nPosition - 1;
-            assert(nDigit and nDigit < nFromBase, "Input contains digits outside its source base.");
-            assert(nValue <= math.floor((_nExactIntegerMax - nDigit) / nFromBase),
-                   "Base conversion input exceeds the exact integer range.");
-            nValue = nValue * nFromBase + nDigit;
-        end
+            local nDigit    = nPosition and nPosition - 1;
+            local nThreshold;
 
-        if (bNegative) then
-            nValue = -nValue;
+            assert(nDigit and nDigit < nFromBase, "Input contains digits outside its source base.");
+            nThreshold = (nLimit + nDigit) // nFromBase;
+
+            -- Integer division floors; the overflow guard needs a ceiling.
+            if ((nLimit + nDigit) % nFromBase ~= 0) then
+                nThreshold = nThreshold + 1;
+            end
+
+            assert(nValue >= nThreshold, "Base conversion input exceeds the native Lua integer range.");
+            nValue = nValue * nFromBase - nDigit;
         end
     end
 
-    local bNegative = nValue < 0;
-    nValue = math.abs(nValue);
-    local sRet = "";
-
+    -- 3. Extract digits without abs(mininteger) or floating-point division.
+    -- A negative divisor gives a nonpositive remainder; negate it for the digit.
     repeat
-        local nDigit = nValue % nToBase;
-        sRet = _sDigits:sub(nDigit + 1, nDigit + 1)..sRet;
-        nValue = (nValue - nDigit) / nToBase;
+        local nDigit = -(nValue % -nToBase);
+
+        sRet   = _sDigits:sub(nDigit + 1, nDigit + 1)..sRet;
+        nValue = (nValue + nDigit) // nToBase;
     until nValue == 0
 
-    if (bNegative) then
+    -- 4. Normalize signed zero, and restore the sign of every negative value.
+    if (bNegative and sRet ~= "0") then
         sRet = "-"..sRet;
     end
 

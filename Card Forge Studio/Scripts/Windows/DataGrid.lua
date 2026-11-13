@@ -505,6 +505,46 @@ function DataGrid.create(tSession, bFinal)
         oGrid:Scroll(nX, nY);
         nLastX, nLastY = oGrid:GetViewStart();
     end
+    local tWheelRemainders = {};
+    --[[!
+    @fqxn CFS.Windows.DataGrid.Private.Functions.scrollWheel
+    @desc Consumes wheel events as viewport movement only, without moving the cell cursor
+    or changing selection. Native grid cell/label windows forward wheel events to the grid.
+    Keep separate fractional deltas for each axis and honor system line/page scrolling.
+    The existing scroll timer publishes the resulting viewport to the paired data grid.
+    @param wxMouseEvent oEvent Wheel event forwarded to the shared grid control.
+    @vis private
+    !]]
+    local function scrollWheel(oEvent)
+        if (bClosed or bRefreshing) then return; end
+        local nAxis			= oEvent:GetWheelAxis();
+        local bHorizontal	= nAxis == wx.wxMOUSE_WHEEL_HORIZONTAL;
+        if (not bHorizontal and nAxis ~= wx.wxMOUSE_WHEEL_VERTICAL) then return; end
+        local nDelta = oEvent:GetWheelDelta();
+        if (nDelta <= 0) then return; end
+
+        local nRemainder	= (tWheelRemainders[nAxis] or 0) + oEvent:GetWheelRotation();
+        local nNotches	= nRemainder / nDelta;
+        local nSteps		= nNotches > 0 and math.floor(nNotches) or math.ceil(nNotches);
+        tWheelRemainders[nAxis] = nRemainder - nSteps * nDelta;
+        if (nSteps == 0) then return; end
+
+        local nUnits = oEvent:GetLinesPerAction();
+        if (oEvent:IsPageScroll()) then
+            local nOrientation = bHorizontal and wx.wxHORIZONTAL or wx.wxVERTICAL;
+            nUnits = oGrid:GetScrollThumb(nOrientation);
+            -- Native page-wheel handling scrolls one page per completed wheel event.
+            nSteps = nSteps > 0 and 1 or -1;
+        end
+        if (nUnits <= 0) then return; end
+
+        local nX, nY = oGrid:GetViewStart();
+        if (bHorizontal) then oGrid:Scroll(math.max(0, nX + nSteps * nUnits), nY);
+        else oGrid:Scroll(nX, math.max(0, nY - nSteps * nUnits)); end
+        -- Do not Skip: the native wheel path must not process this event again.
+    end
+    oGrid:Connect(wx.wxEVT_MOUSEWHEEL, protect(scrollWheel));
+
     tSession.subscribeScroll(syncScroll);
     dFrame:Connect(oScrollTimer:GetId(), wx.wxEVT_TIMER, function()
         if (bClosed or bRefreshing or not dFrame:IsShown()) then return; end

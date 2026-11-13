@@ -42,17 +42,38 @@ features. Deferred; no preset implementation is authorized by this note.
 - Cover invalid presets, inheritance, isolated draft application, manual edits,
   save/discard, import/export and preview parity. User handles visual verification.
 ]]
+-- Preview shortcuts are intentionally editable here, alongside numeric-control policy.
+local _tKeyBindings = {PreviewActualSize = string.byte("=")};
+-- Percentages, angle ranges and normalized strengths get pots plus exact value fields.
+-- Pixel distances, counts, font sizes and seeds get spinners with their existing limits.
+local _tPotFields = {
+    GlowAlphaMax = true,
+    BevelLightAngle = true, BevelLightElevation = true,
+    BevelHighlightStrength = true, BevelShadowStrength = true,
+    BevelSpecularStrength = true, BevelOpacity = true,
+    WearDensity = true, WearAngle = true, WearAngleSpread = true,
+    WearOpacity = true, WearChipRoughness = true,
+    WearLengthMin = true, WearLengthMax = true,
+    WearChipSizeMin = true, WearChipSizeMax = true,
+};
+
 local tGroups = {
     {"Font", {{"Family", "Font family", "text", "Times New Roman"}, {"Size", "Size", "number", "12", 1, 300}, {"Color", "Text color", "color", "0,0,0,255"}, {"Bold", "Bold", "boolean", "false"}, {"Italic", "Italic", "boolean", "false"}, {"Underline", "Underline", "boolean", "false"}, {"StrikeOut", "Strikeout", "boolean", "false"}, {"HQ", "High quality", "boolean", "true"}, {"LetterSpacing", "Letter spacing", "number", "0", 0, 100},}},
-    {"Gradient", {{"GradientEnabled", "Enabled", "boolean", "false"}, {"GradientDirection", "Direction (Vertical/Horizontal)", "direction", "Vertical"}, {"GradientStops", "Stops (position:#RRGGBB[AA])", "stops", "0:#EAF6FF; 0.45:#95BBD0; 0.5:#D7EEFA; 1:#52778E"},}},
+    {"Gradient", {{"GradientEnabled", "Enabled", "boolean", "false"}, {"GradientDirection", "Direction", "choice", "Vertical", {"Vertical", "Horizontal"}}, {"GradientStops", "Color stops", "stops", "0:#EAF6FF; 0.45:#95BBD0; 0.5:#D7EEFA; 1:#52778E"},}},
     {"Bevel / Emboss", {{"BevelEnabled", "Enabled", "boolean", "false"}, {"BevelMode", "Mode", "choice", "Raised", {"Raised", "Inset", "Emboss", "Stamp"}}, {"BevelProfile", "Profile", "choice", "Chamfer", {"Chamfer", "Round", "Sharp"}}, {"BevelWidth", "Bevel width (pixels)", "number", "2", 1, 16}, {"BevelDepth", "Relief depth (pixels)", "number", "2", 1, 16}, {"BevelSoftness", "Edge softness (pixels)", "number", "1", 0, 8}, {"BevelEdgeTop", "Top-facing edges", "boolean", "true"}, {"BevelEdgeBottom", "Bottom-facing edges", "boolean", "true"}, {"BevelEdgeLeft", "Left-facing edges", "boolean", "true"}, {"BevelEdgeRight", "Right-facing edges", "boolean", "true"}, {"BevelLightAngle", "Light direction (0 right, 90 up)", "number", "135", 0, 359}, {"BevelLightElevation", "Light elevation (degrees)", "number", "45", 0, 90}, {"BevelHighlightColor", "Highlight color", "color", "255,255,255,255"}, {"BevelShadowColor", "Shadow color", "color", "16,24,32,255"}, {"BevelHighlightStrength", "Highlight strength (0–255)", "number", "180", 0, 255}, {"BevelShadowStrength", "Shadow strength (0–255)", "number", "180", 0, 255}, {"BevelSpecularStrength", "Specular strength (0–255)", "number", "80", 0, 255}, {"BevelSpecularPower", "Specular sharpness", "number", "16", 1, 128}, {"BevelOpacity", "Overall strength (0–255)", "number", "220", 0, 255},}},
-    {"Wear", {{"WearEnabled", "Enabled", "boolean", "false"}, {"WearPattern", "Pattern (Scratches/Chips/Mixed)", "wearpattern", "Scratches"}, {"WearChipSizeMin", "Minimum chip size (% of font height)", "number", "3", 1, 20}, {"WearChipSizeMax", "Maximum chip size (% of font height)", "number", "9", 1, 20}, {"WearChipRoughness", "Chip edge roughness (0–100)", "number", "65", 0, 100}, {"WearDensity", "Density (0–100)", "number", "18", 0, 100}, {"WearLengthMin", "Minimum length (% of font height)", "number", "8", 1, 200}, {"WearLengthMax", "Maximum length (% of font height)", "number", "45", 1, 200}, {"WearWidth", "Scratch thickness (pixels)", "number", "1", 1, 8}, {"WearAngle", "Scratch angle (degrees)", "number", "-15", -180, 180}, {"WearAngleSpread", "Angle variation (± degrees)", "number", "25", 0, 180}, {"WearOpacity", "Strength (0–255)", "number", "100", 0, 255}, {"WearColor", "Scratch color", "color", "48,42,32,255"}, {"WearHighlightEnabled", "Highlight enabled", "boolean", "true"}, {"WearHighlightColor", "Highlight color", "color", "255,244,203,255"}, {"WearHighlightOffset", "Highlight offset (pixels)", "number", "1", 0, 8}, {"WearSeed", "Pattern seed", "number", "1", 0, 2147483646},}},
+    {"Wear", {{"WearEnabled", "Enabled", "boolean", "false"}, {"WearPattern", "Pattern", "choice", "Scratches", {"Scratches", "Chips", "Mixed"}}, {"WearChipSizeMin", "Minimum chip size (% of font height)", "number", "3", 1, 20}, {"WearChipSizeMax", "Maximum chip size (% of font height)", "number", "9", 1, 20}, {"WearChipRoughness", "Chip edge roughness (0–100)", "number", "65", 0, 100}, {"WearDensity", "Density (0–100)", "number", "18", 0, 100}, {"WearLengthMin", "Minimum length (% of font height)", "number", "8", 1, 200}, {"WearLengthMax", "Maximum length (% of font height)", "number", "45", 1, 200}, {"WearWidth", "Scratch thickness (pixels)", "number", "1", 1, 8}, {"WearAngle", "Scratch angle (degrees)", "number", "-15", -180, 180}, {"WearAngleSpread", "Angle variation (± degrees)", "number", "25", 0, 180}, {"WearOpacity", "Strength (0–255)", "number", "100", 0, 255}, {"WearColor", "Scratch color", "color", "48,42,32,255"}, {"WearHighlightEnabled", "Highlight enabled", "boolean", "true"}, {"WearHighlightColor", "Highlight color", "color", "255,244,203,255"}, {"WearHighlightOffset", "Highlight offset (pixels)", "number", "1", 0, 8}, {"WearSeed", "Pattern seed", "number", "1", 0, 2147483646},}},
     {"Shadow", {{"ShadowEnabled", "Enabled", "boolean", "false"}, {"ShadowX", "Horizontal offset", "number", "0", -500, 500}, {"ShadowY", "Vertical offset", "number", "0", -500, 500}, {"ShadowRadius", "Softness radius", "number", "2", 0, 15}, {"ShadowColor", "Color", "color", "0,0,0,128"},}},
     {"Outline", {{"OutlineEnabled", "Enabled", "boolean", "false"}, {"OutlineThickness", "Thickness", "number", "1", 0, 30}, {"OutlineColor", "Color", "color", "0,0,0,255"},}},
     {"3D", {{"3DEnabled", "Enabled", "boolean", "false"}, {"3DDepth", "Depth", "number", "1", 0, 50}, {"3DStepX", "Horizontal step", "number", "1", -50, 50}, {"3DStepY", "Vertical step", "number", "1", -50, 50}, {"3DColor", "Color", "color", "0,0,0,255"},}},
     {"Glow", {{"GlowEnabled", "Enabled", "boolean", "false"}, {"GlowRadius", "Radius", "number", "8", 0, 50}, {"GlowAlphaMax", "Strength (0–255)", "number", "160", 0, 255}, {"GlowColor", "Inner color", "color", "255,255,255,255"}, {"GlowOuterColor", "Outer color", "color", "255,255,255,0"},}},
     {"Highlight", {{"BackgroundEnabled", "Enabled", "boolean", "false"}, {"BackgroundPadding", "Padding", "number", "2", 0, 100}, {"BackgroundColor", "Color", "color", "255,255,0,96"},}},
 };
+-- Font is always first; all remaining feature tabs sort alphabetically.
+table.sort(tGroups, function(a, b)
+    if (a[1] == "Font") then return b[1] ~= "Font"; end
+    if (b[1] == "Font") then return false; end
+    return a[1]:lower() < b[1]:lower();
+end);
 local tFields = {};
 for _, tGroup in ipairs(tGroups) do
     for _, tField in ipairs(tGroup[2]) do tFields[tField[1]] = tField; end
@@ -111,12 +132,14 @@ end
 !]]
 function StyleEditor.model(pFile)
     local tModel = {path = pFile, original = readFile(pFile), sections = {}, names = {}, dirty = false,};
+    local tSourceNames = {};
     local oConfig = wx.wxFileConfig("", "", pFile, "", wx.wxCONFIG_USE_LOCAL_FILE);
     oConfig:DisableAutoSave(); oConfig:SetExpandEnvVars(false);
     local bOK, sError = xpcall(function()
         local bGroup, sName, nGroup = oConfig:GetFirstGroup();
         while (bGroup) do
             tModel.names[#tModel.names + 1] = sName;
+            tSourceNames[sName:upper()] = sName;
             tModel.sections[sName] = {};
             oConfig:SetPath("/"..sName);
             local bEntry, sKey, nEntry = oConfig:GetFirstEntry();
@@ -238,8 +261,11 @@ function StyleEditor.model(pFile)
     @vis private
     !]]
     local function names()
-        tModel.names = {};
-        for sName in pairs(tModel.sections) do tModel.names[#tModel.names + 1] = sName; end
+        tModel.names, tSourceNames = {}, {};
+        for sName in pairs(tModel.sections) do
+            tModel.names[#tModel.names + 1] = sName;
+            tSourceNames[sName:upper()] = sName;
+        end
         table.sort(tModel.names);
         tModel.dirty = true;
     end
@@ -453,7 +479,8 @@ function StyleEditor.model(pFile)
             @param any sKey Key.
             @vis private
             !]]
-            GetValue = function(sSection, sKey) return tModel.resolve(sSection, sKey); end,
+            -- Map parser-normalized names to cached INI spelling; preserve model reference rules.
+            GetValue = function(sSection, sKey) return tModel.resolve(tSourceNames[sSection:upper()] or sSection, sKey); end,
             --[[!
             @fqxn CFS.Windows.StyleEditor.Private.Functions.GetValueNames
             @desc Returns keys from a draft style section.
@@ -462,7 +489,8 @@ function StyleEditor.model(pFile)
             !]]
             GetValueNames = function(sSection)
                 local tKeys = {};
-                for sKey in pairs(tModel.sections[sSection] or {}) do tKeys[#tKeys + 1] = sKey; end
+                local sSource = tSourceNames[sSection:upper()] or sSection;
+                for sKey in pairs(tModel.sections[sSource] or {}) do tKeys[#tKeys + 1] = sKey; end
                 return tKeys;
             end,
         });
@@ -643,6 +671,309 @@ local function drawing(oGC, oDC)
 end
 StyleEditor.drawing = drawing;
 
+-- Gradient-stop operations keep positions sorted; dragging moves colors between slots.
+local function gradientModel(sValue)
+    local oModel = {stops = FontStyle.ParseGradientStops(sValue), value = sValue};
+    local function change(fChange)
+        local tNext = {};
+        for nIndex, tStop in ipairs(oModel.stops) do tNext[nIndex] = {Position = tStop.Position, Color = tStop.Color}; end
+        fChange(tNext);
+        local tParts = {};
+        for nIndex, tStop in ipairs(tNext) do tParts[nIndex] = string.format("%.17g:#%08X", tStop.Position, tStop.Color); end
+        local sNext		= table.concat(tParts, "; ");
+        local tParsed	= FontStyle.ParseGradientStops(sNext);
+        oModel.stops, oModel.value = tParsed, sNext;
+        return sNext;
+    end
+    function oModel.color(nIndex, tColor)
+        return change(function(tStops)
+            tStops[nIndex].Color = (tColor.R << 24) | (tColor.G << 16) | (tColor.B << 8) | tColor.A;
+        end);
+    end
+    function oModel.position(nIndex, nPercent)
+        assert(nIndex > 1 and nIndex < #oModel.stops, "The first and last stops stay at 0% and 100%.");
+        return change(function(tStops) tStops[nIndex].Position = nPercent / 100; end);
+    end
+    function oModel.move(nFrom, nTo)
+        assert(oModel.stops[nFrom] and oModel.stops[nTo], "Unknown gradient stop.");
+        if (nFrom == nTo) then return oModel.value; end
+        return change(function(tStops)
+            local tColors = {};
+            for nIndex, tStop in ipairs(tStops) do tColors[nIndex] = tStop.Color; end
+            local nColor = table.remove(tColors, nFrom);
+            table.insert(tColors, nTo, nColor);
+            for nIndex, tStop in ipairs(tStops) do tStop.Color = tColors[nIndex]; end
+        end);
+    end
+    function oModel.add()
+        return change(function(tStops)
+            local nInsert, nLargest = 2, -1;
+            for nIndex = 2, #tStops do
+                local nGap = tStops[nIndex].Position - tStops[nIndex - 1].Position;
+                if (nGap > nLargest) then nInsert, nLargest = nIndex, nGap; end
+            end
+            local tLeft, tRight = tStops[nInsert - 1], tStops[nInsert];
+            local nColor = 0;
+            for nShift = 24, 0, -8 do
+                local nChannel	= math.floor((((tLeft.Color >> nShift) & 255) + ((tRight.Color >> nShift) & 255)) / 2 + 0.5);
+                nColor			= nColor | (nChannel << nShift);
+            end
+            table.insert(tStops, nInsert, {Position = (tLeft.Position + tRight.Position) / 2, Color = nColor});
+        end);
+    end
+    function oModel.remove(nIndex)
+        assert(#oModel.stops > 2, "A gradient needs at least two stops.");
+        return change(function(tStops)
+            assert(tStops[nIndex], "Unknown gradient stop.");
+            table.remove(tStops, nIndex);
+            tStops[1].Position, tStops[#tStops].Position = 0, 1;
+        end);
+    end
+    return oModel;
+end
+
+local function unpackColor(nColor)
+    return {R = (nColor >> 24) & 255, G = (nColor >> 16) & 255, B = (nColor >> 8) & 255, A = nColor & 255};
+end
+
+-- Use the Style resolver's actual color contract, including eligible numeric values.
+-- Only identifier-keyed paths can be applied by its current dotted-path API.
+local function cfgColorTree()
+    local tColors, tStack = {}, {};
+    local tCFG = UserEnv and UserEnv.Get and UserEnv.Get().CFG;
+    local function visit(tTable, sPath, bPathValid)
+        local tItems, tKeys = {}, {};
+        if (rawtype(tTable) ~= "table" or tStack[tTable]) then return tItems; end
+        tStack[tTable] = true;
+        for vKey in pairs(tTable) do
+            if (rawtype(vKey) == "string" or rawtype(vKey) == "number") then tKeys[#tKeys + 1] = vKey; end
+        end
+        table.sort(tKeys, function(a, b) return tostring(a) < tostring(b); end);
+        for _, vKey in ipairs(tKeys) do
+            local sKey		= tostring(vKey);
+            local bValid	= bPathValid and rawtype(vKey) == "string" and sKey:match("^[%a_][%w_]*$") ~= nil;
+            local sNext		= bValid and (sPath.."."..sKey) or (sPath.."["..string.format("%q", sKey).."]");
+            local vValue	= tTable[vKey];
+            local tNode		= {Id = sNext, Text = sKey};
+            if (rawtype(vValue) == "table") then
+                tNode.Children = visit(vValue, sNext, bValid);
+                tNode.Text = sKey..(tStack[vValue] and " (cycle)" or " (table)");
+            else
+                local bOK, nColor = pcall(FontStyle.ResolveColor, sNext);
+                if (bValid and bOK and nColor ~= nil) then
+                    tColors[sNext] = nColor;
+                    tNode.Value = nColor;
+                else
+                    tNode.Text = sKey..(bValid and " (not a color)" or " (unsupported path)");
+                end
+            end
+            tItems[#tItems + 1] = tNode;
+        end
+        tStack[tTable] = nil;
+        return tItems;
+    end
+    return {{Id = "CFG", Text = "CFG", Expanded = true, Children = visit(tCFG, "CFG", true)}}, tColors;
+end
+
+-- Gradient rows compose existing wxLuma controls; no framework module is replaced.
+local function gradientEditor(dParent, Controls, oSkin, track, protect, fChanged, typing)
+    local oEditor	= {};
+    local dPanel	= wx.wxPanel(dParent, wx.wxID_ANY);
+    local dRows		= wx.wxScrolledWindow(dPanel, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(-1, 244), wx.wxVSCROLL);
+    dRows:SetScrollRate(0, 12);
+    dPanel:SetMinSize(wx.wxSize(280, 296));
+    local oRowsLayout = wx.wxBoxSizer(wx.wxVERTICAL);
+    dRows:SetSizer(oRowsLayout);
+    local oHint = wx.wxStaticText(dPanel, wx.wxID_ANY, "Drag a handle to reorder colors. Endpoints stay at 0% and 100%.");
+    oHint:Wrap(440);
+    local operation;
+    local oAdd	= track(Controls.button(dPanel, {Skin = oSkin, Text = "Add stop",
+        OnClick	= protect(function() operation("add"); end)}));
+    local tRows	= {};
+    local oModel;
+    local bEnabled, bUpdating, bDisposed = true, false, false;
+    local nDrag, nDrop;
+    local nRowHeight = 46;
+
+    local function enabled(oComponent, bValue)
+        if (oComponent.isEnabled() ~= bValue) then oComponent.setEnabled(bValue); end
+    end
+    local function sync()
+        if (not oModel or bDisposed) then return; end
+        bUpdating = true;
+        for nIndex, tRow in ipairs(tRows) do
+            local tStop = oModel.stops[nIndex];
+            tRow.color.setValue(unpackColor(tStop.Color));
+            tRow.position.setValue(tStop.Position * 100);
+            tRow.pot.setValue(tStop.Position * 100);
+            enabled(tRow.color, bEnabled);
+            enabled(tRow.handle, bEnabled);
+            enabled(tRow.position, bEnabled and nIndex > 1 and nIndex < #tRows);
+            enabled(tRow.pot, bEnabled and nIndex > 1 and nIndex < #tRows);
+            enabled(tRow.remove, bEnabled and #tRows > 2);
+        end
+        enabled(oAdd, bEnabled);
+        bUpdating = false;
+    end
+    operation = function(sOperation, ...)
+        if (not bEnabled or bUpdating or not oModel) then return; end
+        local tArgs	= table.pack(...);
+        local oNext	= gradientModel(oModel.value);
+        local bOK, sValue = pcall(function() return oNext[sOperation](table.unpack(tArgs, 1, tArgs.n)); end);
+        if (not bOK) then sync(); error(sValue, 0); end
+        if (fChanged(sValue) ~= false) then oEditor.setValue(sValue); else sync(); end
+    end
+    local function cancelDrag()
+        nDrag, nDrop = nil, nil;
+        if (not bDisposed) then
+            oHint:SetLabel("Drag a handle to reorder colors. Endpoints stay at 0% and 100%.");
+            oHint:Wrap(math.max(200, dPanel:GetClientSize():GetWidth()));
+        end
+    end
+    local function disposeRows()
+        cancelDrag();
+        for _, tRow in ipairs(tRows) do
+            for _, sKey in ipairs({"handle", "position", "pot", "color", "remove"}) do tRow[sKey].destroy(); end
+            typing[tRow.typingID] = nil;
+            oRowsLayout:Detach(tRow.panel);
+            tRow.panel:Destroy();
+        end
+        tRows = {};
+    end
+    local function build()
+        disposeRows();
+        for nIndex in ipairs(oModel.stops) do
+            local nRow	= nIndex;
+            local dRow	= wx.wxPanel(dRows, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(-1, nRowHeight));
+            dRow:SetMinSize(wx.wxSize(250, nRowHeight));
+            local oHandle = track(Controls.button(dRow, {Skin = oSkin, Text = "::"}));
+            oHandle.Control:SetToolTip("Drag to move this color to another stop position.");
+            local oPosition	= track(Controls.numericField(dRow, {Skin = oSkin, Min = 0, Max = 100, Precision = 6, Step = 0.1, StepButtons = false,
+                OnChange	= protect(function(nValue) operation("position", nRow, nValue); end)}));
+            typing[oPosition.TextControl:GetId()] = true;
+            oPosition.Control:SetToolTip("Stop position (%)");
+            local oPercent = wx.wxStaticText(dRow, wx.wxID_ANY, "%");
+            local oPot		= track(Controls.knob(dRow, {Skin = oSkin, Min = 0, Max = 100, Rate = 0.1,
+                OnChange	= protect(function(nValue) operation("position", nRow, nValue); end)}));
+            local oColor	= track(Controls.colorPicker(dRow, {Skin = oSkin,
+                OnChange	= protect(function(tColor) operation("color", nRow, tColor); end)}));
+            local oRemove	= track(Controls.button(dRow, {Skin = oSkin, Text = "-",
+                OnClick		= protect(function() operation("remove", nRow); end)}));
+            oRemove.Control:SetToolTip("Remove this stop; at least two remain.");
+            tRows[nRow] = {panel = dRow, handle = oHandle, position = oPosition, pot = oPot, color = oColor, remove = oRemove, typingID = oPosition.TextControl:GetId()};
+            local function layout()
+                local nWidth = dRow:GetClientSize():GetWidth();
+                oHandle.layout(0, 5, 28, 36);
+                oPosition.layout(32, 5, 80, 36);
+                oPercent:SetSize(114, 14, 12, 18);
+                oPot.layout(128, 5, 32, 34);
+                oColor.layout(164, 5, math.max(46, nWidth - 200), 36);
+                oRemove.layout(math.max(214, nWidth - 32), 5, 32, 36);
+            end
+            dRow:Connect(wx.wxEVT_SIZE, function(oEvent) layout(); oEvent:Skip(); end);
+            layout();
+            oRowsLayout:Add(dRow, 0, wx.wxEXPAND);
+            oHandle.on("leftDown", protect(function() if (bEnabled) then nDrag, nDrop = nRow, nRow; end end));
+            oHandle.on("pointerMove", protect(function(oComponent, tEvent)
+                if (not nDrag or nDrag ~= nRow) then return; end
+                local oPoint = dRows:ScreenToClient(oComponent.Control:ClientToScreen(wx.wxPoint(tEvent.X, tEvent.Y)));
+                local _, nScrollY = dRows:GetViewStart();
+                local nHeight = dRows:GetClientSize():GetHeight();
+                if (oPoint:GetY() < 12) then dRows:Scroll(0, math.max(0, nScrollY - 1));
+                elseif (oPoint:GetY() > nHeight - 12) then dRows:Scroll(0, nScrollY + 1); end
+                _, nScrollY = dRows:GetViewStart();
+                nDrop = math.max(1, math.min(#tRows, math.floor((oPoint:GetY() + nScrollY * 12) / nRowHeight) + 1));
+                oHint:SetLabel("Release to move this color to stop "..nDrop..".");
+            end));
+            oHandle.on("leftUp", protect(function()
+                local nFrom, nTo = nDrag, nDrop;
+                cancelDrag();
+                if (nFrom and nTo and nFrom ~= nTo) then operation("move", nFrom, nTo); end
+            end));
+            oHandle.on("captureLost", cancelDrag);
+            oHandle.on("keyDown", function(_, tEvent) if (tEvent.KeyCode == wx.WXK_ESCAPE) then cancelDrag(); end end);
+        end
+        dRows:Layout(); dRows:FitInside();
+    end
+    function oEditor.setValue(sValue)
+        if (bDisposed or (oModel and oModel.value == sValue)) then return; end
+        local oNext		= gradientModel(sValue);
+        local bRebuild	= not oModel or #oNext.stops ~= #oModel.stops;
+        oModel			= oNext;
+        if (bRebuild) then build(); end
+        sync();
+    end
+    function oEditor.setEnabled(bValue)
+        if (bEnabled ~= bValue) then bEnabled = bValue; cancelDrag(); sync(); end
+    end
+    function oEditor.destroy()
+        if (bDisposed) then return; end
+        bDisposed = true; nDrag, nDrop = nil, nil;
+        for _, tRow in ipairs(tRows) do
+            for _, sKey in ipairs({"handle", "position", "pot", "color", "remove"}) do tRow[sKey].destroy(); end
+            typing[tRow.typingID] = nil;
+        end
+        tRows = {}; oAdd.destroy();
+    end
+    local oLayout = wx.wxBoxSizer(wx.wxVERTICAL);
+    oLayout:Add(dRows, 1, wx.wxEXPAND);
+    oLayout:Add(oHint, 0, wx.wxEXPAND + wx.wxTOP, 4);
+    oAdd.Control:SetMinSize(wx.wxSize(100, 36));
+    oAdd.layout(0, 0, 100, 36);
+    oLayout:Add(oAdd.Control, 0, wx.wxTOP, 4);
+    dPanel:SetSizer(oLayout);
+    dPanel:Connect(wx.wxEVT_DESTROY, function(oEvent)
+        if (oEvent:GetId() == dPanel:GetId()) then oEditor.destroy(); end
+        oEvent:Skip();
+    end);
+    oEditor.Control = dPanel;
+    return oEditor;
+end
+
+local function cfgPicker(dParent, Controls, oSkin, widget, sCurrent)
+    local tItems, tColors = cfgColorTree();
+    local dDialog = wx.wxDialog(dParent, wx.wxID_ANY, "Choose CFG color", wx.wxDefaultPosition, wx.wxSize(560, 560), wx.wxDEFAULT_DIALOG_STYLE + wx.wxRESIZE_BORDER);
+    local oTree, dTree = widget(dDialog, Controls.tree, {Skin = oSkin, Items = tItems}, 420, 320);
+    local oSwatch, dSwatch = widget(dDialog, Controls.colorPicker, {Skin = oSkin, Enabled = false}, 260, 36);
+    local oPath		= wx.wxStaticText(dDialog, wx.wxID_ANY, "Select a color value. Tables expand; other values are inactive.");
+    local oUse		= wx.wxButton(dDialog, wx.wxID_OK, "Use color");
+    local oCancel	= wx.wxButton(dDialog, wx.wxID_CANCEL, "Cancel");
+    local sSelected;
+    oUse:Enable(false);
+    local function select(sId)
+        if (not tColors[sId]) then return; end
+        sSelected = sId;
+        oSwatch.setValue(unpackColor(tColors[sId]));
+        oPath:SetLabel(sId); oPath:Wrap(math.max(200, dDialog:GetClientSize():GetWidth() - 24));
+        oUse:Enable(true);
+    end
+    oTree.on("valueChanged", function(_, tEvent) select(tEvent.Value); end);
+    oTree.TreeControl:Connect(wx.wxEVT_COMMAND_TREE_SEL_CHANGING, function(oEvent)
+        local oItem	= oEvent:GetItem();
+        local oData	= oItem and oItem:IsOk() and oTree.TreeControl:GetItemData(oItem);
+        local sId	= oData and oData:GetData();
+        if (not tColors[sId]) then oEvent:Veto(); else oEvent:Skip(); end
+    end);
+    if (tColors[sCurrent]) then oTree.setValue(sCurrent); select(sCurrent); end
+    local oLayout = wx.wxBoxSizer(wx.wxVERTICAL);
+    oLayout:Add(dTree, 1, wx.wxEXPAND + wx.wxALL, 12);
+    oLayout:Add(oPath, 0, wx.wxEXPAND + wx.wxLEFT + wx.wxRIGHT, 12);
+    oLayout:Add(dSwatch, 0, wx.wxEXPAND + wx.wxALL, 12);
+    local oButtons = wx.wxBoxSizer(wx.wxHORIZONTAL);
+    oButtons:AddStretchSpacer(); oButtons:Add(oUse, 0, wx.wxALL, 6); oButtons:Add(oCancel, 0, wx.wxALL, 6);
+    oLayout:Add(oButtons, 0, wx.wxEXPAND);
+    dDialog:SetSizer(oLayout); dDialog:Layout();
+    local bOK, vResult = xpcall(function()
+        if (dDialog:ShowModal() == wx.wxID_OK and sSelected) then
+            assert(FontStyle.ResolveColor(sSelected) ~= nil, "The selected CFG color is no longer available.");
+            return sSelected;
+        end
+    end, debug.traceback);
+    oTree.destroy(); oSwatch.destroy(); dDialog:Destroy();
+    if (not bOK) then error(vResult, 0); end
+    return vResult;
+end
+
 --[[!
 @fqxn CFS.Windows.StyleEditor.Functions.create
 @pulsarlua function StyleEditor.create
@@ -655,6 +986,11 @@ function StyleEditor.create(dParent, pFile, tOptions)
     tOptions = tOptions or {};
     local tModel = StyleEditor.model(pFile);
     assert(#tModel.names > 0, "The styles file has no styles.");
+    local Controls = require("wxLuma.init")().Controls;
+    local oSkin = Controls.loadSkin();
+    local tWidgets = setmetatable({}, {__mode = "k"});
+    local tTyping = {};
+    local bSkinDisposed = false;
     local dFrame = wx.wxFrame(dParent, wx.wxID_ANY, "Style Editor", wx.wxDefaultPosition, wx.wxSize(1000, 820));
     dFrame:SetMinSize(wx.wxSize(800, 650));
     local oState = WindowState.bind(dFrame, "StyleEditor", tOptions.stateFile);
@@ -665,6 +1001,8 @@ function StyleEditor.create(dParent, pFile, tOptions)
     local dBook = wx.wxNotebook(dPanel, wx.wxID_ANY);
     local oMessage = wx.wxStaticText(dPanel, wx.wxID_ANY, "Draft changes affect only these samples until Save.");
     local oSample = wx.wxTextCtrl(dPanel, wx.wxID_ANY, "The quick brown fox 0123456789");
+    local oUpperNames = wx.wxCheckBox(dPanel, wx.wxID_ANY, "Uppercase names");
+    oUpperNames:SetToolTip("Display uppercase names without changing INI spelling or style lookup.");
     local oSave = wx.wxButton(dPanel, wx.wxID_SAVE, "Save");
     local oClose = wx.wxButton(dPanel, wx.wxID_CLOSE, "Close");
     local tControls, tSamples = {}, {};
@@ -674,6 +1012,29 @@ function StyleEditor.create(dParent, pFile, tOptions)
     local oPreview;
     local sPreviewFont = "";
     local refresh;
+    local nPreviewZoom = 1;
+    tTyping[oSample:GetId()] = true;
+
+    local function track(oComponent)
+        tWidgets[oComponent] = true;
+        oComponent.on("destroyed", function() tWidgets[oComponent] = nil; end);
+        return oComponent;
+    end
+    local function widget(dParent, fFactory, tSettings, nWidth, nHeight)
+        local dHost = wx.wxPanel(dParent, wx.wxID_ANY);
+        dHost:SetMinSize(wx.wxSize(nWidth, nHeight));
+        local oWidget = track(fFactory(dHost, tSettings));
+        if (oWidget.TextControl) then tTyping[oWidget.TextControl:GetId()] = true; end
+        oWidget.layout(0, 0, nWidth, nHeight);
+        dHost:Connect(wx.wxEVT_SIZE, function(oEvent)
+            if (not oWidget.Disposed) then oWidget.layout(0, 0, dHost:GetClientSizeWH()); end
+            oEvent:Skip();
+        end);
+        return oWidget, dHost;
+    end
+    local function enableWidget(oWidget, bEnabled)
+        if (oWidget.isEnabled() ~= bEnabled) then oWidget.setEnabled(bEnabled); end
+    end
     --[[!
     @fqxn CFS.Windows.StyleEditor.Private.Functions.protect
     @desc Wraps a style-editor action and displays and logs failures.
@@ -695,7 +1056,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
     @vis private
     !]]
     local function edited(sKey, sValue)
-        if (bLoading) then return; end
+        if (bLoading) then return false; end
         local bOK, sError = pcall(function()
             local tField = tFields[sKey];
             assert(sValue ~= "" or tField[3] ~= "number", "Enter a number for "..tField[2]..".");
@@ -717,20 +1078,31 @@ function StyleEditor.create(dParent, pFile, tOptions)
             oMessage:SetLabel(tostring(sError):match("^[^\n]+"));
             oSave:Enable(false);
             dPanel:Layout();
-            return;
+            return false;
         end
-        if (next(tInvalid)) then oSave:Enable(false); return; end
+        if (next(tInvalid)) then oSave:Enable(false); return true; end
         refresh();
+        return true;
+    end
+    local function commitWidget(sKey, sValue)
+        local bAccepted = edited(sKey, sValue);
+        if (bAccepted == false and not bLoading) then
+            local sError = oMessage:GetLabel();
+            tInvalid[sKey] = nil;
+            refresh();
+            oMessage:SetLabel(sError);
+        end
+        return bAccepted;
     end
     for _, tGroup in ipairs(tGroups) do
-        local bScroll = tGroup[1] == "Wear" or tGroup[1] == "Bevel / Emboss";
-        local dPage = bScroll and wx.wxScrolledWindow(dBook, wx.wxID_ANY) or wx.wxPanel(dBook, wx.wxID_ANY);
-        if (bScroll) then dPage:SetScrollRate(0, 12); end
+        local dPage = wx.wxScrolledWindow(dBook, wx.wxID_ANY);
+        dPage:SetScrollRate(12, 12);
         local oGrid = wx.wxFlexGridSizer(0, 3, 8, 10);
         oGrid:AddGrowableCol(1, 1);
         for _, tField in ipairs(tGroup[2]) do
             local sKey, sKind = tField[1], tField[3];
             local oInput, oAlpha;
+            local oWidget, dWidget, oPot, dPot, oGradient;
             local oCFGPath, oApplyCFG, oFixedColor, oColorSource;
             local oColorLayout;
             local oCell = wx.wxBoxSizer(wx.wxHORIZONTAL);
@@ -740,37 +1112,48 @@ function StyleEditor.create(dParent, pFile, tOptions)
             elseif (sKind == "choice") then
                 oInput = wx.wxChoice(dPage, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxDefaultSize, tField[5]);
                 oInput:Connect(wx.wxEVT_COMMAND_CHOICE_SELECTED, protect(function() edited(sKey, oInput:GetStringSelection()); end));
-            elseif (sKind == "color") then
-                oInput = wx.wxColourPickerCtrl(dPage, wx.wxID_ANY, wx.wxBLACK);
-                oAlpha = wx.wxSpinCtrl(dPage, wx.wxID_ANY, "255", wx.wxDefaultPosition, wx.wxSize(80, -1), wx.wxSP_ARROW_KEYS, 0, 255, 255);
-                --[[!
-                @fqxn CFS.Windows.StyleEditor.Private.Functions.changed
-                @desc Copies the selected color and alpha controls into the edited style field.
-                @vis private
-                !]]
-                local function changed()
-                    local oColor = oInput:GetColour();
-                    edited(sKey, table.concat({oColor:Red(), oColor:Green(), oColor:Blue(), oAlpha:GetValue()}, ","));
+            elseif (sKind == "number") then
+                local bPot = _tPotFields[sKey] == true;
+                local fFactory = bPot and Controls.numericField or Controls.spinner;
+                local function changed(nValue)
+                    if (bLoading) then return; end
+                    commitWidget(sKey, string.format("%.0f", math.floor(nValue + 0.5)));
                 end
-                oInput:Connect(wx.wxEVT_COMMAND_COLOURPICKER_CHANGED, protect(changed));
-                oAlpha:Connect(wx.wxEVT_COMMAND_SPINCTRL_UPDATED, protect(changed));
+                oWidget, dWidget = widget(dPage, fFactory, {Skin = oSkin, Min = tField[5], Max = tField[6],
+                    Precision = 0, Step = 1, StepButtons = false, Value = tonumber(tField[4]), OnChange = protect(changed)}, 120, 40);
+                oInput = oWidget.Control;
+                if (bPot) then
+                    oPot, dPot = widget(dPage, Controls.knob, {Skin = oSkin, Min = tField[5], Max = tField[6],
+                        Value = tonumber(tField[4]), Rate = 1, Continuity = sKey == "BevelLightAngle" and "revolve" or "none",
+                        OnChange = protect(changed)}, 40, 40);
+                    oPot.Control:SetToolTip(tField[2]);
+                end
+            elseif (sKind == "stops") then
+                oGradient = gradientEditor(dPage, Controls, oSkin, track, protect,
+                    function(sValue) return commitWidget(sKey, sValue); end, tTyping);
+                oInput, dWidget = oGradient.Control, oGradient.Control;
+            elseif (sKind == "color") then
+                oWidget, dWidget = widget(dPage, Controls.colorPicker, {Skin = oSkin,
+                    OnChange = protect(function(tColor)
+                        if (not bLoading) then commitWidget(sKey, table.concat({tColor.R, tColor.G, tColor.B, tColor.A}, ",")); end
+                    end)}, 180, 40);
+                oInput = oWidget.Control;
             else
                 oInput = wx.wxTextCtrl(dPage, wx.wxID_ANY, "", wx.wxDefaultPosition, wx.wxDefaultSize, wx.wxTE_PROCESS_ENTER);
+                tTyping[oInput:GetId()] = true;
                 oInput:Connect(wx.wxEVT_COMMAND_TEXT_UPDATED, protect(function() edited(sKey, oInput:GetValue()); end));
             end
-            oCell:Add(oInput, 1, wx.wxEXPAND);
-            if (oAlpha) then
-                oCell:Add(wx.wxStaticText(dPage, wx.wxID_ANY, "Opacity"), 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT + wx.wxRIGHT, 6);
-                oCell:Add(oAlpha, 0);
-            end
+            oCell:Add(dWidget or oInput, 1, wx.wxEXPAND);
+            if (dPot) then oCell:Add(dPot, 0, wx.wxLEFT + wx.wxALIGN_CENTER_VERTICAL, 6); end
             if (sKey == "Color") then
                 --Keep the resolved swatch visible, with an explicit editor for its live source.
                 oColorLayout = wx.wxBoxSizer(wx.wxVERTICAL);
                 oColorLayout:Add(oCell, 0, wx.wxEXPAND);
                 local oPathRow = wx.wxBoxSizer(wx.wxHORIZONTAL);
                 oCFGPath = wx.wxTextCtrl(dPage, wx.wxID_ANY, "", wx.wxDefaultPosition, wx.wxDefaultSize, wx.wxTE_PROCESS_ENTER);
-                oCFGPath:SetToolTip("Case-sensitive dotted path, for example CFG.Color.Tint.Air. Apply CFG to use it.");
-                oApplyCFG = wx.wxButton(dPage, wx.wxID_ANY, "Apply CFG");
+                oCFGPath:SetToolTip("Case-sensitive CFG path. Press Enter to commit a typed path, or Browse to select a color.");
+                tTyping[oCFGPath:GetId()] = true;
+                oApplyCFG = wx.wxButton(dPage, wx.wxID_ANY, "Browse...");
                 oFixedColor = wx.wxButton(dPage, wx.wxID_ANY, "Use fixed color");
                 oPathRow:Add(wx.wxStaticText(dPage, wx.wxID_ANY, "CFG path:"), 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 6);
                 oPathRow:Add(oCFGPath, 1, wx.wxEXPAND + wx.wxRIGHT, 6);
@@ -791,7 +1174,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
                     local sPath = oCFGPath:GetValue():match("^%s*(.-)%s*$");
                     local _, sReference = FontStyle.ResolveColor(sPath);
                     if (not sReference) then
-                        oMessage:SetLabel("Enter a dotted CFG path such as CFG.Color.Tint.Air, then Apply CFG.");
+                        oMessage:SetLabel("Enter a dotted CFG path such as CFG.Color.Tint.Air and press Enter, or use Browse.");
                         dPanel:Layout();
                         return;
                     end
@@ -806,8 +1189,8 @@ function StyleEditor.create(dParent, pFile, tOptions)
                 !]]
                 local function fUseFixedColor()
                     if (bLoading) then return; end
-                    local oColor = oInput:GetColour();
-                    edited(sKey, table.concat({oColor:Red(), oColor:Green(), oColor:Blue(), oAlpha:GetValue()}, ","));
+                    local tColor = oWidget.getValue();
+                    commitWidget(sKey, table.concat({tColor.R, tColor.G, tColor.B, tColor.A}, ","));
                 end
 
                 oCFGPath:Connect(wx.wxEVT_COMMAND_TEXT_UPDATED, function()
@@ -821,7 +1204,10 @@ function StyleEditor.create(dParent, pFile, tOptions)
                     oColorSource:Wrap(500);
                     dPanel:Layout();
                 end);
-                oApplyCFG:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(fApplyCFGPath));
+                oApplyCFG:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(function()
+                    local sPath = cfgPicker(dFrame, Controls, oSkin, widget, oCFGPath:GetValue());
+                    if (sPath) then commitWidget(sKey, sPath); end
+                end));
                 oCFGPath:Connect(wx.wxEVT_COMMAND_TEXT_ENTER, protect(fApplyCFGPath));
                 oFixedColor:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(fUseFixedColor));
             end
@@ -833,21 +1219,25 @@ function StyleEditor.create(dParent, pFile, tOptions)
                 local sSource = oLink:GetStringSelection();
                 edited(sKey, sSource == "Own value" and (tModel.resolve(sSelected, sKey) ~= "" and tModel.resolve(sSelected, sKey) or tField[4]) or "<"..sSource..">");
             end));
-            oGrid:Add(wx.wxStaticText(dPage, wx.wxID_ANY, tField[2]), 0, wx.wxALIGN_CENTER_VERTICAL);
+            local oLabel = wx.wxStaticText(dPage, wx.wxID_ANY, tField[2]);
+            oLabel:Wrap(170);
+            oGrid:Add(oLabel, 0, wx.wxALIGN_CENTER_VERTICAL);
             oGrid:Add(oColorLayout or oCell, 1, wx.wxEXPAND);
             oGrid:Add(oLink, 0, wx.wxEXPAND);
             tControls[sKey] = {
                 input = oInput, alpha = oAlpha, link = oLink, field = tField,
+                widget = oWidget, pot = oPot, gradient = oGradient,
                 cfgPath = oCFGPath, applyCFG = oApplyCFG, fixedColor = oFixedColor, colorSource = oColorSource,
             };
         end
         local oPageLayout = wx.wxBoxSizer(wx.wxVERTICAL);
         oPageLayout:Add(oGrid, 1, wx.wxEXPAND + wx.wxALL, 12);
         dPage:SetSizer(oPageLayout);
-        if (bScroll) then dPage:FitInside(); end
+        dPage:FitInside();
         dBook:AddPage(dPage, tGroup[1]);
     end
     local oStyles = wx.wxBoxSizer(wx.wxVERTICAL);
+    oStyles:Add(oUpperNames, 0, wx.wxEXPAND + wx.wxBOTTOM, 4);
     oStyles:Add(oList, 1, wx.wxEXPAND);
     local tStyleButtons = {};
     for _, sAction in ipairs({"New", "Duplicate", "Rename", "Delete", "Import", "Export"}) do
@@ -859,6 +1249,30 @@ function StyleEditor.create(dParent, pFile, tOptions)
     oBody:Add(dBook, 1, wx.wxEXPAND);
     oLayout:Add(oBody, 1, wx.wxEXPAND + wx.wxALL, 12);
     oLayout:Add(oSample, 0, wx.wxEXPAND + wx.wxLEFT + wx.wxRIGHT, 12);
+    local oZoomRow = wx.wxBoxSizer(wx.wxHORIZONTAL);
+    local oZoomLabel = wx.wxStaticText(dPanel, wx.wxID_ANY, "100%");
+    local function setZoom(nZoom)
+        nPreviewZoom = math.max(0.25, math.min(8, nZoom));
+        oZoomLabel:SetLabel(string.format("%.0f%%", nPreviewZoom * 100));
+        for _, dCanvas in ipairs(tSamples) do dCanvas:Refresh(false); end
+    end
+    local _, dZoomOut = widget(dPanel, Controls.button, {Skin = oSkin, Text = "-",
+        OnClick = function() setZoom(nPreviewZoom / 1.25); end}, 36, 36);
+    local _, dZoomIn = widget(dPanel, Controls.button, {Skin = oSkin, Text = "+",
+        OnClick = function() setZoom(nPreviewZoom * 1.25); end}, 36, 36);
+    local _, dActual = widget(dPanel, Controls.button, {Skin = oSkin, Text = "Actual Size (=)",
+        OnClick = function() setZoom(1); end}, 150, 36);
+    oZoomRow:Add(wx.wxStaticText(dPanel, wx.wxID_ANY, "Preview zoom"), 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 8);
+    oZoomRow:Add(dZoomOut, 0); oZoomRow:Add(oZoomLabel, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT + wx.wxRIGHT, 8);
+    oZoomRow:Add(dZoomIn, 0); oZoomRow:Add(dActual, 0, wx.wxLEFT, 8);
+    oLayout:Add(oZoomRow, 0, wx.wxLEFT + wx.wxRIGHT + wx.wxTOP, 12);
+    dFrame:Connect(wx.wxEVT_CHAR_HOOK, function(oEvent)
+        local oFocus = wx.wxWindow.FindFocus();
+        if (oEvent:GetKeyCode() == _tKeyBindings.PreviewActualSize and not oEvent:ControlDown()
+            and not oEvent:AltDown() and not (oFocus and tTyping[oFocus:GetId()])) then
+            setZoom(1);
+        else oEvent:Skip(); end
+    end);
     local oSamples = wx.wxBoxSizer(wx.wxHORIZONTAL);
     for _, nBackground in ipairs({0, 255}) do
         local dCanvas = wx.wxPanel(dPanel, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(-1, 160));
@@ -873,9 +1287,10 @@ function StyleEditor.create(dParent, pFile, tOptions)
                     local D = drawing(oGC, oDC);
                     local nW, nH, nX, nY = oPreview.Prep(D, oSample:GetValue());
                     local oSize = dCanvas:GetClientSize();
-                    local nScale = math.min(1, (oSize:GetWidth() - 20) / math.max(1, nW), (oSize:GetHeight() - 20) / math.max(1, nH));
+                    local nScale = nPreviewZoom;
+                    oGC:Translate(oSize:GetWidth() / 2, oSize:GetHeight() / 2);
                     oGC:Scale(nScale, nScale);
-                    oPreview.Draw("Style preview", D, oDC, 10 / nScale - nX, 10 / nScale - nY, oSample:GetValue());
+                    oPreview.Draw("Style preview", D, oDC, -nW / 2 - nX, -nH / 2 - nY, oSample:GetValue());
                 end
             end, debug.traceback);
             oGC:delete(); oDC:delete();
@@ -915,28 +1330,32 @@ function StyleEditor.create(dParent, pFile, tOptions)
                 sChainName = sChainValue:match("^%s*<%s*(.-)%s*>%s*$");
             end
             tControl.link:SetToolTip(table.concat(tChain, " -> ").."\n"..tControl.field[2]..": "..sValue);
-            tControl.input:Enable(not sSource);
+            if (tControl.widget) then enableWidget(tControl.widget, not sSource);
+            elseif (tControl.gradient) then tControl.gradient.setEnabled(not sSource);
+            else tControl.input:Enable(not sSource); end
+            if (tControl.pot) then enableWidget(tControl.pot, not sSource); end
             if (tControl.alpha) then tControl.alpha:Enable(not sSource); end
             local sKind = tControl.field[3];
             if (sKind == "boolean") then tControl.input:SetValue(sValue:lower() == "true");
             elseif (sKind == "choice") then tControl.input:SetStringSelection(sValue);
+            elseif (sKind == "number") then
+                tControl.widget.setValue(tonumber(sValue));
+                if (tControl.pot) then tControl.pot.setValue(tonumber(sValue)); end
+            elseif (sKind == "stops") then
+                tControl.gradient.setValue(sValue);
             elseif (sKind == "color") then
                 local tColor = channels(sValue, sKey == "Color");
-                tControl.input:SetColour(wx.wxColour(tColor[1], tColor[2], tColor[3]));
-                tControl.alpha:SetValue(tColor[4]);
+                tControl.widget.setValue({R = tColor[1], G = tColor[2], B = tColor[3], A = tColor[4]});
                 if (sKey == "Color") then
                     local nResolved, sPath = FontStyle.ResolveColor(sValue);
                     local sStatus = sPath and ("CFG -> "..sPath) or "Fixed color";
                     if (sPath and not nResolved) then sStatus = "Unresolved CFG path -> "..sPath.." (black preview)"; end
-                    if (sSource) then
-                        sStatus = "Inherited from "..table.concat(tChain, " -> ", 2).." -> "..sStatus;
-                    end
+                    if (sSource) then sStatus = "Inherited from "..table.concat(tChain, " -> ", 2).." -> "..sStatus; end
                     tControl.cfgPath:ChangeValue(sPath or "");
                     tControl.cfgPath:Enable(not sSource);
                     tControl.applyCFG:Enable(not sSource);
                     tControl.fixedColor:Enable(not sSource and sPath ~= nil);
-                    tControl.input:Enable(not sSource and not sPath);
-                    tControl.alpha:Enable(not sSource and not sPath);
+                    enableWidget(tControl.widget, not sSource and not sPath);
                     tControl.sourceText = sStatus;
                     tControl.colorSource:SetLabel(sStatus);
                     tControl.colorSource:Wrap(500);
@@ -962,8 +1381,10 @@ function StyleEditor.create(dParent, pFile, tOptions)
     !]]
     local function refreshNames()
         oList:Clear();
-        for _, sName in ipairs(tModel.names) do oList:Append(sName); end
-        oList:SetStringSelection(sSelected);
+        for nIndex, sName in ipairs(tModel.names) do
+            oList:Append(oUpperNames:GetValue() and sName:upper() or sName);
+            if (sName == sSelected) then oList:SetSelection(nIndex - 1); end
+        end
         for _, tControl in pairs(tControls) do
             tControl.link:Clear(); tControl.link:Append("Own value");
             for _, sName in ipairs(tModel.names) do tControl.link:Append(sName); end
@@ -1096,8 +1517,9 @@ function StyleEditor.create(dParent, pFile, tOptions)
         if (nAnswer == wx.wxYES) then save(); return true; end
         return nAnswer == wx.wxNO;
     end
+    oUpperNames:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, protect(refreshNames));
     oList:SetSelection(0);
-    oList:Connect(wx.wxEVT_COMMAND_LISTBOX_SELECTED, protect(function() assert(not next(tInvalid), "Correct the invalid field before selecting another style."); sSelected = oList:GetStringSelection(); refresh(); end));
+    oList:Connect(wx.wxEVT_COMMAND_LISTBOX_SELECTED, protect(function() assert(not next(tInvalid), "Correct the invalid field before selecting another style."); sSelected = assert(tModel.names[oList:GetSelection() + 1]); refresh(); end));
     oSample:Connect(wx.wxEVT_COMMAND_TEXT_UPDATED, protect(function() for _, dCanvas in ipairs(tSamples) do dCanvas:Refresh(false); end end));
     oSave:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(save));
     oClose:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function() dFrame:Close(); end);
@@ -1113,9 +1535,19 @@ function StyleEditor.create(dParent, pFile, tOptions)
         if (tOptions.onClose) then tOptions.onClose(); end
         oEvent:Skip();
     end);
+    dFrame:Connect(wx.wxEVT_DESTROY, function(oEvent)
+        if (oEvent:GetId() == dFrame:GetId() and not bSkinDisposed) then
+            bClosed = true;
+            for _, tControl in pairs(tControls) do if (tControl.gradient) then tControl.gradient.destroy(); end end
+            for oComponent in pairs(tWidgets) do oComponent.destroy(); end
+            oSkin.destroy(); bSkinDisposed = true;
+        end
+        oEvent:Skip();
+    end);
     refresh();
     dFrame:Show(true); dPanel:Layout();
     return {frame = dFrame, model = tModel, controls = tControls, samples = tSamples, save = save, refresh = refresh,
+        zoom = {setValue = setZoom, getValue = function() return nPreviewZoom; end}, uppercaseNames = oUpperNames,
         --[[!
         @fqxn CFS.Windows.StyleEditor.Private.Functions.close
         @desc Closes the style editor through its draft-protection handling.
