@@ -1,0 +1,443 @@
+{
+	"schema": 1,
+	"provider": "The Game Crafter",
+	"checked": "2026-11-15",
+	"profiles": [
+		{
+			"id": "DigestPerfectBoundBook",
+			"name": "The Game Crafter — Digest Perfect Bound Book",
+			"product": "DigestPerfectBoundBook",
+			"source": "https://www.thegamecrafter.com/make/products/DigestPerfectBoundBook",
+			"templates": [
+				"Source Templates/DigestPerfectBoundBook/PerfectBoundBookDigest-BackExteriorCover.png",
+				"Source Templates/DigestPerfectBoundBook/PerfectBoundBookDigest-EvenNumberedPage.png",
+				"Source Templates/DigestPerfectBoundBook/PerfectBoundBookDigest-FrontExteriorCover.png",
+				"Source Templates/DigestPerfectBoundBook/PerfectBoundBookDigest-OddNumberedPage.png",
+				"Source Templates/DigestPerfectBoundBook/PerfectBoundBookDigest-Spine.png"
+			],
+			"uploadPixels": "1725x2625",
+			"minPages": 40,
+			"maxPages": 200,
+			"pageMultiple": 4,
+			"notes": "Inside margins mirror on even pages. Covers and any page-dependent spine require their separate supplier templates. Safe margins are conservatively rounded up from the supplied guides.",
+			"values": {
+				"units": "in",
+				"width": 5.375,
+				"height": 8.375,
+				"bleed": 0.1875,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.625,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "JumboBooklet-20",
+			"name": "The Game Crafter — Jumbo Booklet (up to 20 pages)",
+			"product": "JumboBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/JumboBooklet",
+			"templates": [
+				"Source Templates/JumboBooklet/jumbo-booklet 20pg.svg"
+			],
+			"uploadPixels": "2475x3075",
+			"minPages": 4,
+			"maxPages": 20,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 8,
+				"height": 10,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.125,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "JumboBooklet-40",
+			"name": "The Game Crafter — Jumbo Booklet (up to 40 pages)",
+			"product": "JumboBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/JumboBooklet",
+			"templates": [
+				"Source Templates/JumboBooklet/jumbo-booklet 40pg.svg"
+			],
+			"uploadPixels": "2475x3075",
+			"minPages": 4,
+			"maxPages": 40,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 8,
+				"height": 10,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.375,
+				"marginOutside": 0.375,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "JumboCoilBook",
+			"name": "The Game Crafter — Jumbo Coil Book",
+			"product": "JumboCoilBook",
+			"source": "https://www.thegamecrafter.com/make/products/JumboCoilBook",
+			"templates": [
+				"Source Templates/JumboCoilBook/JumboCoilBoundBook-EvenNumberedPage.png",
+				"Source Templates/JumboCoilBook/JumboCoilBoundBook-OddNumberedPage.png"
+			],
+			"uploadPixels": "2550x3075",
+			"minPages": 4,
+			"maxPages": 200,
+			"pageMultiple": 2,
+			"notes": "Inside margins mirror on even pages. Covers and any page-dependent spine require their separate supplier templates. Safe margins are conservatively rounded up from the supplied guides.",
+			"values": {
+				"units": "in",
+				"width": 8.25,
+				"height": 10,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.52,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "LargeBooklet-20",
+			"name": "The Game Crafter — Large Booklet (up to 20 pages)",
+			"product": "LargeBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/LargeBooklet",
+			"templates": [
+				"Source Templates/LargeBooklet/large-booklet 20pg.svg"
+			],
+			"uploadPixels": "1575x2475",
+			"minPages": 4,
+			"maxPages": 20,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 5,
+				"height": 8,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.125,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "LargeBooklet-40",
+			"name": "The Game Crafter — Large Booklet (up to 40 pages)",
+			"product": "LargeBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/LargeBooklet",
+			"templates": [
+				"Source Templates/LargeBooklet/large-booklet 40pg.svg"
+			],
+			"uploadPixels": "1575x2475",
+			"minPages": 4,
+			"maxPages": 40,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 5,
+				"height": 8,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.375,
+				"marginOutside": 0.375,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "LetterPerfectBoundBook",
+			"name": "The Game Crafter — Letter Perfect Bound Book",
+			"product": "LetterPerfectBoundBook",
+			"source": "https://www.thegamecrafter.com/make/products/LetterPerfectBoundBook",
+			"templates": [
+				"Source Templates/LetterPerfectBoundBook/PerfectBoundBookLetter-BackExteriorCover.png",
+				"Source Templates/LetterPerfectBoundBook/PerfectBoundBookLetter-EvenNumberedPage.png",
+				"Source Templates/LetterPerfectBoundBook/PerfectBoundBookLetter-FrontExteriorCover.png",
+				"Source Templates/LetterPerfectBoundBook/PerfectBoundBookLetter-OddNumberedPage.png",
+				"Source Templates/LetterPerfectBoundBook/PerfectBoundBookLetter-Spine.png"
+			],
+			"uploadPixels": "2625x3375",
+			"minPages": 40,
+			"maxPages": 200,
+			"pageMultiple": 4,
+			"notes": "Inside margins mirror on even pages. Covers and any page-dependent spine require their separate supplier templates. Safe margins are conservatively rounded up from the supplied guides.",
+			"values": {
+				"units": "in",
+				"width": 8.5,
+				"height": 11,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.625,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "MediumBooklet-20",
+			"name": "The Game Crafter — Medium Booklet (up to 20 pages)",
+			"product": "MediumBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/MediumBooklet",
+			"templates": [
+				"Source Templates/MediumBooklet/medium-booklet 20pg.svg"
+			],
+			"uploadPixels": "1125x1575",
+			"minPages": 4,
+			"maxPages": 20,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 3.5,
+				"height": 5,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.125,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "MediumBooklet-40",
+			"name": "The Game Crafter — Medium Booklet (up to 40 pages)",
+			"product": "MediumBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/MediumBooklet",
+			"templates": [
+				"Source Templates/MediumBooklet/medium-booklet 40pg.svg"
+			],
+			"uploadPixels": "1125x1575",
+			"minPages": 4,
+			"maxPages": 40,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 3.5,
+				"height": 5,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.375,
+				"marginOutside": 0.375,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "MediumCoilBook",
+			"name": "The Game Crafter — Medium Coil Book",
+			"product": "MediumCoilBook",
+			"source": "https://www.thegamecrafter.com/make/products/MediumCoilBook",
+			"templates": [
+				"Source Templates/MediumMatBook/medium-coil-book-even.svg",
+				"Source Templates/MediumMatBook/medium-coil-book-odd.svg"
+			],
+			"uploadPixels": "1575x2325",
+			"minPages": 4,
+			"maxPages": 200,
+			"pageMultiple": 2,
+			"notes": "Inside margins mirror on even pages. Covers and any page-dependent spine require their separate supplier templates. Safe margins are conservatively rounded up from the supplied guides.",
+			"values": {
+				"units": "in",
+				"width": 5,
+				"height": 7.5,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.52,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "MediumMatBook",
+			"name": "The Game Crafter — Medium Mat Book",
+			"product": "MediumMatBook",
+			"source": "https://www.thegamecrafter.com/make/products/MediumMatBook",
+			"templates": [
+				"Source Templates/MediumMatBook/medium-coil-book-even.svg",
+				"Source Templates/MediumMatBook/medium-coil-book-odd.svg"
+			],
+			"uploadPixels": "1575x2325",
+			"minPages": 4,
+			"maxPages": 100,
+			"pageMultiple": 2,
+			"notes": "Inside margins mirror on even pages. Covers and any page-dependent spine require their separate supplier templates. Safe margins are conservatively rounded up from the supplied guides.",
+			"values": {
+				"units": "in",
+				"width": 5,
+				"height": 7.5,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.52,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "SmallBooklet-20",
+			"name": "The Game Crafter — Small Booklet (up to 20 pages)",
+			"product": "SmallBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/SmallBooklet",
+			"templates": [
+				"Source Templates/SmallBooklet/small-booklet 20pg.svg"
+			],
+			"uploadPixels": "825x1125",
+			"minPages": 4,
+			"maxPages": 20,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 2.5,
+				"height": 3.5,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.125,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "SmallBooklet-40",
+			"name": "The Game Crafter — Small Booklet (up to 40 pages)",
+			"product": "SmallBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/SmallBooklet",
+			"templates": [
+				"Source Templates/SmallBooklet/small-booklet 40pg.svg"
+			],
+			"uploadPixels": "825x1125",
+			"minPages": 4,
+			"maxPages": 40,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 2.5,
+				"height": 3.5,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.375,
+				"marginOutside": 0.375,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "TallBooklet-20",
+			"name": "The Game Crafter — Tall Booklet (up to 20 pages)",
+			"product": "TallBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/TallBooklet",
+			"templates": [
+				"Source Templates/TallBooklet/tall-booklet 20pg.svg"
+			],
+			"uploadPixels": "1425x2475",
+			"minPages": 4,
+			"maxPages": 20,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 4.5,
+				"height": 8,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.125,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "TallBooklet-40",
+			"name": "The Game Crafter — Tall Booklet (up to 40 pages)",
+			"product": "TallBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/TallBooklet",
+			"templates": [
+				"Source Templates/TallBooklet/tall-booklet 40pg.svg"
+			],
+			"uploadPixels": "1425x2475",
+			"minPages": 4,
+			"maxPages": 40,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 4.5,
+				"height": 8,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.375,
+				"marginOutside": 0.375,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "TarotBooklet-20",
+			"name": "The Game Crafter — Tarot Booklet (up to 20 pages)",
+			"product": "TarotBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/TarotBooklet",
+			"templates": [
+				"Source Templates/TarotBooklet/tarot-booklet 20pg.svg"
+			],
+			"uploadPixels": "900x1500",
+			"minPages": 4,
+			"maxPages": 20,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 2.75,
+				"height": 4.75,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.125,
+				"marginOutside": 0.125,
+				"dpi": 300
+			}
+		},
+		{
+			"id": "TarotBooklet-40",
+			"name": "The Game Crafter — Tarot Booklet (up to 40 pages)",
+			"product": "TarotBooklet",
+			"source": "https://www.thegamecrafter.com/make/products/TarotBooklet",
+			"templates": [
+				"Source Templates/TarotBooklet/tarot-booklet 40pg.svg"
+			],
+			"uploadPixels": "900x1500",
+			"minPages": 4,
+			"maxPages": 40,
+			"pageMultiple": 4,
+			"notes": "Margins are measured from the trim edge. Booklet 40-page templates reserve more space at both side edges.",
+			"values": {
+				"units": "in",
+				"width": 2.75,
+				"height": 4.75,
+				"bleed": 0.125,
+				"marginTop": 0.125,
+				"marginBottom": 0.125,
+				"marginInside": 0.375,
+				"marginOutside": 0.375,
+				"dpi": 300
+			}
+		}
+	]
+}

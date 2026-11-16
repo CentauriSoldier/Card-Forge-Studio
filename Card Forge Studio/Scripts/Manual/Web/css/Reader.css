@@ -1,0 +1,7 @@
+/* Reader-only adaptations of the original PHP presentation. Font files used
+   aliases; OS lookup requires their installed family names instead. */
+h1, h2, .brand-link, .navbar-brand { font-family: 'Suggested 3D', sans-serif; }
+h3, .section-level-3 > .section-heading h3 { font-family: 'Calibri', sans-serif; font-weight: 700; }
+.manual-shell [hidden] { display: none !important; }
+.source-figure { object-fit: contain; }
+.pdf-page-frame, .pdf-running-header { display: none; }

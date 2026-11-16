@@ -1,0 +1,36 @@
+/* PDF layout reuses the Web component artwork and heading styles. Paged.js
+   reserves real margin boxes and resolves target page numbers in the TOC. */
+html, body { margin: 0; padding: 0; background: #171d23; color: #e6e3da; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+body { font: 10.5pt/15.5pt 'Control Freak', sans-serif; }
+.manual-shell { width: auto; max-width: none; margin: 0; padding: 0; }
+.section-level-2 { border: 0; border-image: none; background: transparent; padding: 0; margin: 0; filter: none; }
+.section-level-2, .pdf-contents { break-before: page; }
+.section-level-3 { margin: 12pt 0; padding: 8pt; break-inside: auto; }
+.section-level-3::before { display: none; }
+.section-heading { break-after: avoid; margin: 8pt 0 10pt; padding: 7pt; }
+.section-heading h1, .section-heading h2 { font: 21pt/29pt 'Suggested 3D', sans-serif; margin: 0; }
+.section-heading h3 { font-size: 14pt; }
+.section-copy, .section-level-2 > .section-copy { font-size: 10.5pt; line-height: 15.5pt; color: #e6e3da; }
+.section-copy p, .section-copy li { line-height: 15.5pt; margin: 0 0 8pt; orphans: 2; widows: 2; }
+.source-figure { display: block; max-width: 100%; max-height: var(--pdf-figure-height); width: auto; height: auto; margin: 0 auto 8pt; border: 0; break-inside: avoid; }
+.table-responsive { overflow: visible; }
+table { width: 100%; font-size: 9pt !important; line-height: 12pt; }
+thead { display: table-header-group; }
+.table th, .table td { padding: 6pt 7pt; }
+tr, img, pre { break-inside: avoid; }
+.pdf-cover { break-after: page; }
+.pdf-cover p { font-size: 10.5pt; line-height: 15.5pt; margin-bottom: 8pt; }
+.pdf-toc { list-style: none; padding: 0; }
+.pdf-toc li { margin-bottom: 2pt; line-height: 14pt; }
+.pdf-toc a { display: block; position: relative; padding-right: 4ch; color: #e6e3da; text-decoration: none; }
+.pdf-toc a::after { content: target-counter(attr(href), page); position: absolute; right: 0; bottom: 0; }
+.pdf-toc [data-level='3'] { margin-left: 10pt; }
+.pdf-toc [data-level='4'] { margin-left: 20pt; }
+.pdf-toc [data-level='5'] { margin-left: 30pt; }
+.pdf-toc [data-level='6'] { margin-left: 40pt; }
+.pdf-page-header { position: running(pdfHeader); container-type: normal; aspect-ratio: auto; min-height: 0; height: 13pt; width: var(--pdf-header-width); padding: 2pt 8pt; border: 0; border-image: none; background: var(--manual-header-art) center / 100% 100% no-repeat; color: #eab24e; font: 8pt/9pt 'Control Freak', sans-serif; text-align: center; gap: 0; }
+.pagedjs_sheet, .pagedjs_pagebox { background: #171d23; }
+.pagedjs_pagebox::before { content: ''; position: absolute; inset: calc(var(--pdf-bleed) + .04in); border: .11in solid transparent; border-image: var(--manual-panel-art) 42 fill stretch; pointer-events: none; z-index: 0; }
+.pagedjs_area, .pagedjs_margin { z-index: 1; }
+.pagedjs_page { margin: 0 !important; box-shadow: none !important; }
+.glossary-popup { display: none !important; }

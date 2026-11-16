@@ -105,7 +105,7 @@ function Main.create(tOptions)
     local sPage = "Welcome";
     local tDataSession = tOptions.dataSession or DataSession.create();
     local dBaseWindow, dFinalWindow, dStyleWindow, dSourceWindow, dGameEditorWindow, dWikiWindow, dTutorialsWindow;
-    -- local dManualWindow;
+	local dManualWindow;
     local showPage;
     local bDataLoaded = false;
     local sActiveCardSetName = "";
@@ -559,7 +559,7 @@ function Main.create(tOptions)
         if (dStyleWindow and not dStyleWindow.close()) then return; end
         if (dSourceWindow and not dSourceWindow.close()) then return; end
         if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
-        -- if (dManualWindow and not dManualWindow.close()) then return; end
+		if (dManualWindow and not dManualWindow.close()) then return; end
         if (dWikiWindow and not dWikiWindow.close()) then return; end
 
         local oGame = require("Windows.NewGame").Show(dFrame, CFS.Game.New);
@@ -603,7 +603,7 @@ function Main.create(tOptions)
             if (dSourceWindow and not dSourceWindow.close()) then return; end
             if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
             local oGame = tGames[nSelection + 1];
-            -- if (dManualWindow and not dManualWindow.close()) then return; end
+			if (dManualWindow and not dManualWindow.close()) then return; end
             if (dWikiWindow and not dWikiWindow.close()) then return; end
             CFS.Game.Activate(oGame);
             INIFile.SetValue(FS.AppCFG, "Settings", "LastGame", oGame.GetUUID());
@@ -771,7 +771,7 @@ function Main.create(tOptions)
         if (dSourceWindow and not dSourceWindow.close()) then return; end
         if (dStyleWindow and not dStyleWindow.close()) then return; end
         if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
-        -- if (dManualWindow and not dManualWindow.close()) then return; end
+		if (dManualWindow and not dManualWindow.close()) then return; end
         if (dWikiWindow and not dWikiWindow.close()) then return; end
         CFS.Game.Deactivate();
         bDataLoaded, sActiveCardSetName = false, "";
@@ -855,16 +855,6 @@ function Main.create(tOptions)
         });
     end},
         {false},
-        --[[ Manual editor detached; retain its menu wiring.
-        {"Manual", function()
-        assert(Game.GetActive(), "Load a game first.");
-        if (dManualWindow) then dManualWindow.show(); return; end
-        dManualWindow = require("Windows.Manual").create(dFrame, FS.Game.Manual, {
-            styles = FS.Game.Styles,
-            onClose = function() dManualWindow = nil; end,
-        });
-    end},
-        --]]
         {"Style Editor", function()
         assert(CFS.Game.GetActive(), "Load a game first.");
         if (dStyleWindow) then dStyleWindow.show(); return; end
@@ -890,6 +880,26 @@ function Main.create(tOptions)
             onClose = function() dGameEditorWindow = nil; end,
         });
     end},
+		--[[!
+		@fqxn CFS.Windows.Main.Private.Functions.openManualEditor
+		@desc Opens one Manual Editor host for the active game, or raises its existing window. Content and export roots come from the prepared game filesystem.
+		@vis private
+		!]]
+		{"Manual Editor", function()
+			local oGame = assert(CFS.Game.GetActive(), "Load a game first.");
+			if (dManualWindow) then dManualWindow.show(); return; end
+			dManualWindow = require("Manual.Adapter").create(dFrame, FS.Game.Manual, {
+				gameName	= oGame.GetName(),
+				gameRoot	= FS.Game.Root,
+				exports		= FS.Game.Exports,
+				--[[!
+				@fqxn CFS.Windows.Main.Private.Functions.manualEditorClosed
+				@desc Clears the closed host reference so the current or next game can open its own editor.
+				@vis private
+				!]]
+				onClose = function() dManualWindow = nil; end,
+			});
+		end},
         {"Mechanics Viewer"},
         {false},
         {"Docs", function()
@@ -1047,7 +1057,7 @@ function Main.create(tOptions)
         for sPath, tMenuItem in pairs(tMenuItems) do
             local bAvailable = type(tMenuItem.action) == "function";
 
-            if (sPath == "Card Set:Load" or sPath == "Game:Docs" or sPath == "Game:Rebuild Docs" or sPath == "Game:Style Editor" or sPath == "Game:Wiki") then bAvailable = not not CFS.Game.GetActive(); end
+            if (sPath == "Card Set:Load" or sPath == "Game:Docs" or sPath == "Game:Rebuild Docs" or sPath == "Game:Style Editor" or sPath == "Game:Wiki" or sPath == "Game:Manual Editor") then bAvailable = not not CFS.Game.GetActive(); end
             if (sPath == "Card Set:Info..." or sPath == "Card Set:Edit Source...") then bAvailable = bDataLoaded; end
             if (sPath == "Card Set:New") then bAvailable = not not CFS.Game.GetActive(); end
             if (sPath == "Game:Info..." or sPath == "Game:Browse" or sPath == "Game:Edit Source...") then bAvailable = not not CFS.Game.GetActive(); end
@@ -1131,12 +1141,10 @@ function Main.create(tOptions)
             if (oEvent:CanVeto()) then oEvent:Veto(); end
             return;
         end
-        --[[ Manual editor detached; retain its close guard.
-        if (dManualWindow and not dManualWindow.close()) then
+		if (dManualWindow and not dManualWindow.close(true)) then
             if (oEvent:CanVeto()) then oEvent:Veto(); end
             return;
         end
-        --]]
         oWindowState.close();
         oRenderTimer:Stop();
         ProcSys.Shutdown();

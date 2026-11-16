@@ -1,0 +1,14 @@
+{
+	"pdf": {
+		"preset": "custom",
+		"units": "in",
+		"width": 8.5,
+		"height": 11,
+		"bleed": 0,
+		"marginTop": 0.5,
+		"marginBottom": 0.5,
+		"marginInside": 0.5,
+		"marginOutside": 0.5,
+		"dpi": 300
+	}
+}

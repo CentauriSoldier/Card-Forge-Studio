@@ -73,7 +73,6 @@ require("Constants");
 
 
 local wx = require("wx");
-assert(wx.wxFont.AddPrivateFont(_Fonts.."/CRYSTAL-Regular.ttf"), "Cannot load the bundled CRYSTAL font.");
 
 CFG     = {};
 FTCSV   = require("Plugins.FTCSV.ftcsv");

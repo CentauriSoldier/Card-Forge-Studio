@@ -1,0 +1,10 @@
+/* Shared reader/print artwork. Future per-game component overrides can replace
+   these variables without maintaining separate Web and PDF artwork paths. */
+:root {
+	--manual-panel-art: url('../images/components/Intro Panel Frame.png');
+	--manual-header-art: url('../images/components/Intro Title Frame.png');
+}
+.metal-panel { border-image-source: var(--manual-panel-art); }
+@media screen {
+	.title-assembly { background-image: var(--manual-header-art), linear-gradient(#161b20, #161b20); }
+}

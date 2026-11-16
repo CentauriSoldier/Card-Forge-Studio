@@ -57,6 +57,7 @@ local _sOriginalPackagePath = package.path;
 @field string CardSets Active CardSets path.
 @field string CSVBackup Active CSVBackup path.
 @field string Exports Active Exports path.
+@field string Manual Active game-owned manual content root, alongside Exports.
 @field string Scripts Active Scripts path.
 @field string Symbols Active Symbols path.
 @field string CFG Active CFG path.
@@ -68,7 +69,7 @@ local _sOriginalPackagePath = package.path;
 local tGame     = {
     Root        = "",
     Wiki        = "",
-    -- Manual      = "",
+	Manual		= "",
     Docs        = "",
     CardSets    = "",
     --Set         = "",
@@ -155,6 +156,45 @@ local tFS       = {
     CardSet         = tCardSetDecoy,
 };
 
+-- Manual content and export directories are shared by creation and preparation.
+local _tManualFolders = {
+	"Manual", "Manual/Content", "Manual/Images",
+	"Manual/Styles", "Manual/Config", "Exports", "Exports/Manual",
+	"Exports/Manual/Web", "Exports/Manual/PDF",
+};
+
+local _tManualFiles = {
+	"Content/intro.md", "Content/glossary.md", "Content/_ORDER_.txt",
+	"Config/glossary-alternatives.json", "Config/glossary-settings.json",
+	"Config/editor-settings.json", "Config/export-settings.json",
+	"Styles/web-font-styles.css", "Styles/font-styles.css",
+};
+
+--[[!
+@fqxn CFS.Modules.FS.Private.Functions.GetManualStarterFiles
+@desc Reads bundled manual templates for creation or missing-file repair. With an existing game root, excludes every existing file and rejects directories occupying required file paths before anything is written. Templates are always copied, never moved.
+@param string|nil pRoot Existing game data root, or nil to include all starters.
+@return table tFiles Game-relative target paths mapped to template contents.
+@vis private
+!]]
+local function GetManualStarterFiles(pRoot)
+	local tFiles = {};
+	for _, sFile in ipairs(_tManualFiles) do
+		local sTarget	= "Manual/"..sFile;
+		local pTarget	= pRoot and pRoot.."/"..sTarget;
+		local hTemplate;
+		if (pTarget) then
+			assert(not wx.wxDirExists(pTarget), "A directory blocks the required manual file: "..pTarget);
+		end
+		if (not pTarget or not wx.wxFileExists(pTarget)) then
+			hTemplate = assert(io.open(pTemplates.."/Manual/"..sFile, "rb"));
+			tFiles[sTarget] = assert(hTemplate:read("a"));
+			assert(hTemplate:close());
+		end
+	end
+	return tFiles;
+end
+
 
 --[[!
 @fqxn CFS.Modules.FS.Functions.GetManifest
@@ -169,12 +209,20 @@ tFS.GetManifest = function(sKind, tContext)
     local sName = assert(tContext.name);
     assert(rawtype(sName) == "string" and sName:match("%S") and not sName:find("[%c]"), "Invalid manifest name.");
     if (sKind == "Game") then
+		local tFolders;
         local tFiles = { ["autocomplete.lua"] = "return {version = 1, items = {}};\r\n", ["Info.ini"] = "[SETTINGS]\r\nIncludePlugins=false\r\nName="..sName.."\r\n" };
         for sTarget, sTemplate in pairs({["Scripts/CFG.lua"] = "CFG.lua", ["Scripts/ENV.lua"] = "ENV.lua", ["Scripts/Effects.lua"] = "Effects.lua", ["Styles.ini"] = "Styles.ini"}) do
             local hFile = assert(io.open(pTemplates.."/"..sTemplate, "rb"));
             tFiles[sTarget] = assert(hFile:read("a")); assert(hFile:close());
         end
-        return {folders = {"", FOLDER_CARD_SETS, "CSV Backup", "Docs", "Exports", "Scripts", "Scripts/CFG", "Scripts/ENV", "Symbols", FOLDER_WIKI}, files = tFiles};
+		for sTarget, sContents in pairs(GetManualStarterFiles()) do
+			tFiles[sTarget] = sContents;
+		end
+		tFolders = {"", FOLDER_CARD_SETS, "CSV Backup", "Docs", "Exports", "Scripts", "Scripts/CFG", "Scripts/ENV", "Symbols", FOLDER_WIKI};
+		for _, sFolder in ipairs(_tManualFolders) do
+			if (sFolder ~= "Exports") then tFolders[#tFolders + 1] = sFolder; end
+		end
+		return {folders = tFolders, files = tFiles};
     end
     assert(sKind == "CardSet", "Unknown manifest kind.");
     local nWidth, nHeight = tContext.width, tContext.height;
@@ -281,6 +329,35 @@ end
 !]]
 local function CheckFolder(pFolder)
     if (not wx.wxDirExists(pFolder)) then error("Required game folder is missing: "..pFolder..". Linked game data is read-only.", 2); end
+end
+
+--[[!
+@fqxn CFS.Modules.FS.Private.Functions.PrepareManualFolders
+@desc Creates missing manual-content and export directories, then copies missing bundled manual starter files beneath a validated game root. Preflights path collisions and template reads before creating folders. Preserves existing files and never removes a path.
+@param string pRoot Existing, validated active-game data root.
+@vis private
+!]]
+local function PrepareManualFolders(pRoot)
+	local tPaths	= {};
+	local tFiles	= GetManualStarterFiles(pRoot);
+	for _, sFolder in ipairs(_tManualFolders) do
+		local pFolder = pRoot.."/"..sFolder;
+		assert(not wx.wxFileExists(pFolder), "A file blocks the required manual folder: "..pFolder);
+		tPaths[#tPaths + 1] = pFolder;
+	end
+	for _, pFolder in ipairs(tPaths) do
+		if (not wx.wxDirExists(pFolder)) then
+			assert(wx.wxMkdir(pFolder), "Cannot create manual or export folder: "..pFolder);
+		end
+	end
+	for sFile, sContents in pairs(tFiles) do
+		local pFile			= pRoot.."/"..sFile;
+		local hFile			= assert(io.open(pFile, "wb"));
+		local bWritten, sError	= hFile:write(sContents);
+		local bClosed, sCloseError = hFile:close();
+		assert(bWritten, sError);
+		assert(bClosed, sCloseError);
+	end
 end
 
 --[[!
@@ -434,7 +511,7 @@ end
 --[[!
 @fqxn CFS.Modules.FS.Game.Functions.Prep
 @pulsarlua function FS.Game.Prep
-@desc Validates a game's required paths before publishing them. Existing game data is preserved; missing generated autocomplete and Scripts/Effects.lua files are created during loading.
+@desc Validates a game's required paths before publishing them. Missing Manual content directories and Exports/Web are created on game loading. Existing contents are preserved; missing generated autocomplete and Scripts/Effects.lua files are also created.
 @param Game oGame Game to prepare.
 !]]
 tGame.Prep = function(oGame)
@@ -447,7 +524,7 @@ tGame.Prep = function(oGame)
         CFG         = pScripts.."\\CFG",
         CSVBackup   = pRoot.."\\CSV Backup",
         Docs        = pRoot.."\\Docs",
-        -- Manual      = pRoot.."\\Manual",
+		Manual		= pRoot.."\\Manual",
         ENV         = pScripts.."\\ENV",
         Effects     = pScripts.."\\Effects.lua",
         Exports     = pRoot.."\\Exports",
@@ -462,13 +539,14 @@ tGame.Prep = function(oGame)
     for sKey, pPath in pairs(tPaths) do
         if (sKey == "Info" or sKey == "Styles") then
             CheckFile(pPath);
-        elseif (sKey ~= "Wiki" and sKey ~= "Manual" and sKey ~= "Effects") then
+        elseif (sKey ~= "Wiki" and sKey ~= "Manual" and sKey ~= "Exports" and sKey ~= "Effects") then
             CheckFolder(pPath);
         end
     end
 
     CheckFile(pScripts.."\\CFG.lua");
     CheckFile(pScripts.."\\ENV.lua");
+	PrepareManualFolders(pRoot);
 
     --Add the optional processor starter only when absent; never replace game edits.
     if (not wx.wxFileExists(tPaths.Effects)) then
