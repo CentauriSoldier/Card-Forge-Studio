@@ -143,11 +143,12 @@ namespace CFS
         @fqxn CFS.Classes.FontStyle.Private.Functions.Ini
         @desc Creates an INI-reader adapter for style sections and inherited values.
         @param any pFile File.
-        @param boolean bCaseSensitive Optional; defaults to true. False matches section/key names without case.
+        @param boolean bCaseSensitive Optional; defaults to false. True requires exact section/key spelling.
         @vis private
         !]]
         private static Ini(pFile, bCaseSensitive)
         {
+            if (bCaseSensitive == nil) then bCaseSensitive = false; end
             return FontStyle.INI.CreateReader(pFile, bCaseSensitive);
         }
 
@@ -1207,7 +1208,7 @@ namespace CFS
         @pulsarlua function FontStyle.UpdateINI
         @desc Loads and synchronizes font styles from an INI file.
         @param string sINI The path to the INI file.
-        @param boolean bCaseSensitive Optional; defaults to true. False enables case-insensitive INI section/key lookup.
+        @param boolean bCaseSensitive Optional; defaults to false for case-insensitive INI section/key lookup. True requires exact spelling.
         !]]
         public static UpdateINI(sINI, bCaseSensitive)
         {
