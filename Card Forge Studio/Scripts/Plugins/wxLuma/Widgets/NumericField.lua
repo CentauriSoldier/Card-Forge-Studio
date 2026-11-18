@@ -1,3 +1,5 @@
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx      = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events  = require("wxLuma.Core.ControlEvents");
@@ -17,6 +19,7 @@ local NumericField = {};
 @ret table oComponent Editor with TextControl, standard value and policy setters.
 !]]
 function NumericField.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "NumericField requires Skin.");
     local nMin       = tOptions.Min == nil and 0 or tOptions.Min;
     local nMax       = tOptions.Max == nil and 100 or tOptions.Max;
@@ -49,15 +52,15 @@ function NumericField.create(oParent, tOptions)
     assert(tOptions.Value == nil or _finite(tOptions.Value), "Value must be finite.");
     assert(tOptions.StepButtons == nil or type(tOptions.StepButtons) == "boolean", "Invalid StepButtons.");
     assert(tOptions.ReadOnly == nil or type(tOptions.ReadOnly) == "boolean", "Invalid ReadOnly.");
-    local oComponent = _Surface.create(oParent, tOptions, "NumericField");
+    local oComponent = _Surface.create(oParent, _Border.hostOptions(tOptions), "NumericField");
     local oText = _wx.wxTextCtrl(oComponent.Control, _wx.wxID_ANY, "", _wx.wxDefaultPosition,
-        _wx.wxDefaultSize, _wx.wxBORDER_NONE + _wx.wxTE_PROCESS_ENTER + _wx.wxTE_RIGHT);
-    oComponent.TextControl = oText;
+        _wx.wxDefaultSize, _Border.style(tOptions, _wx.wxTE_PROCESS_ENTER + _wx.wxTE_RIGHT));
+    oComponent.TextControl, oComponent.BorderControl = oText, oText;
     oText:SetFont(oComponent.Skin.Font);
     oText:SetBackgroundColour(_wx.wxColour(24, 29, 36));
     oText:SetForegroundColour(_wx.wxColour(208, 218, 230));
     oText:SetEditable(not bReadOnly);
-    local nPressedPart;
+    local nPressedPart, nHoverPart;
     local sAcceptedText = "";
     local nEditStart, nEditEnd = 0, 0;
 
@@ -168,6 +171,31 @@ function NumericField.create(oParent, tOptions)
     !]]
     function oComponent.getRange()
         return nMin, nMax;
+    end
+
+    --[[!
+    @fqxn wxLuma.UI.NumericField.getNumericSettings
+    @desc Returns coupled numeric settings together for atomic persistence.
+    @ret number nMin Minimum, followed by maximum, precision and step.
+    !]]
+    function oComponent.getNumericSettings() return nMin, nMax, nPrecision, nStep; end
+
+    --[[!
+    @fqxn wxLuma.UI.NumericField.setNumericSettings
+    @desc Validates bounds, precision and step together before applying them silently
+        and normalizing the current value. Avoids invalid intermediate configurations.
+    @param number nLow New minimum.
+    @param number nHigh New maximum.
+    @param number nDigits Decimal precision.
+    @param number nIncrement Positive step.
+    @ret table oComponent This object.
+    !]]
+    function oComponent.setNumericSettings(nLow, nHigh, nDigits, nIncrement)
+        assert(not oComponent.Disposed, "Numeric field is disposed.");
+        fValidate(nLow, nHigh, nDigits, nIncrement);
+        nMin, nMax, nPrecision, nStep = nLow, nHigh, nDigits, nIncrement;
+        oComponent.setValue(oComponent.Value);
+        return oComponent;
     end
 
     --[[!
@@ -320,6 +348,7 @@ function NumericField.create(oParent, tOptions)
         return false;
     end;
     oComponent.pointer = function(sEvent, nX, nY)
+        nHoverPart = oComponent.Hover and fPart(nX, nY) or nil;
         if (sEvent == "down") then
             nPressedPart = fPart(nX, nY);
             if (not nPressedPart) then
@@ -335,11 +364,12 @@ function NumericField.create(oParent, tOptions)
         end
     end;
     oComponent.onCancel = function()
-        nPressedPart = nil;
+        nPressedPart, nHoverPart = nil, nil;
     end;
     oComponent.onLayout = function(nWidth, nHeight)
-        oText:SetSize(8, math.max(2, math.floor((nHeight - 23) / 2)),
-            math.max(1, nWidth - (bButtons and 40 or 16)), 23);
+        -- Match the stepper bounds so the editor has no gap beside its buttons.
+        oText:SetSize(8, bButtons and 0 or math.max(2, math.floor((nHeight - 23) / 2)),
+            math.max(1, nWidth - (bButtons and 34 or 16)), bButtons and math.max(1, nHeight) or 23);
     end;
     oComponent.onEnable = function(bEnabled)
         oText:Enable(bEnabled);
@@ -354,9 +384,16 @@ function NumericField.create(oParent, tOptions)
             math.max(1, nWidth), math.max(1, nHeight));
         if (bButtons) then
             for nIndex, sDirection in ipairs({"Up", "Down"}) do
-                local sArrowState = (not oComponent.isEnabled() or bReadOnly) and "Disabled" or sState;
-                oComponent.Skin.draw(oDC, "Spinner "..sDirection.." "..sArrowState,
-                    nWidth - 26, (nIndex - 1) * nHeight / 2, 24, math.max(1, math.floor(nHeight / 2)));
+                local nDirection = nIndex == 1 and 1 or -1;
+                local sArrowState = (not oComponent.isEnabled() or bReadOnly
+                    or nDirection == 1 and oComponent.Value >= nMax or nDirection == -1 and oComponent.Value <= nMin) and "Disabled"
+                    or oComponent.Pressed and nPressedPart == nDirection and nHoverPart == nDirection and "Pressed"
+                    or nHoverPart == nDirection and "Hover" or "Normal";
+                if (not (_Theme.isTheme(oComponent.Skin) and oComponent.Skin.arrowButton(oComponent, oDC, sDirection,
+                    nWidth - 26, (nIndex - 1) * nHeight / 2, 24, math.max(1, math.floor(nHeight / 2)), sArrowState))) then
+                    oComponent.Skin.draw(oDC, "Spinner "..sDirection.." "..sArrowState,
+                        nWidth - 26, (nIndex - 1) * nHeight / 2, 24, math.max(1, math.floor(nHeight / 2)));
+                end
             end
         end
         if (not oComponent.isEnabled()) then
@@ -426,6 +463,7 @@ function NumericField.create(oParent, tOptions)
     end);
     oComponent.setValue(tOptions.Value == nil and nMin or tOptions.Value);
     oComponent.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

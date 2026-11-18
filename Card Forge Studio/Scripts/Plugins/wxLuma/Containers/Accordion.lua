@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events  = require("wxLuma.Core.ControlEvents");
 local _Artwork = require("wxLuma.Core.ControlArtwork");
@@ -19,6 +20,7 @@ local Accordion = {};
     expandedChanged and standard component events.
 !]]
 function Accordion.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(type(tOptions.Sections) == "table", "Accordion requires Sections.");
     assert(tOptions.Exclusive == nil or type(tOptions.Exclusive) == "boolean", "Invalid Exclusive.");
     local tSpecs, tSeen = {}, {};
@@ -172,6 +174,7 @@ function Accordion.create(oParent, tOptions)
         end
     end;
     oComponent.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

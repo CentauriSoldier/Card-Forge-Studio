@@ -134,7 +134,7 @@ function Welcome.create(pApplication)
     !]]
     local function addLinks(dCanvas, fProtect)
         local wxLuma = require("wxLuma.init")();
-        local oSkin = wxLuma.Controls.loadSkin();
+        local oTheme = wxLuma.Theme;
         local tButtons = {};
         local tLinks = {
             {image = "patreon", url = APP_PATREON, label = "Help support the project"},
@@ -179,7 +179,7 @@ function Welcome.create(pApplication)
             end
             local sURL = tLink.url;
             local oButton = wxLuma.Controls.imageButton(dCanvas, {
-                Skin = oSkin,
+                Theme = oTheme,
                 Image = tButton.normal,
                 AlphaHit = false,
                 Background = function(oDC)
@@ -244,14 +244,14 @@ function Welcome.create(pApplication)
             layout(); oEvent:Skip();
         end);
         dCanvas:Connect(wx.wxEVT_DESTROY, function(oEvent)
-            if (oEvent:GetEventObject() == dCanvas and not bDisposed) then
+            if (oEvent:GetId() == dCanvas:GetId() and not bDisposed) then
                 bDisposed = true;
                 if (bPlayed) then wx.wxSound.Stop(); end
                 for _, tButton in ipairs(tButtons) do
                     tButton.button.destroy();
                     for _, oSound in pairs(tButton.sounds) do oSound:delete(); end
                 end
-                oSkin.destroy(); oClock:delete();
+                oTheme.destroy(); oClock:delete();
                 if (oBackground) then oBackground:delete(); end
             end
             oEvent:Skip();

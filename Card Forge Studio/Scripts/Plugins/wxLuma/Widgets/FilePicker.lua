@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx      = require("wx");
 local _Editor  = require("wxLuma.Core.ControlEditor");
 local _Dialog  = require("wxLuma.Containers.Dialog");
@@ -19,6 +20,7 @@ local FilePicker = {};
     open/close/isOpen/navigate/getDirectory and browser event subscriptions.
 !]]
 function FilePicker.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local sMode = tOptions.Mode or "file";
     assert(sMode == "file" or sMode == "folder", "FilePicker Mode must be file or folder.");
     local tCopy = {};
@@ -236,6 +238,7 @@ function FilePicker.create(oParent, tOptions)
     end
     fLayout();
     oComponent.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

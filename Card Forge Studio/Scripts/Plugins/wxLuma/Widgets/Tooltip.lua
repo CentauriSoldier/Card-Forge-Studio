@@ -1,14 +1,18 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _Containment   = require("wxLuma.Core.ControlContainment");
 local _ControlObject = require("wxLuma.Core.ControlObject");
 local _Events        = require("wxLuma.Core.ControlEvents");
 local _wx            = require("wx");
+local finite         = require("wxLuma.Core.ControlNumeric").finite;
 local Tooltip        = {};
 local drawFrame      = require("wxLuma.Core.ControlDrawing").frame;
 
 --[[!
 @fqxn wxLuma.UI.Tooltip.create
 @param wxWindow oTarget Hover/focus target; tooltip lifetime follows target.
-@param table tOptions Skin, Text; optional Delay (500 milliseconds), Enabled,
+@param table tOptions Skin, Text; optional Delay (integer milliseconds, 0..2147483647;
+    default 500, zero displays immediately), Enabled,
     Automatic (true; false leaves show/hide under application control),
     Containment (ancestor window/component), ContainmentOverflow (hide/allow).
 @desc Skinned non-activating popup after hover delay or focus; hides on leave,
@@ -16,9 +20,12 @@ local drawFrame      = require("wxLuma.Core.ControlDrawing").frame;
 @ret table oComponent Control, show/hide/setText/setEnabled/destroy/isShown.
 !]]
 function Tooltip.create(oTarget, tOptions)
+    tOptions = _Theme.options(tOptions, oTarget);
     assert(tOptions and tOptions.Skin and type(tOptions.Text) == "string", "Tooltip requires Skin and Text.");
+    local nDelay = tOptions.Delay == nil and 500 or tOptions.Delay;
+    assert(finite(nDelay) and nDelay % 1 == 0 and nDelay >= 0 and nDelay <= 2147483647, "Invalid tooltip Delay.");
     oTarget = _Containment.native(oTarget);
-    local oPopup     = _wx.wxPopupWindow(oTarget, _wx.wxBORDER_NONE);
+    local oPopup     = _wx.wxPopupWindow(oTarget, _Border.style(tOptions));
     local oComponent = _ControlObject.create({
         Control  = oPopup,
         Text     = tOptions.Text,
@@ -131,7 +138,11 @@ function Tooltip.create(oTarget, tOptions)
             return;
         end
         local nWidth, nHeight = oPopup:GetClientSizeWH();
-        drawFrame(oDC, 0, 0, nWidth, nHeight, true, true);
+        if (_Theme.isTheme(tOptions.Skin) and tOptions.Skin.getName() == "System") then
+            tOptions.Skin.fill(oDC, "Background", 0, 0, nWidth, nHeight);
+        else
+            drawFrame(oDC, 0, 0, nWidth, nHeight, true, true, tOptions.Skin);
+        end
         tOptions.Skin.text(oDC, oComponent.Text, 12, 10, true);
         oDC:delete();
     end);
@@ -142,7 +153,8 @@ function Tooltip.create(oTarget, tOptions)
     end);
     oTarget:Connect(_wx.wxEVT_ENTER_WINDOW, function(jEvent)
         if (not oComponent.Disposed and tOptions.Automatic ~= false) then
-            oTimer:Start(tOptions.Delay or 500, true);
+            -- Zero delay means immediate display, not an invalid native timer interval.
+            if (nDelay == 0) then oComponent.show(); else oTimer:Start(nDelay, true); end
         end;
         jEvent:Skip();
     end);
@@ -189,6 +201,7 @@ function Tooltip.create(oTarget, tOptions)
             end
         end
     end);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

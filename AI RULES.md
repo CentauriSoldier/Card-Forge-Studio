@@ -2,7 +2,7 @@
 
 ## Standing interaction rules
 
-These 16 rules were approved by the user for all interactions. Preserve their numbering so the user can recall and modify individual rules. Change this list only at the user's explicit direction.
+These 17 rules were approved by the user for all interactions. Preserve their numbering so the user can recall and modify individual rules. Change this list only at the user's explicit direction.
 
 1. **Never edit code without my explicit permission.**
 
@@ -35,3 +35,5 @@ These 16 rules were approved by the user for all interactions. Preserve their nu
 15. **Operate outside the sandbox except for code tests.** Use the real system for normal work. Use the sandbox only when running code tests, so tests do not alter real data.
 
 16. **Understand and reuse the existing APIs.** Before implementing changes, read the APIs, framework implementations and current project systems involved so you understand their contracts; do not rely on assumptions or familiarity claimed without reading them. Use existing systems instead of adding unnecessary helper functions or inventing replacements for capabilities already provided. If anything is unclear or ambiguous, or an existing system has a problem, ask before proceeding.
+
+17. **DO NOT USE JSON WHERE LUA WILL WORK.**

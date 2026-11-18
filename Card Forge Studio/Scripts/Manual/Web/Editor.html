@@ -7,17 +7,19 @@
 	<title>Manual Editor</title>
 	<link rel="stylesheet" href="css/bootstrap.min.css">
 	<link rel="stylesheet" href="css/intro-preview.css">
+	<style id="manual-appearance-styles"></style>
 	<style id="game-font-styles">{{GAME_CSS}}</style>
-	<style id="game-web-styles">{{WEB_CSS}}</style>
 	<link rel="stylesheet" href="css/glossary.css">
 	<script src="vendor/markdown-it/markdown-it.min.js?v={{ASSET_REVISION}}" defer></script>
+	<script src="js/Appearance.js?v={{ASSET_REVISION}}" defer></script>
 	<script src="js/host.js?v={{ASSET_REVISION}}" defer></script>
 	<script src="js/glossary.js?v={{ASSET_REVISION}}" defer></script>
 	<link rel="stylesheet" href="css/admin.css">
 	<script src="js/bootstrap.bundle.min.js?v={{ASSET_REVISION}}" defer></script>
 	<script src="js/admin.js?v={{ASSET_REVISION}}" defer></script>
+	<script src="js/Editing.js?v={{ASSET_REVISION}}" defer></script>
+	<script src="js/MarkdownTools.js?v={{ASSET_REVISION}}" defer></script>
 	<script src="js/EditorTools.js?v={{ASSET_REVISION}}" defer></script>
-	<script src="js/ExportDocument.js?v={{ASSET_REVISION}}" defer></script>
 	<script src="js/Export.js?v={{ASSET_REVISION}}" defer></script>
 </head>
 <body>
@@ -28,10 +30,10 @@
 	<header class="admin-topbar">
 	<ul class="nav nav-tabs" role="tablist">
 		<li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#editor-tab" type="button" role="tab" aria-selected="true">Content editor</button></li>
-		<li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#style-editor-tab" type="button" role="tab" aria-selected="false">Style Editor</button></li>
 		<li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#document-order-tab" type="button" role="tab" aria-selected="false">Document Order</button></li>
 		<li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#glossary-tab" type="button" role="tab" aria-selected="false">Glossary</button></li>
-		<li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tools-tab" type="button" role="tab" aria-selected="false">Export</button></li>
+		<li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tools-tab" type="button" role="tab" aria-selected="false">Export Old</button></li>
+		<li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#export-tab" type="button" role="tab" aria-selected="false">Export</button></li>
 	</ul>
 	<div class="admin-status-bar metal-panel">
 		<div class="admin-message-slot"><div id="admin-notice" class="alert d-none" role="status" aria-live="polite"></div></div>
@@ -57,39 +59,16 @@
 			</div>
 
 			<div class="editor-tools-bar" role="toolbar" aria-label="Markdown and favorite styles">
-				<div class="markdown-tools"><span class="small">Markdown</span><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="bold">Bold</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="italic">Italic</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="code">Code</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="strike">Strike</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="heading">Heading</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="bullet">List</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="quote">Quote</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-style="G">Glossary link</button><button type="button" class="btn btn-sm btn-outline-light" id="insert-anchor">Anchor</button><button type="button" class="btn btn-sm btn-outline-light" id="insert-anchor-link">Link to anchor</button></div>
+				<div class="markdown-tools"><span class="small">Markdown</span><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="bold">Bold</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="italic">Italic</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="code">Code</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="strike">Strike</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="heading">Heading</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="bullet">List</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-markdown="quote">Quote</button><button type="button" class="btn btn-sm btn-outline-light" data-wrap-style="G" data-glossary-tag>Glossary link</button><button type="button" class="btn btn-sm btn-outline-light" id="insert-anchor">Anchor</button><button type="button" class="btn btn-sm btn-outline-light" id="insert-anchor-link">Link to anchor</button></div>
 				<div class="favorite-tools"><span class="small">Favorites</span><div id="favorite-tags" aria-label="Drop favorite styles here"></div><span id="favorite-status" class="small" aria-live="polite"></span></div>
 			</div>
 
 			<div class="editor-grid">
-				<div><label class="editor-label" for="markdown-editor">Editable Markdown</label><div class="markdown-editor-stack"><div id="markdown-selections" aria-hidden="true"></div><textarea id="markdown-editor" spellcheck="false" aria-describedby="save-status selection-help selection-status">{{CONTENT}}</textarea></div><span id="selection-status" class="small" aria-live="polite"></span></div>
-				<div><h2 class="editor-label">Live preview</h2><div id="markdown-preview" class="markdown-preview"></div></div>
+				<div><div class="markdown-editor-stack"><div id="markdown-selections" aria-hidden="true"></div><textarea id="markdown-editor" aria-label="Manual Markdown" spellcheck="false" aria-describedby="save-status selection-help selection-status">{{CONTENT}}</textarea></div><span id="selection-status" class="small" aria-live="polite"></span></div>
+				<div><div id="markdown-preview" aria-label="Manual preview" class="markdown-preview"></div></div>
 			</div>
 			</div>
 			</div>
-		</section>
-		<section class="tab-pane fade" id="style-editor-tab" role="tabpanel">
-			<p>Only web stylesheet definitions appear here. Game-generated CSS and the game INI are never edited. A web style may override a game style with the same name.</p>
-			<div class="style-editor-layout">
-				<form id="web-style-form" class="admin-card">
-					<label for="web-style-select">Web style</label><select id="web-style-select" class="form-select mb-3"></select>
-					<div class="style-actions"><button id="new-web-style" class="btn btn-outline-light" type="button">New style</button><button id="delete-web-style" class="btn btn-outline-danger" type="button">Delete style</button></div>
-					<label class="form-label" for="web-style-name">Style name</label><input id="web-style-name" class="form-control mb-3" required pattern="[A-Za-z_][A-Za-z0-9_-]*" autocomplete="off">
-					<label class="form-label" for="web-style-family">Font family</label><select id="web-style-family" class="form-select mb-3"></select>
-					<div class="style-format-flags">
-						<label><input id="web-style-bold" type="checkbox"> Bold</label><label><input id="web-style-italic" type="checkbox"> Italic</label>
-						<label><input id="web-style-underline" type="checkbox"> Underline</label><label><input id="web-style-strike" type="checkbox"> Strike through</label>
-					</div>
-					<label class="form-label" for="web-style-color">Text color</label><input id="web-style-color" class="form-control form-control-color mb-3" type="color" value="#e6e3da">
-					<label class="form-label" for="web-style-size-mode">Font size</label><select id="web-style-size-mode" class="form-select mb-2"><option value="auto">Auto — surrounding text size</option><option value="fixed">Fixed size in pixels</option><option value="relative">Auto plus/minus pixels</option><option value="custom">Keep existing CSS size</option></select>
-					<label class="form-label" for="web-style-size-value" id="web-style-size-label">Size / offset (px)</label><input id="web-style-size-value" class="form-control mb-3" type="number" step="0.1" value="0">
-					<p class="small">Renaming also updates matching tags throughout the Markdown files. Save content drafts before renaming or deleting a style.</p>
-					<label class="d-block mb-3"><input id="web-style-remove-tags" type="checkbox" checked> When deleting, remove matching Markdown tags and keep their text.</label>
-					<button id="save-web-style" class="btn btn-warning" type="submit">Save style</button><span id="web-style-status" class="ms-2" aria-live="polite">Saved</span>
-				</form>
-				<div class="admin-card"><h2>Style preview</h2><p>Auto uses the surrounding text size. Relative sizes add or subtract pixels from it.</p><div class="style-preview-box"><span id="web-style-sample" class="style-editor-sample">Skystrike Protocol — The quick brown fox 0123456789</span></div><p id="web-style-size-description" class="small mt-3"></p><label class="form-label" for="web-style-css">Style CSS declarations</label><textarea id="web-style-css" class="form-control web-style-css" spellcheck="false"></textarea><div class="style-actions mt-3"><button id="save-web-style-css" class="btn btn-warning" type="button" disabled>Save CSS</button><span id="web-style-css-status" aria-live="polite">Saved</span></div></div>
-			</div>
-			<script id="web-style-data" type="application/json">{{STYLE_STATE}}</script>
 		</section>
 		<section class="tab-pane fade" id="document-order-tab" role="tabpanel">
 			<div class="admin-card document-order-card"><h2>Document Order</h2><p>Drag a document to change its position. Each drop saves _ORDER_.txt and refreshes the navigation. The arrows also move a document. Use the Content editor to add, rename or delete Markdown files; unlisted files appear at the end until you arrange them.</p>
@@ -114,12 +93,11 @@
 			</div>
 			<script id="glossary-data" type="application/json">{{GLOSSARY_STATE}}</script>
 		</section>
+		<section class="tab-pane fade" id="export-tab" role="tabpanel">
+			<button type="button" class="btn btn-warning" id="open-manual-export">Open Manual Export</button>
+		</section>
 		<section class="tab-pane fade" id="tools-tab" role="tabpanel">
-			<div class="admin-tools-grid">
-				<article class="admin-card"><div class="mb-3" id="pdf-export-progress" hidden><div class="progress" style="height: 6px" role="progressbar" aria-label="PDF export activity"><div class="progress-bar progress-bar-striped progress-bar-animated bg-warning w-100"></div></div><span class="small" id="pdf-export-stage" role="status" aria-live="polite"></span></div><div class="d-flex align-items-center gap-3"><h2 class="mb-0">PDF</h2><button type="button" id="export-help" class="glossary-help" aria-label="Export preset help" data-bs-content="Presets live in Studio Docs/Templates/Manual/PDF Export/The Game Crafter/Profiles.json. Copy a profile object, give it a unique ID and name, fill in its dimensions and reference templates, then restart the editor. The README beside it documents every field. Changes here autosave to the active game's Manual/Config/export-settings.json, without changing the template.">?</button></div><form id="pdf-settings" class="mt-3"><label class="form-label" for="pdf-preset">Book preset</label><select id="pdf-preset" class="form-select mb-3"><option value="custom">Custom</option></select><div class="export-fields"><label class="form-label">Trim width (in)<input class="form-control" type="number" data-pdf-field="width" min="0.01" step="any" required></label><label class="form-label">Trim height (in)<input class="form-control" type="number" data-pdf-field="height" min="0.01" step="any" required></label><label class="form-label">Bleed, each edge (in)<input class="form-control" type="number" data-pdf-field="bleed" min="0" step="any" required></label><label class="form-label">Top margin (in)<input class="form-control" type="number" data-pdf-field="marginTop" min="0" step="any" required></label><label class="form-label">Bottom margin (in)<input class="form-control" type="number" data-pdf-field="marginBottom" min="0" step="any" required></label><label class="form-label">Inside margin (in)<input class="form-control" type="number" data-pdf-field="marginInside" min="0" step="any" required></label><label class="form-label">Outside margin (in)<input class="form-control" type="number" data-pdf-field="marginOutside" min="0" step="any" required></label><label class="form-label">Image resolution (DPI)<input class="form-control" type="number" data-pdf-field="dpi" min="1" step="1" required></label></div><p id="pdf-preset-notes" class="small mt-3"></p><p id="export-settings-status" aria-live="polite">Saved</p></form><button type="button" class="btn btn-warning" data-export="pdf">Export PDF</button><p class="small mt-2 mb-0">Uses installed Chrome, Chromium or Edge. PDF dimensions include bleed; margins mirror on even pages. Fonts come from the operating system. DPI is reserved for future raster-page output.</p></article>
-				<article class="admin-card"><div class="mb-3" id="web-export-progress" hidden><div class="progress" style="height: 6px" role="progressbar" aria-label="Web export activity"><div class="progress-bar progress-bar-striped progress-bar-animated bg-warning w-100"></div></div><span class="small" id="web-export-stage" role="status" aria-live="polite"></span></div><h2>Web</h2><p>Export a standalone website with the manual's styles, navigation, glossary popups and pregenerated card images.</p><button type="button" class="btn btn-warning" data-export="web">Export Web</button><p class="small mt-2 mb-0">Replaces only Exports/Manual/Web. PDF replaces only Exports/Manual/PDF. Web readers use their installed fonts.</p></article>
-			</div>
-			<p id="manual-export-status" class="mt-3" aria-live="polite"></p>
+			<p>Export controls have moved to the app's Manual Export window. Open it from the Export tab or Game menu.</p>
 		</section>
 	</div>
 </div>

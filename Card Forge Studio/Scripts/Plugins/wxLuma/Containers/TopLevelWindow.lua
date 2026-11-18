@@ -1,3 +1,5 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _wx     = require("wx");
 local _Events = require("wxLuma.Core.ControlEvents");
 local _Object = require("wxLuma.Core.ControlObject");
@@ -20,6 +22,7 @@ local TopLevelWindow = {};
 @ret table oWindow Frame, Control, Surface, Buttons, window actions and pointer adapter.
 !]]
 function TopLevelWindow.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     tOptions = tOptions or {};
     local nWidth, nHeight = tOptions.Width or 800, tOptions.Height or 600;
     local nMinWidth, nMinHeight = tOptions.MinWidth or 320, tOptions.MinHeight or 240;
@@ -35,7 +38,7 @@ function TopLevelWindow.create(oParent, tOptions)
     assert(tOptions.Title == nil or type(tOptions.Title) == "string", "Title must be a string.");
     assert(tOptions.OnClose == nil or type(tOptions.OnClose) == "function", "OnClose must be a function.");
     local bBorderless = tOptions.Borderless == true;
-    local nStyle = bBorderless and _wx.wxBORDER_NONE or _wx.wxDEFAULT_FRAME_STYLE;
+    local nStyle = bBorderless and _wx.wxBORDER_NONE or _Border.style(tOptions, _wx.wxDEFAULT_FRAME_STYLE);
     if (not bBorderless and tOptions.Resizable == false) then
         nStyle = nStyle - _wx.wxRESIZE_BORDER - _wx.wxMAXIMIZE_BOX;
     end
@@ -301,6 +304,7 @@ function TopLevelWindow.create(oParent, tOptions)
 
     _Events.attach(oWindow, {oFrame});
     oFrame:Layout(); fLayout();
+    _Theme.finish(oWindow, tOptions);
     return oWindow;
 end
 return TopLevelWindow;

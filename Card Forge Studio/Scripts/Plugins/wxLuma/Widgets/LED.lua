@@ -1,3 +1,5 @@
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx      = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events  = require("wxLuma.Core.ControlEvents");
@@ -15,6 +17,8 @@ local LED = {};
     uses 0.75 of the rendered Size. Zero suppresses the halo without toggling Glow.
 !]]
 function LED.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
     assert(tOptions and tOptions.Skin, "LED requires Skin.");
     local tValues = {Value = false, Glow = true, Glass = false, Brightness = 1, Size = 48,
         Color = {R = 80, G = 220, B = 140, A = 255}};
@@ -208,7 +212,12 @@ function LED.create(oParent, tOptions)
         fLight(oDC, "Lens", nX, nY, nSize, bEnabled);
         if (tValues.Glass) then oComponent.Skin.draw(oDC, sArtwork.." Glass", nX, nY, nSize, nSize); end
     end;
-    oComponent.onDestroy = function()
+    --[[!
+    @fqxn wxLuma.UI.LED.onThemeChanged
+    @desc Releases private material copies before the outgoing skin is disposed.
+        Application LED color, power and brightness remain unchanged.
+    !]]
+    oComponent.onThemeChanged = function()
         fClear();
         for _, tSource in pairs(tSources) do
             if (tSource.Scaled) then tSource.Scaled:delete(); end
@@ -216,6 +225,8 @@ function LED.create(oParent, tOptions)
         end
         tSources = {};
     end;
+    oComponent.onDestroy = oComponent.onThemeChanged;
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

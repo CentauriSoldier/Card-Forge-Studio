@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -20,6 +21,7 @@ local _tSides = {left = true, right = true, top = true, bottom = true, fill = tr
 @ret table oComponent Content, FloatingWindow, dock/float/isFloating and get/setDockState.
 !]]
 function DockablePanel.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local sSide, nExtent = tOptions.Side or "fill", tOptions.Extent or 220;
     assert(_tSides[sSide] and _finite(nExtent) and nExtent >= 64 and nExtent <= 32767, "Invalid dock side/extent.");
     assert(tOptions.Text == nil or type(tOptions.Text) == "string", "Invalid panel title.");
@@ -30,8 +32,9 @@ function DockablePanel.create(oParent, tOptions)
     local oContent = _wx.wxPanel(oComponent.Control, _wx.wxID_ANY, _wx.wxDefaultPosition,
         _wx.wxDefaultSize, _wx.wxTAB_TRAVERSAL + _wx.wxCLIP_CHILDREN);
     oContent:SetBackgroundColour(tArt.color("Content Normal"));
-    local oFloat = _wx.wxFrame(oParent, _wx.wxID_ANY, "", _wx.wxDefaultPosition, _wx.wxSize(360, 240),
-        _wx.wxFRAME_NO_TASKBAR + _wx.wxFRAME_FLOAT_ON_PARENT + _wx.wxBORDER_NONE);
+    local oFloat = _wx.wxFrame(oParent, _wx.wxID_ANY, oComponent.Text, _wx.wxDefaultPosition, _wx.wxSize(360, 240),
+        _wx.wxFRAME_NO_TASKBAR + _wx.wxFRAME_FLOAT_ON_PARENT + _wx.wxDEFAULT_FRAME_STYLE);
+    oFloat:SetMinClientSize(_wx.wxSize(64, 64));
     oComponent.Content, oComponent.FloatingWindow = oContent, oFloat;
     local bFloating, bChanging, bDestroying = false, false, false;
     local tDrag;
@@ -95,7 +98,10 @@ function DockablePanel.create(oParent, tOptions)
         local tOld = oComponent.getDockState();
         bChanging = true; oComponent.cancel();
         sSide, nExtent = tState.Side, tState.Extent;
-        oFloat:SetSize(math.floor(tState.X), math.floor(tState.Y), math.floor(tState.Width), math.floor(tState.Height));
+        -- Saved dimensions describe the client. Native window chrome must not
+        -- be subtracted again on every dock/float or state-restoration cycle.
+        oFloat:Move(math.floor(tState.X), math.floor(tState.Y));
+        oFloat:SetClientSize(math.floor(tState.Width), math.floor(tState.Height));
         if (tState.Floating ~= bFloating) then
             oComponent.Control:Reparent(tState.Floating and oFloat or oParent);
             bFloating = tState.Floating;
@@ -197,6 +203,7 @@ function DockablePanel.create(oParent, tOptions)
         tArt.destroy();
     end;
     fLayoutDock();
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

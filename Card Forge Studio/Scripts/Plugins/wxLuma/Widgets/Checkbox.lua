@@ -1,3 +1,6 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
+local _wx = require("wx");
 local _ControlInput = require("wxLuma.Core.ControlInput");
 local Checkbox      = {};
 
@@ -11,6 +14,8 @@ local Checkbox      = {};
 !]]
 
 function Checkbox.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
     return _ControlInput.create(oParent, tOptions, "Checkbox", function(oComponent, tInput)
         local oSkin = tOptions.Skin;
         tInput.Toggle = true;
@@ -53,7 +58,17 @@ function Checkbox.create(oParent, tOptions)
 
         -- Draw artwork for the current value and input state.
         tInput.draw = function(oDC, nWidth, nHeight, sState)
-
+            if (_Theme.isTheme(oSkin) and oSkin.getName() == "System") then
+                -- Measure the platform indicator instead of reusing PNG bounds.
+                local nW, nH = oSkin.indicatorSize(oComponent.Control);
+                tInput.drawPart(oDC, "Checkbox"..(oComponent.Selected and " On " or " Off ")..sState,
+                    0, math.floor((nHeight - nH) / 2), nW, nH);
+                oDC:SetFont(oSkin.Font);
+                local _, nTextH = oDC:GetTextExtent(oComponent.Text);
+                oSkin.text(oDC, oComponent.Text, nW + oComponent.Control:FromDIP(6),
+                    math.floor((nHeight - nTextH) / 2), tInput.enabled());
+                return;
+            end
             tInput.drawPart(oDC, "Checkbox" .. (oComponent.Selected and " On " or " Off ") .. sState, 0,
                 math.floor((nHeight - 32) / 2));
             oSkin.text(oDC, oComponent.Text, 40, math.floor((nHeight - 18) / 2), tInput.enabled());

@@ -1,6 +1,9 @@
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx             = require("wx");
 local _ControlSurface = require("wxLuma.Core.ControlSurface");
 local _ControlEvents  = require("wxLuma.Core.ControlEvents");
+local _Options        = require("wxLuma.Core.ControlOptions");
 local Tree            = {};
 
 --[[!
@@ -14,11 +17,14 @@ local Tree            = {};
 @ret table oComponent Public proxy with TreeControl and standard surface/events API.
 !]]
 function Tree.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local tInitial, tIds, tVisited = {}, {}, {};
 
     -- Validate the entire initial hierarchy before allocating native resources.
     local function fValidate(tItems, sParent)
-        assert(type(tItems) == "table", "Tree Items/Children must be tables.");
+        -- Every level must be dense before its nodes are copied. A hole in a
+        -- nested Children array must not discard the remaining branch silently.
+        _Options.array(tItems);
         assert(not tVisited[tItems], "Tree hierarchy must not contain cycles/shared child arrays.");
         tVisited[tItems] = true;
 
@@ -38,13 +44,15 @@ function Tree.create(oParent, tOptions)
         end
     end
 
-    fValidate(tOptions.Items or {}, nil);
+    local tSource = tOptions.Items;
+    if (tSource == nil) then tSource = {}; end
+    fValidate(tSource, nil);
     assert(tOptions.Value == nil or tIds[tOptions.Value], "Unknown initial tree selection.");
-    local oComponent = _ControlSurface.create(oParent, tOptions, "Tree");
+    local oComponent = _ControlSurface.create(oParent, _Border.hostOptions(tOptions), "Tree");
     local oTree = _wx.wxTreeCtrl(oComponent.Control, _wx.wxID_ANY,
         _wx.wxDefaultPosition, _wx.wxDefaultSize,
-        _wx.wxBORDER_NONE + _wx.wxTR_HAS_BUTTONS + _wx.wxTR_HIDE_ROOT + _wx.wxTR_LINES_AT_ROOT);
-    oComponent.TreeControl = oTree;
+        _Border.style(tOptions, _wx.wxTR_HAS_BUTTONS + _wx.wxTR_HIDE_ROOT + _wx.wxTR_LINES_AT_ROOT));
+    oComponent.TreeControl, oComponent.BorderControl = oTree, oTree;
     oTree:SetFont(oComponent.Skin.Font);
     oTree:SetBackgroundColour(_wx.wxColour(24, 29, 36));
     oTree:SetForegroundColour(_wx.wxColour(208, 218, 230));
@@ -359,6 +367,7 @@ function Tree.create(oParent, tOptions)
 
     oComponent.setValue(tOptions.Value);
     oComponent.onEnable(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

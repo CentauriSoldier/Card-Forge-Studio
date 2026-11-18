@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx          = require("wx");
 local _Surface     = require("wxLuma.Core.ControlSurface");
 local _Events      = require("wxLuma.Core.ControlEvents");
@@ -7,6 +8,7 @@ local _Color       = require("wxLuma.Core.ControlColor");
 local ColorPicker  = {};
 local _tChannels   = {"R", "G", "B", "H", "S", "V", "A"};
 local _tMax        = {255, 255, 255, 360, 100, 100, 255};
+local _tLayouts    = {sliders = true, square = true, wheel = true};
 
 --[[!
 @fqxn wxLuma.UI.ColorPicker.create
@@ -15,12 +17,16 @@ local _tMax        = {255, 255, 255, 360, 100, 100, 255};
     Escape, outside activation or hiding cancels. No native editor colors are used.
 @param wxWindow oParent Native owner.
 @param table tOptions Skin; optional Value ({R,G,B,A}, default opaque white),
-    Swatches (up to ten RGBA tables), Artwork (Color Picker), Enabled, OnChange.
+    Swatches (up to ten RGBA tables), Layout (sliders, square or wheel; default sliders),
+    Artwork (Color Picker), Enabled, OnChange.
 @ret table oComponent Standard surface/events with get/setValue, get/setHSV,
     get/setSwatches, open/close/isOpen and getPreview.
 !]]
 function ColorPicker.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "ColorPicker requires Skin.");
+    local sLayout = tOptions.Layout == nil and "sliders" or tOptions.Layout;
+    assert(_tLayouts[sLayout], "Invalid ColorPicker Layout.");
     local tValue = _Color.rgba(tOptions.Value or {R = 255, G = 255, B = 255});
     local tSwatches = {};
     local tEvents;
@@ -64,6 +70,42 @@ function ColorPicker.create(oParent, tOptions)
     local oEditor = _Surface.create(oPopup, {Skin = tOptions.Skin}, "ColorPickerEditor");
     oComponent.Popup, oComponent.Editor = oPopup, oEditor;
     local nPopupWidth, nPopupHeight = 360, 360;
+    local tRasters = {};
+
+    --[[!
+    @fqxn wxLuma.UI.ColorPicker.clearRasters
+    @desc Releases the bounded color-data bitmaps on layout/theme changes or disposal.
+    !]]
+    local function fClearRasters()
+        for _, tRaster in pairs(tRasters) do tRaster.Bitmap:delete(); end
+        tRasters = {};
+    end
+
+    --[[!
+    @fqxn wxLuma.UI.ColorPicker.getLayout
+    @desc Returns sliders, square or wheel independently of the selected color.
+    @ret string sLayout Current editor layout.
+    !]]
+    function oComponent.getLayout() return sLayout; end
+
+    --[[!
+    @fqxn wxLuma.UI.ColorPicker.setLayout
+    @desc Changes layout without committing or discarding an open preview. Cancels
+        any drag, releases raster caches and optionally emits layoutChanged.
+    @param string sNext sliders, square or wheel.
+    @param boolean|nil bNotify Notify an effective layout change.
+    @ret table oComponent This object.
+    !]]
+    function oComponent.setLayout(sNext, bNotify)
+        assert(not oComponent.Disposed and _tLayouts[sNext], "Invalid ColorPicker Layout or disposed control.");
+        if (sNext ~= sLayout) then
+            local sOld = sLayout;
+            oEditor.cancel(); nRow = 1; sLayout = sNext;
+            fClearRasters(); oEditor.refresh();
+            if (bNotify) then tEvents.emit("layoutChanged", {Layout = sNext, OldLayout = sOld}); end
+        end
+        return oComponent;
+    end
 
     --[[!
     @fqxn wxLuma.UI.ColorPicker.fEqual
@@ -261,7 +303,8 @@ function ColorPicker.create(oParent, tOptions)
         else
             local tNext = _Color.rgba(tPreview);
             tNext[sChannel] = math.floor(nValue + 0.5);
-            fPreview(tNext);
+            -- Alpha edits retain an explicitly selected hue in gray/black previews.
+            fPreview(tNext, nIndex == 7 and tHSV or nil);
         end
     end
 
@@ -288,6 +331,140 @@ function ColorPicker.create(oParent, tOptions)
                 oColor:delete();
             end
         end
+    end
+
+    --[[!
+    @fqxn wxLuma.UI.ColorPicker.raster
+    @desc Caches one bitmap per color surface, at most four in square mode and
+        three in wheel mode. Native interpolation bounds gradient sampling work;
+        markers never rebuild the color data.
+        fPixel returns RGBA color data, not decorative skin artwork.
+    !]]
+    local function fRaster(sPart, sKey, nWidth, nHeight, fPixel)
+        local tEntry = tRasters[sPart];
+        if (not tEntry or tEntry.Key ~= sKey) then
+            local oImage = _wx.wxImage(nWidth, nHeight);
+            oImage:InitAlpha();
+            for nY = 0, nHeight - 1 do
+                for nX = 0, nWidth - 1 do
+                    local tColor = fPixel(nX, nY);
+                    oImage:SetRGB(nX, nY, tColor.R, tColor.G, tColor.B);
+                    oImage:SetAlpha(nX, nY, tColor.A or 255);
+                end
+            end
+            local bPlane = sPart == "plane" or sPart == "saturation" or sPart == "value";
+            local oScaled = oImage:Scale(bPlane and 216 or 24, 216, _wx.wxIMAGE_QUALITY_HIGH);
+            local oBitmap = _wx.wxBitmap(oScaled);
+            oScaled:delete(); oImage:delete();
+            if (tEntry) then tEntry.Bitmap:delete(); end
+            tEntry = {Key = sKey, Bitmap = oBitmap}; tRasters[sPart] = tEntry;
+        end
+        return tEntry.Bitmap;
+    end
+
+    --[[!
+    @fqxn wxLuma.UI.ColorPicker.graphicHit
+    @desc Shares exact plane/bar bounds with drawing. Wheel corners are inactive;
+        captured drags can continue outside the original circle.
+    !]]
+    local function fGraphicHit(nX, nY)
+        if (nY < 54 or nY >= 270) then return nil; end
+        if (nX >= 12 and nX < 228) then
+            if (sLayout == "square" or (nX - 119.5)^2 + (nY - 161.5)^2 <= 107.5^2) then return "plane"; end
+        elseif (nX >= 248 and nX < 272) then return "primary";
+        elseif (nX >= 304 and nX < 328) then return "alpha"; end
+    end
+
+    --[[!
+    @fqxn wxLuma.UI.ColorPicker.graphicInput
+    @desc Maps captured coordinates to HSV or alpha without changing committed RGBA.
+    !]]
+    local function fGraphicInput(sPart, nX, nY)
+        local nFraction = math.max(0, math.min(1, (nY - 54) / 215));
+        if (sPart == "alpha") then fChannel(7, (1 - nFraction) * 255); return; end
+        if (sPart == "primary") then fChannel(sLayout == "square" and 4 or 6, (1 - nFraction) * (sLayout == "square" and 360 or 100)); return; end
+        local tNext = {H = tHSV.H, S = tHSV.S, V = tHSV.V, A = tPreview.A};
+        if (sLayout == "square") then
+            tNext.S = math.max(0, math.min(100, (nX - 12) / 215 * 100));
+            tNext.V = (1 - nFraction) * 100;
+        else
+            local nDX, nDY = nX - 119.5, 161.5 - nY;
+            local nDistance = math.sqrt(nDX * nDX + nDY * nDY);
+            if (nDistance > 0) then tNext.H = math.deg(math.atan(nDY, nDX)) % 360; end
+            tNext.S = math.min(100, nDistance / 107.5 * 100);
+        end
+        fPreview(_Color.fromHSV(tNext), tNext);
+    end
+
+    --[[!
+    @fqxn wxLuma.UI.ColorPicker.drawGraphic
+    @desc Draws an HSV square or hue/saturation wheel beside hue/value and alpha
+        bars. Transparent data blends over the current skin's checker palette.
+    !]]
+    local function fDrawGraphic(oDC)
+        if (sLayout == "square") then
+            -- HSV is a pure hue blended toward white by saturation, then toward
+            -- black by value. These two overlays stay valid for every hue.
+            local tHue = _Color.fromHSV({H = tHSV.H, S = 100, V = 100});
+            local oColor = _wx.wxColour(tHue.R, tHue.G, tHue.B);
+            local oBrush = _wx.wxBrush(oColor);
+            oDC:SetBrush(oBrush); oDC:SetPen(_wx.wxTRANSPARENT_PEN);
+            oDC:DrawRectangle(12, 54, 216, 216);
+            oBrush:delete(); oColor:delete();
+            local oSaturation = fRaster("saturation", "white", 108, 1, function(nX)
+                return {R = 255, G = 255, B = 255, A = math.floor((1 - nX / 107) * 255 + 0.5)};
+            end);
+            local oValue = fRaster("value", "black", 1, 108, function(_, nY)
+                return {R = 0, G = 0, B = 0, A = math.floor(nY / 107 * 255 + 0.5)};
+            end);
+            oDC:DrawBitmap(oSaturation, 12, 54, true);
+            oDC:DrawBitmap(oValue, 12, 54, true);
+        else
+            local oPlane = fRaster("plane", "wheel", 108, 108, function(nX, nY)
+                local nDX, nDY = nX - 53.5, 53.5 - nY;
+                local nRadius = math.sqrt(nDX * nDX + nDY * nDY);
+                return _Color.fromHSV({H = math.deg(math.atan(nDY, nDX)) % 360,
+                    S = math.min(100, nRadius / 53.5 * 100), V = 100,
+                    A = math.floor(math.max(0, math.min(1, 54 - nRadius)) * 255 + 0.5)});
+            end);
+            oDC:DrawBitmap(oPlane, 12, 54, true);
+        end
+        local sPrimaryKey = sLayout == "square" and "hue" or tostring(tHSV.H)..":"..tostring(tHSV.S);
+        local oPrimary = fRaster("primary", sPrimaryKey, 1, 108, function(_, nY)
+            return _Color.fromHSV({H = sLayout == "square" and (1 - nY / 107) * 360 or tHSV.H,
+                S = sLayout == "square" and 100 or tHSV.S, V = sLayout == "square" and 100 or (1 - nY / 107) * 100});
+        end);
+        oDC:DrawBitmap(oPrimary, 248, 54, false);
+        local oLight, oDark = tArt.color("Check Light"), tArt.color("Check Dark");
+        local sAlphaKey = tPreview.R..":"..tPreview.G..":"..tPreview.B;
+        local oAlpha = fRaster("alpha", sAlphaKey, 12, 108, function(nX, nY)
+            local nAlpha = 1 - nY / 107;
+            local oBase = (math.floor(nX / 3) + math.floor(nY / 3)) % 2 == 0 and oLight or oDark;
+            return {R = math.floor(tPreview.R * nAlpha + oBase:Red() * (1 - nAlpha) + 0.5),
+                G = math.floor(tPreview.G * nAlpha + oBase:Green() * (1 - nAlpha) + 0.5),
+                B = math.floor(tPreview.B * nAlpha + oBase:Blue() * (1 - nAlpha) + 0.5)};
+        end);
+        oDC:DrawBitmap(oAlpha, 304, 54, false);
+        tArt.text(oDC, sLayout == "square" and "H" or "V", 254, 32, true);
+        tArt.text(oDC, "A", 310, 32, true);
+        local nMarkerX, nMarkerY;
+        if (sLayout == "square") then nMarkerX, nMarkerY = 12 + tHSV.S / 100 * 215, 54 + (1 - tHSV.V / 100) * 215;
+        else
+            local nAngle = math.rad(tHSV.H);
+            nMarkerX, nMarkerY = 119.5 + math.cos(nAngle) * tHSV.S / 100 * 107.5,
+                161.5 - math.sin(nAngle) * tHSV.S / 100 * 107.5;
+        end
+        -- Paired black/white rings remain visible against every selectable color.
+        for _, tRing in ipairs({{0, 5}, {255, 4}}) do
+            local oColor = _wx.wxColour(tRing[1], tRing[1], tRing[1]);
+            local oPen = _wx.wxPen(oColor, 1, _wx.wxPENSTYLE_SOLID);
+            oDC:SetPen(oPen); oDC:SetBrush(_wx.wxTRANSPARENT_BRUSH);
+            oDC:DrawCircle(math.floor(nMarkerX + 0.5), math.floor(nMarkerY + 0.5), tRing[2]);
+            oPen:delete(); oColor:delete();
+        end
+        local nPrimary = sLayout == "square" and tHSV.H / 360 or tHSV.V / 100;
+        tArt.part(oDC, "Thumb", 244, 50 + (1 - nPrimary) * 215, 32, 8);
+        tArt.part(oDC, "Thumb", 300, 50 + (1 - tPreview.A / 255) * 215, 32, 8);
     end
     oComponent.draw = function(oDC, nWidth, nHeight)
         if (oComponent.Disposed) then
@@ -319,16 +496,20 @@ function ColorPicker.create(oParent, tOptions)
         tArt.part(oDC, "Popup", 0, 0, nWidth, nHeight);
         fSwatch(oDC, tPreview, 12, 12, 48, 28);
         tArt.text(oDC, string.format("#%02X%02X%02X%02X", tPreview.R, tPreview.G, tPreview.B, tPreview.A), 72, 16, true);
-        for nIndex, sChannel in ipairs(_tChannels) do
-            local nY = 54 + (nIndex - 1) * 32;
-            local nValue = nIndex >= 4 and nIndex <= 6 and tHSV[sChannel] or tPreview[sChannel];
-            tArt.text(oDC, sChannel.." "..math.floor(nValue + 0.5), 12, nY + 4, true);
-            tArt.part(oDC, "Track", 92, nY + 7, 244, 12);
-            local nFill = math.floor(nValue / _tMax[nIndex] * 244);
-            tArt.part(oDC, "Fill", 92, nY + 7, nFill, 12);
-            tArt.part(oDC, "Thumb", 88 + nFill, nY + 3, 8, 20);
-            if (nIndex == nRow) then
-                tArt.part(oDC, "Focus", 8, nY + 26, 336, 2);
+        if (sLayout ~= "sliders") then
+            fDrawGraphic(oDC);
+        else
+            for nIndex, sChannel in ipairs(_tChannels) do
+                local nY = 54 + (nIndex - 1) * 32;
+                local nValue = nIndex >= 4 and nIndex <= 6 and tHSV[sChannel] or tPreview[sChannel];
+                tArt.text(oDC, sChannel.." "..math.floor(nValue + 0.5), 12, nY + 4, true);
+                tArt.part(oDC, "Track", 92, nY + 7, 244, 12);
+                local nFill = math.floor(nValue / _tMax[nIndex] * 244);
+                tArt.part(oDC, "Fill", 92, nY + 7, nFill, 12);
+                tArt.part(oDC, "Thumb", 88 + nFill, nY + 3, 8, 20);
+                if (nIndex == nRow) then
+                    tArt.part(oDC, "Focus", 8, nY + 26, 336, 2);
+                end
             end
         end
         for nIndex, tColor in ipairs(tSwatches) do
@@ -365,7 +546,11 @@ function ColorPicker.create(oParent, tOptions)
         if (sEvent == "down") then
             sPressed = sHit;
             oEditor.refresh();
-            if (nY >= 54 and nY < 278 and nX >= 88 and nX <= 340) then
+            if (sLayout ~= "sliders" and fGraphicHit(nX, nY)) then
+                nDrag = fGraphicHit(nX, nY);
+                nRow = nDrag == "plane" and 1 or nDrag == "primary" and 2 or 3;
+                fGraphicInput(nDrag, nX, nY);
+            elseif (sLayout == "sliders" and nY >= 54 and nY < 278 and nX >= 88 and nX <= 340) then
                 nDrag = math.floor((nY - 54) / 32) + 1;
                 nRow = nDrag;
                 fChannel(nDrag, (nX - 92) / 244 * _tMax[nDrag]);
@@ -376,12 +561,30 @@ function ColorPicker.create(oParent, tOptions)
                 end
             end
         elseif (sEvent == "move" and nDrag and oEditor.Pressed) then
-            fChannel(nDrag, (nX - 92) / 244 * _tMax[nDrag]);
+            if (sLayout == "sliders") then fChannel(nDrag, (nX - 92) / 244 * _tMax[nDrag]);
+            else fGraphicInput(nDrag, nX, nY); end
         elseif (sEvent == "up" and sHit and sPressed == sHit) then
             oComponent.close(sHit == "apply");
         end
     end;
     oEditor.key = function(nKey, tModifiers)
+        if (sLayout ~= "sliders" and nKey ~= _wx.WXK_ESCAPE and nKey ~= _wx.WXK_RETURN and nKey ~= _wx.WXK_NUMPAD_ENTER) then
+            if (nKey == _wx.WXK_TAB) then
+                nRow = (nRow - 1 + (tModifiers and tModifiers.Shift and -1 or 1)) % 3 + 1;
+                oEditor.refresh(); return true;
+            end
+            local nChannel = nRow == 3 and 7 or nRow == 2 and (sLayout == "square" and 4 or 6)
+                or (sLayout == "square" and 5 or 4);
+            if (nRow == 1 and (nKey == _wx.WXK_UP or nKey == _wx.WXK_DOWN)) then nChannel = sLayout == "square" and 6 or 5; end
+            local nDelta = (nKey == _wx.WXK_LEFT or nKey == _wx.WXK_DOWN or nKey == _wx.WXK_PAGEDOWN) and -1 or 1;
+            if (nKey == _wx.WXK_PAGEUP or nKey == _wx.WXK_PAGEDOWN) then nDelta = nDelta * 10;
+            elseif (nKey ~= _wx.WXK_LEFT and nKey ~= _wx.WXK_RIGHT and nKey ~= _wx.WXK_UP and nKey ~= _wx.WXK_DOWN
+                and nKey ~= _wx.WXK_HOME and nKey ~= _wx.WXK_END) then return false; end
+            local sChannel = _tChannels[nChannel];
+            local nValue = nChannel == 7 and tPreview.A or tHSV[sChannel];
+            fChannel(nChannel, nKey == _wx.WXK_HOME and 0 or nKey == _wx.WXK_END and _tMax[nChannel] or nValue + nDelta);
+            return true;
+        end
         if (nKey == _wx.WXK_ESCAPE) then
             oComponent.close(false);
         elseif (nKey == _wx.WXK_RETURN or nKey == _wx.WXK_NUMPAD_ENTER) then
@@ -436,6 +639,7 @@ function ColorPicker.create(oParent, tOptions)
         bOpen = false;
         oEditor.destroy();
         oPopup:Destroy();
+        fClearRasters();
         tArt.destroy();
     end;
     tPolicy.watch(function(sReason)
@@ -444,7 +648,9 @@ function ColorPicker.create(oParent, tOptions)
         end
     end);
     tEvents = _Events.attach(oComponent, {oEditor.Control}, {"opened", "closed", "previewChanged",
-        "committed", "cancelled", "swatchesChanged"});
+        "committed", "cancelled", "swatchesChanged", "layoutChanged"});
+    oComponent.onThemeChanged = fClearRasters;
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

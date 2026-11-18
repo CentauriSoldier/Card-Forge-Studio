@@ -5,7 +5,7 @@ const notice = document.getElementById('admin-notice');
 const saveStatus = document.getElementById('save-status');
 let version = adminApp.dataset.version;
 let dirty = false;
-let styleDirty = false;
+let savedContent = editor.value;
 let glossaryDirty = false;
 let previewTimer;
 let previewController;
@@ -22,9 +22,10 @@ async function post(action, values = {}, signal) {
 	return result;
 }
 
-function changed() {
-	dirty = true;
-	saveStatus.textContent = 'Unsaved changes';
+function changed(event) {
+	window.CFSManualEditing?.record(event?.type === 'input');
+	dirty = editor.value !== savedContent;
+	saveStatus.textContent = dirty ? 'Unsaved changes' : 'Saved';
 	clearTimeout(previewTimer);
 	previewTimer = setTimeout(preview, 650);
 }
@@ -47,7 +48,8 @@ async function save() {
 	try {
 		const result = await post('save', { file: adminApp.dataset.file, content: submitted, version });
 		version = result.version;
-		dirty = editor.value !== submitted;
+		savedContent = submitted;
+		dirty = editor.value !== savedContent;
 		saveStatus.textContent = dirty ? 'Unsaved changes' : 'Saved';
 		showNotice(result.message);
 	} catch (error) {
@@ -67,7 +69,7 @@ editor.addEventListener('keydown', event => {
 document.getElementById('save-content').addEventListener('click', save);
 document.getElementById('preview-content').addEventListener('click', preview);
 window.addEventListener('beforeunload', event => {
-	if (dirty || styleDirty || glossaryDirty || window.CFSManual.hasSettingsDrafts()) { event.preventDefault(); event.returnValue = ''; }
+	if (dirty || glossaryDirty || window.CFSManual.hasSettingsDrafts()) { event.preventDefault(); event.returnValue = ''; }
 });
 document.getElementById('content-file').addEventListener('change', event => {
 	if ((dirty || glossaryDirty) && !confirm('Leave this file without saving your changes?')) {
@@ -181,8 +183,9 @@ document.addEventListener('click', event => {
 		const delimiters = {bold: ['**', '**'], italic: ['*', '*'], code: ['`', '`'], strike: ['~~', '~~'], heading: ['## ', ''], bullet: ['- ', ''], quote: ['> ', '']};
 		const pair = delimiters[button.dataset.wrapMarkdown];
 		if (!style && !pair) return;
-		const open = style ? '<' + style + '>' : pair[0];
-		const close = style ? '</' + style + '>' : pair[1];
+		const prefix = !button.hasAttribute('data-glossary-tag') && ['sup', 'g'].includes(style?.toLowerCase()) ? ':' : '';
+		const open = style ? '<' + prefix + style + '>' : pair[0];
+		const close = style ? '</' + prefix + style + '>' : pair[1];
 		const ranges = mergeEditorSelections(editorSelections.map(range => {
 			let { start, end } = range;
 			while (start < end && /\s/.test(editor.value[start])) start++;
@@ -208,6 +211,7 @@ document.addEventListener('click', event => {
 			replacement += original.slice(position, range.start) + open + original.slice(range.start, range.end) + close;
 			position = range.end;
 		});
+		window.CFSManualEditing?.before();
 		editor.setRangeText(replacement, first, last, 'end');
 		editor.focus({ preventScroll: true });
 		const active = updatedSelections[updatedSelections.length - 1];
@@ -261,176 +265,13 @@ function element(tag, text, className) {
 	return node;
 }
 
-// Web-only style editing. Every successful write reloads fresh CSS and tags.
-let webStyleState = JSON.parse(document.getElementById('web-style-data').textContent);
-let selectedWebStyle = null;
-let creatingWebStyle = false;
-let webStyleBaseline = '';
-let webStyleCSSBaseline = '';
-const webStyleSelect = document.getElementById('web-style-select');
-const webStyleForm = document.getElementById('web-style-form');
-const styleField = name => document.getElementById('web-style-' + name);
-// Inline sample properties avoid file-origin CSSOM restrictions in WebView.
-const previewRule = {style: styleField('sample').style};
-
-function webStyleValues() {
-	return {
-		name: styleField('name').value.trim(), family: styleField('family').value,
-		bold: styleField('bold').checked, italic: styleField('italic').checked,
-		underline: styleField('underline').checked, strike: styleField('strike').checked,
-		color: styleField('color').value, size_mode: styleField('size-mode').value,
-		size_value: Number(styleField('size-value').value), remove_tags: styleField('remove-tags').checked,
-	};
-}
-
-function webStyleEditFingerprint() {
-	const values = webStyleValues();
-	delete values.remove_tags;
-	if (['auto', 'custom'].includes(values.size_mode)) values.size_value = 0;
-	return JSON.stringify(values);
-}
-
-function webStyleHasCSSDraft() {
-	return styleField('css').value !== webStyleCSSBaseline;
-}
-
-function previewWebStyle() {
-	const value = webStyleValues();
-	let size = 'inherit';
-	if (value.size_mode === 'fixed') size = value.size_value > 0 ? value.size_value + 'px' : 'inherit';
-	if (value.size_mode === 'relative') size = 'calc(1em ' + (value.size_value < 0 ? '- ' : '+ ') + Math.abs(value.size_value) + 'px)';
-	if (value.size_mode === 'custom') size = webStyleState.styles[selectedWebStyle]?.size_raw || 'inherit';
-	styleField('size-value').disabled = ['auto', 'custom'].includes(value.size_mode);
-	styleField('size-value').min = value.size_mode === 'fixed' ? '.1' : '-200';
-	styleField('size-value').max = value.size_mode === 'fixed' ? '300' : '200';
-	styleField('size-description').textContent = 'Font size: ' + size;
-	if (!previewRule) return;
-	const properties = {
-		'font-family': JSON.stringify(value.family) + ', sans-serif', 'font-size': size,
-		'font-synthesis': 'weight style', 'font-weight': value.bold ? '700' : '400', 'font-style': value.italic ? 'italic' : 'normal',
-		'text-decoration-line': [value.underline ? 'underline' : '', value.strike ? 'line-through' : ''].filter(Boolean).join(' ') || 'none',
-		'color': value.color,
-	};
-	Object.entries(properties).forEach(([name, property]) => previewRule.style.setProperty(name, property));
-	const channels = value.color.match(/[a-f0-9]{2}/gi)?.map(channel => parseInt(channel, 16)) || [230, 227, 218];
-	const brightness = channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
-	document.querySelector('.style-preview-box').classList.toggle('style-preview-light', brightness < 120);
-}
-
-function loadWebStyle(key = null) {
-	creatingWebStyle = key === null;
-	selectedWebStyle = key;
-	const value = webStyleState.styles[key] || {name: '', family: 'Control Freak', bold: false, italic: false, underline: false, strike: false, color: '#e6e3da', size_mode: 'auto', size_value: 0};
-	webStyleSelect.value = key || '';
-	styleField('name').value = value.name;
-	styleField('family').value = value.family;
-	for (const flag of ['bold', 'italic', 'underline', 'strike']) styleField(flag).checked = value[flag];
-	styleField('color').value = value.color;
-	styleField('size-mode').value = value.size_mode;
-	styleField('size-value').value = value.size_value;
-	styleField('remove-tags').checked = true;
-	styleField('sample').className = 'style-editor-sample' + (key ? ' font-' + key : '');
-	document.getElementById('delete-web-style').disabled = creatingWebStyle;
-	document.getElementById('save-web-style').textContent = creatingWebStyle ? 'Create style' : 'Save style';
-	styleField('status').textContent = creatingWebStyle ? 'New style' : 'Saved';
-	styleDirty = false;
-	webStyleBaseline = webStyleEditFingerprint();
-	styleField('css').value = value.css_body || '';
-	webStyleCSSBaseline = styleField('css').value;
-	styleField('css').disabled = creatingWebStyle;
-	document.getElementById('save-web-style-css').disabled = true;
-	styleField('css-status').textContent = creatingWebStyle ? 'Create the style first to edit its CSS.' : 'Saved';
-	previewWebStyle();
-}
-
-webStyleState.families.forEach(family => {
-	const option = element('option', family); option.value = family; styleField('family').append(option);
-});
-const newOption = element('option', 'New web style…'); newOption.value = ''; webStyleSelect.append(newOption);
-Object.entries(webStyleState.styles).forEach(([key, style]) => {
-	const option = element('option', style.name); option.value = key; webStyleSelect.append(option);
-});
-const previousStyle = sessionStorage.getItem('skystrike-selected-web-style');
-sessionStorage.removeItem('skystrike-selected-web-style');
-loadWebStyle(webStyleState.styles[previousStyle] ? previousStyle : Object.keys(webStyleState.styles)[0] || null);
-if (location.hash === '#style-editor-tab') bootstrap.Tab.getOrCreateInstance(document.querySelector('[data-bs-target="#style-editor-tab"]')).show();
-
-webStyleSelect.addEventListener('change', () => {
-	if (styleDirty && !confirm('Discard the unsaved style changes?')) { webStyleSelect.value = selectedWebStyle || ''; return; }
-	loadWebStyle(webStyleSelect.value || null);
-});
-document.getElementById('new-web-style').addEventListener('click', () => {
-	if (styleDirty && !confirm('Discard the unsaved style changes?')) return;
-	loadWebStyle(); styleField('name').focus();
-});
-webStyleForm.addEventListener('input', event => {
-	if (event.target === webStyleSelect || event.target === styleField('remove-tags')) return;
-	styleDirty = webStyleEditFingerprint() !== webStyleBaseline || webStyleHasCSSDraft();
-	styleField('status').textContent = styleDirty ? 'Unsaved changes' : (creatingWebStyle ? 'New style' : 'Saved');
-	previewWebStyle();
-});
-
-async function writeWebStyle(action) {
-	if (window.CFSManual.hasSettingsDrafts()) { showNotice('Let settings finish saving, or correct their save error, before changing styles.', true); return; }
-	if (dirty || glossaryDirty) { showNotice('Save your content and glossary drafts before changing styles.', true); return; }
-	if (action !== 'delete' && webStyleHasCSSDraft() && !confirm('Save the form values and discard the unsaved CSS text?')) return;
-	if (action !== 'delete' && !webStyleForm.reportValidity()) return;
-	if (action === 'delete' && !confirm('Delete ' + webStyleState.styles[selectedWebStyle].name + '?' + (styleField('remove-tags').checked ? ' Matching Markdown tags will be removed; their text will remain.' : ' Existing Markdown tags will be left unchanged.'))) return;
-	const buttons = ['save-web-style', 'delete-web-style', 'new-web-style'].map(id => document.getElementById(id));
-	buttons.forEach(button => { button.disabled = true; });
-	try {
-		const values = webStyleValues();
-		const result = await post('style-' + action, {
-			name: creatingWebStyle ? values.name : webStyleState.styles[selectedWebStyle].name,
-			version: webStyleState.version, values: JSON.stringify(values),
-		});
-		styleDirty = false;
-		sessionStorage.setItem('skystrike-selected-web-style', action === 'delete' ? '' : values.name.toLowerCase());
-		showNotice(result.message);
-		location.hash = 'style-editor-tab';
-		location.reload();
-	} catch (error) {
-		showNotice(error.message, true);
-		buttons.forEach(button => { button.disabled = false; });
-		document.getElementById('delete-web-style').disabled = creatingWebStyle;
-	}
-}
-webStyleForm.addEventListener('submit', event => { event.preventDefault(); writeWebStyle(creatingWebStyle ? 'create' : 'save'); });
-document.getElementById('delete-web-style').addEventListener('click', () => writeWebStyle('delete'));
-styleField('css').addEventListener('input', () => {
-	styleDirty = webStyleEditFingerprint() !== webStyleBaseline || webStyleHasCSSDraft();
-	document.getElementById('save-web-style-css').disabled = !webStyleHasCSSDraft();
-	styleField('css-status').textContent = webStyleHasCSSDraft() ? 'Unsaved CSS' : 'Saved';
-});
-document.getElementById('save-web-style-css').addEventListener('click', async () => {
-	if (window.CFSManual.hasSettingsDrafts()) { showNotice('Let settings finish saving, or correct their save error, before saving CSS.', true); return; }
-	if (creatingWebStyle || !webStyleHasCSSDraft()) return;
-	if (dirty || glossaryDirty) { showNotice('Save your content and glossary drafts before saving CSS.', true); return; }
-	if (webStyleEditFingerprint() !== webStyleBaseline && !confirm('Save the CSS text and replace the unsaved form values with its saved values?')) return;
-	const button = document.getElementById('save-web-style-css');
-	const controls = Array.from(webStyleForm.elements).map(control => [control, control.disabled]);
-	controls.forEach(([control]) => { control.disabled = true; });
-	button.disabled = true; styleField('css').disabled = true;
-	try {
-		const result = await post('style-css-save', {name: webStyleState.styles[selectedWebStyle].name, css: styleField('css').value, version: webStyleState.version});
-		styleDirty = false;
-		sessionStorage.setItem('skystrike-selected-web-style', selectedWebStyle);
-		showNotice(result.message);
-		location.hash = 'style-editor-tab';
-		location.reload();
-	} catch (error) { showNotice(error.message, true); }
-	finally { controls.forEach(([control, disabled]) => { control.disabled = disabled; }); styleField('css').disabled = false; button.disabled = !webStyleHasCSSDraft(); }
-});
-
-
-
 const documentOrderList = document.getElementById('document-order-list');
 let documentOrderState = JSON.parse(document.getElementById('document-order-data').textContent);
 let draggedDocument = null;
 let savingDocumentOrder = false;
 if (location.hash === '#document-order-tab') bootstrap.Tab.getOrCreateInstance(document.querySelector('[data-bs-target="#document-order-tab"]')).show();
 function canChangeDocumentOrder() {
-	if (dirty || styleDirty || glossaryDirty) { showNotice('Save your drafts before changing document order.', true); return false; }
+	if (dirty || glossaryDirty) { showNotice('Save your drafts before changing document order.', true); return false; }
 	return !savingDocumentOrder;
 }
 async function saveDocumentOrder() {
@@ -608,7 +449,7 @@ async function saveGlossaryDocument() {
 		loadGlossaryEntry(result.entry_id, true);
 		glossaryDocumentStatus.textContent = glossaryDocument.value !== submitted || glossaryTitle.value !== submittedTitle ? 'Unsaved changes' : 'Saved';
 		if (adminApp.dataset.file === glossaryState.document.file && !dirty) {
-			editor.value = result.source_content; version = result.version; captureEditorSelection();
+			editor.value = result.source_content; savedContent = editor.value; version = result.version; captureEditorSelection(); window.CFSManualEditing?.reset();
 			await preview();
 		}
 		showNotice(result.message);
@@ -625,9 +466,10 @@ document.getElementById('glossary-apply-style').addEventListener('click', () => 
 	while (start < end && /\s/.test(glossaryDocument.value[start])) start++;
 	while (end > start && /\s/.test(glossaryDocument.value[end - 1])) end--;
 	const style = document.getElementById('glossary-document-style').value;
-	const open = '<' + style + '>';
+	const prefix = ['sup', 'g'].includes(style.toLowerCase()) ? ':' : '';
+	const open = '<' + prefix + style + '>';
 	const selected = glossaryDocument.value.slice(start, end);
-	glossaryDocument.setRangeText(open + selected + '</' + style + '>', start, end, 'end');
+	glossaryDocument.setRangeText(open + selected + '</' + prefix + style + '>', start, end, 'end');
 	glossaryDocument.focus(); glossaryDocument.setSelectionRange(start + open.length, start + open.length + selected.length);
 	glossaryDocumentChanged();
 });
@@ -686,7 +528,7 @@ document.getElementById('glossary-delete').addEventListener('click', async () =>
 		glossaryEntry.replaceChildren();
 		Object.entries(glossaryState.entries).forEach(([id, entry]) => { const option = element('option', entry.title); option.value = id; glossaryEntry.append(option); });
 		loadGlossaryEntry(Object.keys(glossaryState.entries)[0] || null);
-		if (adminApp.dataset.file === glossaryState.document.file && !dirty) { editor.value = result.source_content; version = result.version; captureEditorSelection(); await preview(); }
+		if (adminApp.dataset.file === glossaryState.document.file && !dirty) { editor.value = result.source_content; savedContent = editor.value; version = result.version; captureEditorSelection(); window.CFSManualEditing?.reset(); await preview(); }
 		showNotice('Glossary entry deleted. Previous content and alternatives were backed up.');
 	} catch (error) { showNotice(error.message, true); }
 	finally { button.disabled = !glossarySelected; glossaryEntry.disabled = false; }
@@ -695,5 +537,5 @@ document.querySelectorAll('[data-glossary-help]').forEach(button => bootstrap.Po
 if (location.hash === '#glossary-tab') bootstrap.Tab.getOrCreateInstance(document.querySelector('[data-bs-target="#glossary-tab"]')).show();
 
 // Native close protection observes the same draft flags as the original page.
-window.CFSManual.bindDirty(() => dirty || styleDirty || glossaryDirty);
+window.CFSManual.bindDirty(() => dirty || glossaryDirty);
 window.CFSManual.reportDirty();

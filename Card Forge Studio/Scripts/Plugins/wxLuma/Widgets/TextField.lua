@@ -1,20 +1,25 @@
+local _Border = require("wxLuma.Core.ControlBorder");
 local _wx           = require("wx");
 local _Events       = require("wxLuma.Core.ControlEvents");
+local _Theme        = require("wxLuma.Core.ControlTheme");
 local TextField     = {};
 local createSurface = require("wxLuma.Core.ControlSurface").create;
 
 --[[!
 @fqxn wxLuma.UI.TextField.create
-@param table tOptions Skin; optional Value (string), Hint, MaxLength, ReadOnly, Enabled, OnChange, OnEnter.
+@param table tOptions Optional Theme or legacy Skin; Value, Hint, MaxLength, ReadOnly, Enabled, OnChange, OnEnter.
 @desc Native single-line editing, selection and clipboard inside a skinned frame.
       setValue does not notify by default; TextControl exposes native editing API.
 !]]
 function TextField.create(oParent, tOptions)
-    local oComponent = createSurface(oParent, tOptions, "Textfield");
+    local oTheme;
+    tOptions, oTheme = _Theme.options(tOptions, oParent);
+    local oComponent = createSurface(oParent, _Border.hostOptions(tOptions), "Textfield");
     oComponent.TextControl = _wx.wxTextCtrl(oComponent.Control, _wx.wxID_ANY, tOptions.Value or "",
         _wx.wxDefaultPosition, _wx.wxDefaultSize,
-        _wx.wxBORDER_NONE + _wx.wxTE_PROCESS_ENTER);
+        _Border.style(tOptions, _wx.wxTE_PROCESS_ENTER));
     local oText = oComponent.TextControl;
+    oComponent.BorderControl = oText;
     oText:SetFont(oComponent.Skin.Font);
     oText:SetBackgroundColour(_wx.wxColour(24, 29, 36));
     oText:SetForegroundColour(_wx.wxColour(208, 218, 230));
@@ -102,6 +107,39 @@ function TextField.create(oParent, tOptions)
     oComponent.setEnabled(tOptions.Enabled ~= false);
     -- Native editor interaction belongs to this field's public subscriptions.
     _Events.attach(oComponent, {oText});
+    if (oTheme) then
+        local fEnable = oComponent.onEnable;
+        oComponent.onEnable = function(bEnabled)
+            fEnable(bEnabled);
+            oText:SetForegroundColour(oTheme.color("Text", bEnabled));
+        end;
+        -- Keep the native editor and its text/selection alive across skin changes.
+        oComponent.draw = function(oDC, nWidth, nHeight)
+            if (oComponent.Disposed) then return; end
+            oTheme.editor(oComponent, oDC, nWidth, nHeight);
+            oComponent.drawContent(oDC, nWidth, nHeight);
+        end;
+        oComponent.onLayout = function(nWidth, nHeight)
+            local nTextHeight = oText:GetCharHeight() + 6;
+            oText:SetSize(9, math.max(2, math.floor((nHeight - nTextHeight) / 2)),
+                math.max(1, nWidth - 18), math.max(1, math.min(nTextHeight, nHeight - 4)));
+        end;
+        oTheme.attach(oComponent, function()
+            local nStart, nEnd = oText:GetSelection();
+            oText:SetFont(oTheme.Font);
+            oText:SetBackgroundColour(oTheme.color("Editor"));
+            oText:SetForegroundColour(oTheme.color("Text", oComponent.isEnabled()));
+            oComponent.Control:SetBackgroundColour(oTheme.color("Editor"));
+            oComponent.onLayout(oComponent.Control:GetClientSizeWH());
+            -- Native framed editors can update selection during WM_SIZE.
+            -- Restore it after font and bounds changes have both completed.
+            oText:SetSelection(nStart, nEnd);
+            oText:Refresh(false); oComponent.refresh();
+        end);
+        for _, nEvent in ipairs({_wx.wxEVT_SET_FOCUS, _wx.wxEVT_KILL_FOCUS}) do
+            oText:Connect(nEvent, function(oEvent) oComponent.refresh(); oEvent:Skip(); end);
+        end
+    end
     return oComponent;
 end
 

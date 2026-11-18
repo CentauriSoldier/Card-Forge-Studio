@@ -1,5 +1,6 @@
 local _wx             = require("wx");
 local _finite         = require("wxLuma.Core.ControlNumeric").finite;
+local _Options        = require("wxLuma.Core.ControlOptions");
 local ListRowRenderer = {};
 
 --[[!
@@ -13,6 +14,9 @@ local ListRowRenderer = {};
 !]]
 function ListRowRenderer.create(tDefinitions, oSkin)
     assert(type(tDefinitions) == "table" and #tDefinitions > 0, "List Columns must be a nonempty array.");
+    -- A missing middle column would otherwise change the meaning of every
+    -- remaining cell while appearing to be a successful construction.
+    _Options.array(tDefinitions);
     local tColumns, tCache, tOrder = {}, {}, {};
 
     for nIndex, tDefinition in ipairs(tDefinitions) do
@@ -234,7 +238,9 @@ function ListRowRenderer.create(tDefinitions, oSkin)
         columns use pixels; remaining columns share free space by Weight. Overflow
         clips at the list edge. Each cell has its own nested clipping region.
     !]]
-    function tRenderer.draw(oDC, tItem, nIndex, nX, nY, nWidth, nHeight, bEnabled, tInsets)
+    -- bSelected is supplied only for a system-palette row. Forward it to the
+    -- shared text helper so selection foreground and background stay paired.
+    function tRenderer.draw(oDC, tItem, nIndex, nX, nY, nWidth, nHeight, bEnabled, tInsets, bSelected)
         local nFixed, nWeight = 0, 0;
 
         for nColumn, tColumn in ipairs(tColumns) do
@@ -273,7 +279,7 @@ function ListRowRenderer.create(tDefinitions, oSkin)
                             oDC:DrawBitmap(tImage.Bitmap, nX + 6 + nInset + math.floor((nContentWidth - tImage.DrawWidth) / 2),
                                 nY + math.floor((nHeight - tImage.DrawHeight) / 2), true);
                         else
-                            oSkin.text(oDC, "?", nX + 6 + nInset, nY + (nHeight - 18) / 2, bEnabled);
+                            oSkin.text(oDC, "?", nX + 6 + nInset, nY + (nHeight - 18) / 2, bEnabled, bSelected);
                         end
                     end
                 else
@@ -288,7 +294,7 @@ function ListRowRenderer.create(tDefinitions, oSkin)
                         nTextX = nTextX + nContentWidth - nTextWidth;
                     end
 
-                    oSkin.text(oDC, sText, nTextX, nY + (nHeight - 18) / 2, bEnabled);
+                    oSkin.text(oDC, sText, nTextX, nY + (nHeight - 18) / 2, bEnabled, bSelected);
                 end
 
                 oClipper:delete();

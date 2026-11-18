@@ -1,3 +1,5 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _wx          = require("wx");
 local _Object      = require("wxLuma.Core.ControlObject");
 local _Events      = require("wxLuma.Core.ControlEvents");
@@ -19,6 +21,7 @@ local _tResults    = {ok = _wx.wxID_OK, cancel = _wx.wxID_CANCEL, yes = _wx.wxID
     show/showModal/close/getValue, standard events and containment.
 !]]
 function Dialog.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "Dialog requires Skin.");
     local nWidth  = tOptions.Width or 480;
     local nHeight = tOptions.Height or 300;
@@ -42,7 +45,7 @@ function Dialog.create(oParent, tOptions)
     oNative:SetClientSize(nWidth, nHeight);
     oNative:SetMinClientSize(_wx.wxSize(320, 200));
     local oControl = _wx.wxPanel(oNative, _wx.wxID_ANY, _wx.wxDefaultPosition,
-        _wx.wxDefaultSize, _wx.wxTAB_TRAVERSAL + _wx.wxCLIP_CHILDREN);
+        _wx.wxDefaultSize, _Border.style(tOptions, _wx.wxTAB_TRAVERSAL + _wx.wxCLIP_CHILDREN));
     oControl:SetBackgroundStyle(_wx.wxBG_STYLE_PAINT);
     local oContent = _wx.wxPanel(oControl, _wx.wxID_ANY, _wx.wxDefaultPosition,
         _wx.wxDefaultSize, _wx.wxTAB_TRAVERSAL);
@@ -341,6 +344,7 @@ function Dialog.create(oParent, tOptions)
     oDialog.setEnabled(tOptions.Enabled ~= false);
     oNative:Layout();
     fLayout();
+    _Theme.finish(oDialog, tOptions);
     return oDialog;
 end
 

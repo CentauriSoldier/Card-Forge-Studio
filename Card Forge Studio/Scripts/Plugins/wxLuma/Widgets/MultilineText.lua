@@ -1,3 +1,5 @@
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -15,19 +17,20 @@ local MultilineText = {};
 @ret table oComponent Value/read-only APIs, TextControl and shared input events.
 !]]
 function MultilineText.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "MultilineText requires Skin.");
     assert(tOptions.Value == nil or type(tOptions.Value) == "string", "Value must be text.");
     assert(tOptions.ReadOnly == nil or type(tOptions.ReadOnly) == "boolean", "Invalid ReadOnly.");
     assert(tOptions.Wrap == nil or type(tOptions.Wrap) == "boolean", "Invalid Wrap.");
-    local oComponent = _Surface.create(oParent, tOptions, "MultilineText");
+    local oComponent = _Surface.create(oParent, _Border.hostOptions(tOptions), "MultilineText");
     local tArt = _Artwork.create(tOptions.Skin, tOptions.Artwork or "Multiline Text");
-    local nStyle = _wx.wxBORDER_NONE + _wx.wxTE_MULTILINE;
+    local nStyle = _Border.style(tOptions, _wx.wxTE_MULTILINE);
     if (tOptions.Wrap == false) then nStyle = nStyle + _wx.wxHSCROLL; end
     local oText = _wx.wxTextCtrl(oComponent.Control, _wx.wxID_ANY, tOptions.Value or "",
         _wx.wxDefaultPosition, _wx.wxDefaultSize, nStyle);
     local bReadOnly = tOptions.ReadOnly == true;
     local sValue = oText:GetValue();
-    oComponent.TextControl = oText;
+    oComponent.TextControl, oComponent.BorderControl = oText, oText;
     local tEvents = _Events.attach(oComponent, {oText}, {"readOnlyChanged"});
     oText:SetFont(tOptions.Skin.Font);
     oText:SetBackgroundColour(tArt.color("Editor Normal"));
@@ -88,12 +91,18 @@ function MultilineText.create(oParent, tOptions)
     end
 
     oComponent.onLayout = function(nWidth, nHeight)
-        oText:SetSize(9, 8, math.max(1, nWidth - 18), math.max(1, nHeight - 16));
+        local bSystem = _Theme.isTheme(oComponent.Skin) and oComponent.Skin.getName() == "System";
+        local nX, nY = bSystem and 2 or 9, bSystem and 2 or 8;
+        oText:SetSize(nX, nY, math.max(1, nWidth - nX * 2), math.max(1, nHeight - nY * 2));
     end;
     oComponent.onEnable = function(bEnabled) oText:Enable(bEnabled); end;
     oComponent.onDestroy = tArt.destroy;
     oComponent.draw = function(oDC, nWidth, nHeight)
         if (oComponent.Disposed) then return; end
+        if (_Theme.isTheme(oComponent.Skin) and oComponent.Skin.getName() == "System") then
+            oComponent.Skin.editor(oComponent, oDC, nWidth, nHeight);
+            return;
+        end
         tArt.part(oDC, "Surface "..oComponent.getState(), 0, 0, nWidth, nHeight);
         if (oText:HasFocus()) then tArt.part(oDC, "Focus", 0, 0, nWidth, nHeight); end
     end;
@@ -104,6 +113,7 @@ function MultilineText.create(oParent, tOptions)
     oText:Connect(_wx.wxEVT_SET_FOCUS, function(jEvent) oComponent.refresh(); jEvent:Skip(); end);
     oText:Connect(_wx.wxEVT_KILL_FOCUS, function(jEvent) oComponent.refresh(); jEvent:Skip(); end);
     oComponent.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

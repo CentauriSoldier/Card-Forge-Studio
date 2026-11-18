@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx             = require("wx");
 local _ControlSurface = require("wxLuma.Core.ControlSurface");
 local _ControlEvents  = require("wxLuma.Core.ControlEvents");
@@ -16,6 +17,7 @@ local SplitContainer  = {};
 @ret table oComponent Public proxy with Panes[1/2], First/Second and standard events.
 !]]
 function SplitContainer.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local sOrientation = tOptions.Orientation or "vertical";
     local nValue       = tOptions.Value or 0.5;
     local nMinFirst    = tOptions.MinFirst or 80;
@@ -275,6 +277,7 @@ function SplitContainer.create(oParent, tOptions)
     end;
     tEvents = _ControlEvents.attach(oComponent, nil, {"splitChanged", "dragStarted", "dragEnded"});
     oComponent.onEnable(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

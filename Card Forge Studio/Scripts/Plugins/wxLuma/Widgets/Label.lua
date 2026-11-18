@@ -1,3 +1,5 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _wx             = require("wx");
 local _ControlSurface = require("wxLuma.Core.ControlSurface");
 local _ControlEvents  = require("wxLuma.Core.ControlEvents");
@@ -11,9 +13,12 @@ local Label           = {};
 @param wxWindow oParent The native parent.
 @param table tOptions Skin, Value (string), Wrap, Padding (4), Align
     (left/center/right), VerticalAlign (top/center/bottom), Enabled and OnChange.
+    Border defaults to wxBORDER_NONE; System labels inherit their parent surface.
 @ret table oComponent An independent public proxy with standard surface/events API.
 !]]
 function Label.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
     local sValue = tOptions.Value or "";
     local nPadding = tOptions.Padding or 4;
     assert(type(sValue) == "string", "Label Value must be a string.");
@@ -154,8 +159,15 @@ function Label.create(oParent, tOptions)
             return;
         end
 
-        oDC:SetBackground(oBrush);
+        -- A label follows its actual parent surface. Read that surface at paint
+        -- time so subscription order cannot cache the previous provider's color.
+        local oParentBrush;
+        if (_Theme.isTheme(oComponent.Skin) and oComponent.Skin.getName() == "System") then
+            oParentBrush = _wx.wxBrush(oParent:GetBackgroundColour());
+        end
+        oDC:SetBackground(oParentBrush or oBrush);
         oDC:Clear();
+        if (oParentBrush) then oParentBrush:delete(); end
         local nInnerWidth  = math.max(1, nWidth - nPadding * 2);
         local nInnerHeight = math.max(1, nHeight - nPadding * 2);
         fLines(oDC, nInnerWidth);
@@ -190,6 +202,17 @@ function Label.create(oParent, tOptions)
         oBrush:delete();
     end;
     oComponent.setAlignment(tOptions.Align or "left", tOptions.VerticalAlign or "top");
+    --[[!
+    @fqxn wxLuma.UI.Label.onThemeChanged
+    @desc Reflows text for the new GUI font and refreshes its surface palette.
+    !]]
+    oComponent.onThemeChanged = function()
+        tLines, tWidths = nil, nil;
+        oBrush:delete();
+        local oColor = _Theme.colour(oComponent.Skin, "Background", 24, 29, 36);
+        oBrush = _wx.wxBrush(oColor); oColor:delete();
+    end;
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

@@ -57,6 +57,35 @@ local _tPotFields = {
     WearChipSizeMin = true, WearChipSizeMax = true,
 };
 
+-- Related settings share compact boxes; the field list remains authoritative.
+local _tFieldBoxes = {
+    Font = {
+        Family = "Typeface", Size = "Typeface", LetterSpacing = "Typeface",
+        Bold = "Formatting", Italic = "Formatting", Underline = "Formatting", StrikeOut = "Formatting", HQ = "Formatting",
+        Color = "Text color",
+    },
+    Gradient = {GradientEnabled = "Gradient", GradientDirection = "Gradient", GradientStops = "Color stops"},
+    ["Bevel / Emboss"] = {
+        BevelEnabled = "Relief", BevelMode = "Relief", BevelProfile = "Relief", BevelWidth = "Relief", BevelDepth = "Relief", BevelSoftness = "Relief",
+        BevelEdgeTop = "Edges", BevelEdgeBottom = "Edges", BevelEdgeLeft = "Edges", BevelEdgeRight = "Edges",
+        BevelLightAngle = "Lighting", BevelLightElevation = "Lighting",
+        BevelHighlightColor = "Highlights", BevelHighlightStrength = "Highlights", BevelSpecularStrength = "Highlights", BevelSpecularPower = "Highlights",
+        BevelShadowColor = "Shadows", BevelShadowStrength = "Shadows", BevelOpacity = "Finish",
+    },
+    Wear = {
+        WearEnabled = "Pattern", WearPattern = "Pattern", WearDensity = "Pattern", WearSeed = "Pattern",
+        WearLengthMin = "Scratches", WearLengthMax = "Scratches", WearWidth = "Scratches", WearAngle = "Scratches", WearAngleSpread = "Scratches",
+        WearChipSizeMin = "Chips", WearChipSizeMax = "Chips", WearChipRoughness = "Chips",
+        WearOpacity = "Appearance", WearColor = "Appearance",
+        WearHighlightEnabled = "Highlights", WearHighlightColor = "Highlights", WearHighlightOffset = "Highlights",
+    },
+    Shadow = {ShadowEnabled = "Shadow", ShadowColor = "Shadow", ShadowX = "Offset", ShadowY = "Offset", ShadowRadius = "Softness"},
+    Outline = {OutlineEnabled = "Outline", OutlineColor = "Outline", OutlineThickness = "Thickness"},
+    ["3D"] = {["3DEnabled"] = "Extrusion", ["3DDepth"] = "Extrusion", ["3DStepX"] = "Direction", ["3DStepY"] = "Direction", ["3DColor"] = "Color"},
+    Glow = {GlowEnabled = "Glow", GlowRadius = "Glow", GlowAlphaMax = "Strength", GlowColor = "Colors", GlowOuterColor = "Colors"},
+    Highlight = {BackgroundEnabled = "Background", BackgroundColor = "Background", BackgroundPadding = "Background"},
+};
+
 local tGroups = {
     {"Font", {{"Family", "Font family", "text", "Times New Roman"}, {"Size", "Size", "number", "12", 1, 300}, {"Color", "Text color", "color", "0,0,0,255"}, {"Bold", "Bold", "boolean", "false"}, {"Italic", "Italic", "boolean", "false"}, {"Underline", "Underline", "boolean", "false"}, {"StrikeOut", "Strikeout", "boolean", "false"}, {"HQ", "High quality", "boolean", "true"}, {"LetterSpacing", "Letter spacing", "number", "0", 0, 100},}},
     {"Gradient", {{"GradientEnabled", "Enabled", "boolean", "false"}, {"GradientDirection", "Direction", "choice", "Vertical", {"Vertical", "Horizontal"}}, {"GradientStops", "Color stops", "stops", "0:#EAF6FF; 0.45:#95BBD0; 0.5:#D7EEFA; 1:#52778E"},}},
@@ -776,24 +805,24 @@ local function cfgColorTree()
 end
 
 -- Gradient rows compose existing wxLuma controls; no framework module is replaced.
-local function gradientEditor(dParent, Controls, oSkin, track, protect, fChanged, typing)
+local function gradientEditor(dParent, Controls, oTheme, track, protect, fChanged, typing)
     local oEditor	= {};
     local dPanel	= wx.wxPanel(dParent, wx.wxID_ANY);
     local dRows		= wx.wxScrolledWindow(dPanel, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(-1, 244), wx.wxVSCROLL);
     dRows:SetScrollRate(0, 12);
-    dPanel:SetMinSize(wx.wxSize(280, 296));
+    dPanel:SetMinSize(wx.wxSize(312, 296));
     local oRowsLayout = wx.wxBoxSizer(wx.wxVERTICAL);
     dRows:SetSizer(oRowsLayout);
     local oHint = wx.wxStaticText(dPanel, wx.wxID_ANY, "Drag a handle to reorder colors. Endpoints stay at 0% and 100%.");
     oHint:Wrap(440);
     local operation;
-    local oAdd	= track(Controls.button(dPanel, {Skin = oSkin, Text = "Add stop",
+    local oAdd	= track(Controls.button(dPanel, {Theme = oTheme, Text = "Add stop",
         OnClick	= protect(function() operation("add"); end)}));
     local tRows	= {};
     local oModel;
     local bEnabled, bUpdating, bDisposed = true, false, false;
     local nDrag, nDrop;
-    local nRowHeight = 46;
+    local nRowHeight = 88;
 
     local function enabled(oComponent, bValue)
         if (oComponent.isEnabled() ~= bValue) then oComponent.setEnabled(bValue); end
@@ -845,30 +874,30 @@ local function gradientEditor(dParent, Controls, oSkin, track, protect, fChanged
         for nIndex in ipairs(oModel.stops) do
             local nRow	= nIndex;
             local dRow	= wx.wxPanel(dRows, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(-1, nRowHeight));
-            dRow:SetMinSize(wx.wxSize(250, nRowHeight));
-            local oHandle = track(Controls.button(dRow, {Skin = oSkin, Text = "::"}));
+            dRow:SetMinSize(wx.wxSize(282, nRowHeight));
+            local oHandle = track(Controls.button(dRow, {Theme = oTheme, Text = "::"}));
             oHandle.Control:SetToolTip("Drag to move this color to another stop position.");
-            local oPosition	= track(Controls.numericField(dRow, {Skin = oSkin, Min = 0, Max = 100, Precision = 6, Step = 0.1, StepButtons = false,
+            local oPosition	= track(Controls.numericField(dRow, {Theme = oTheme, Min = 0, Max = 100, Precision = 6, Step = 0.1, StepButtons = false,
                 OnChange	= protect(function(nValue) operation("position", nRow, nValue); end)}));
             typing[oPosition.TextControl:GetId()] = true;
             oPosition.Control:SetToolTip("Stop position (%)");
             local oPercent = wx.wxStaticText(dRow, wx.wxID_ANY, "%");
-            local oPot		= track(Controls.knob(dRow, {Skin = oSkin, Min = 0, Max = 100, Rate = 0.1,
+            local oPot		= track(Controls.knob(dRow, {Theme = oTheme, ShowBackground = false, ShowValue = false, Min = 0, Max = 100, Rate = 0.1,
                 OnChange	= protect(function(nValue) operation("position", nRow, nValue); end)}));
-            local oColor	= track(Controls.colorPicker(dRow, {Skin = oSkin,
+            local oColor	= track(Controls.colorPicker(dRow, {Theme = oTheme,
                 OnChange	= protect(function(tColor) operation("color", nRow, tColor); end)}));
-            local oRemove	= track(Controls.button(dRow, {Skin = oSkin, Text = "-",
+            local oRemove	= track(Controls.button(dRow, {Theme = oTheme, Text = "-",
                 OnClick		= protect(function() operation("remove", nRow); end)}));
             oRemove.Control:SetToolTip("Remove this stop; at least two remain.");
             tRows[nRow] = {panel = dRow, handle = oHandle, position = oPosition, pot = oPot, color = oColor, remove = oRemove, typingID = oPosition.TextControl:GetId()};
             local function layout()
                 local nWidth = dRow:GetClientSize():GetWidth();
-                oHandle.layout(0, 5, 28, 36);
-                oPosition.layout(32, 5, 80, 36);
-                oPercent:SetSize(114, 14, 12, 18);
-                oPot.layout(128, 5, 32, 34);
-                oColor.layout(164, 5, math.max(46, nWidth - 200), 36);
-                oRemove.layout(math.max(214, nWidth - 32), 5, 32, 36);
+                oHandle.layout(0, 28, 28, 32);
+                oPosition.layout(32, 28, 80, 32);
+                oPercent:SetSize(114, 35, 12, 18);
+                oPot.layout(128, 16, 56, 56);
+                oColor.layout(188, 28, math.max(46, nWidth - 224), 32);
+                oRemove.layout(math.max(238, nWidth - 32), 28, 32, 32);
             end
             dRow:Connect(wx.wxEVT_SIZE, function(oEvent) layout(); oEvent:Skip(); end);
             layout();
@@ -930,11 +959,11 @@ local function gradientEditor(dParent, Controls, oSkin, track, protect, fChanged
     return oEditor;
 end
 
-local function cfgPicker(dParent, Controls, oSkin, widget, sCurrent)
+local function cfgPicker(dParent, Controls, oTheme, widget, sCurrent)
     local tItems, tColors = cfgColorTree();
     local dDialog = wx.wxDialog(dParent, wx.wxID_ANY, "Choose CFG color", wx.wxDefaultPosition, wx.wxSize(560, 560), wx.wxDEFAULT_DIALOG_STYLE + wx.wxRESIZE_BORDER);
-    local oTree, dTree = widget(dDialog, Controls.tree, {Skin = oSkin, Items = tItems}, 420, 320);
-    local oSwatch, dSwatch = widget(dDialog, Controls.colorPicker, {Skin = oSkin, Enabled = false}, 260, 36);
+    local oTree, dTree = widget(dDialog, Controls.tree, {Theme = oTheme, Items = tItems}, 420, 320);
+    local oSwatch, dSwatch = widget(dDialog, Controls.colorPicker, {Theme = oTheme, Enabled = false}, 260, 36);
     local oPath		= wx.wxStaticText(dDialog, wx.wxID_ANY, "Select a color value. Tables expand; other values are inactive.");
     local oUse		= wx.wxButton(dDialog, wx.wxID_OK, "Use color");
     local oCancel	= wx.wxButton(dDialog, wx.wxID_CANCEL, "Cancel");
@@ -986,11 +1015,12 @@ function StyleEditor.create(dParent, pFile, tOptions)
     tOptions = tOptions or {};
     local tModel = StyleEditor.model(pFile);
     assert(#tModel.names > 0, "The styles file has no styles.");
-    local Controls = require("wxLuma.init")().Controls;
-    local oSkin = Controls.loadSkin();
+    local wxLuma = require("wxLuma.init")();
+    local Controls = wxLuma.Controls;
+    local oTheme = wxLuma.Theme;
     local tWidgets = setmetatable({}, {__mode = "k"});
     local tTyping = {};
-    local bSkinDisposed = false;
+    local bThemeDisposed = false;
     local dFrame = wx.wxFrame(dParent, wx.wxID_ANY, "Style Editor", wx.wxDefaultPosition, wx.wxSize(1000, 820));
     dFrame:SetMinSize(wx.wxSize(800, 650));
     local oState = WindowState.bind(dFrame, "StyleEditor", tOptions.stateFile);
@@ -1021,6 +1051,12 @@ function StyleEditor.create(dParent, pFile, tOptions)
         return oComponent;
     end
     local function widget(dParent, fFactory, tSettings, nWidth, nHeight)
+        if (fFactory == Controls.knob) then
+            local oWidget = track(fFactory(dParent, tSettings));
+            oWidget.Control:SetMinSize(wx.wxSize(nWidth, nHeight));
+            oWidget.layout(0, 0, nWidth, nHeight);
+            return oWidget, oWidget.Control;
+        end
         local dHost = wx.wxPanel(dParent, wx.wxID_ANY);
         dHost:SetMinSize(wx.wxSize(nWidth, nHeight));
         local oWidget = track(fFactory(dHost, tSettings));
@@ -1055,7 +1091,7 @@ function StyleEditor.create(dParent, pFile, tOptions)
     @param any sValue Value.
     @vis private
     !]]
-    local function edited(sKey, sValue)
+    local function edited(sKey, sValue, bFieldOnly)
         if (bLoading) then return false; end
         local bOK, sError = pcall(function()
             local tField = tFields[sKey];
@@ -1081,11 +1117,11 @@ function StyleEditor.create(dParent, pFile, tOptions)
             return false;
         end
         if (next(tInvalid)) then oSave:Enable(false); return true; end
-        refresh();
+        refresh(bFieldOnly and sKey or nil);
         return true;
     end
-    local function commitWidget(sKey, sValue)
-        local bAccepted = edited(sKey, sValue);
+    local function commitWidget(sKey, sValue, bFieldOnly)
+        local bAccepted = edited(sKey, sValue, bFieldOnly);
         if (bAccepted == false and not bLoading) then
             local sError = oMessage:GetLabel();
             tInvalid[sKey] = nil;
@@ -1097,70 +1133,85 @@ function StyleEditor.create(dParent, pFile, tOptions)
     for _, tGroup in ipairs(tGroups) do
         local dPage = wx.wxScrolledWindow(dBook, wx.wxID_ANY);
         dPage:SetScrollRate(12, 12);
-        local oGrid = wx.wxFlexGridSizer(0, 3, 8, 10);
-        oGrid:AddGrowableCol(1, 1);
+        local oBoxes = wx.wxFlexGridSizer(0, 2, 8, 8);
+        local tBoxes = {};
+        local nColumns = 2;
+        local bLayingOut = false;
+        oBoxes:AddGrowableCol(0, 1); oBoxes:AddGrowableCol(1, 1);
         for _, tField in ipairs(tGroup[2]) do
             local sKey, sKind = tField[1], tField[3];
+            local sBox = (_tFieldBoxes[tGroup[1]] or {})[sKey] or tGroup[1];
+            if (not tBoxes[sBox]) then
+                local oBox = wx.wxStaticBoxSizer(wx.wxVERTICAL, dPage, sBox);
+                local nFieldColumns = (sBox == "Text color" or sBox == "Color stops") and 1 or 2;
+                local oFields = wx.wxFlexGridSizer(0, nFieldColumns, 6, 8);
+                for nColumn = 0, nFieldColumns - 1 do oFields:AddGrowableCol(nColumn, 1); end
+                oBox:Add(oFields, 0, wx.wxEXPAND + wx.wxALL, 6);
+                oBoxes:Add(oBox, 0, wx.wxEXPAND);
+                tBoxes[sBox] = {parent = oBox:GetStaticBox(), fields = oFields};
+            end
+            local dFieldParent = tBoxes[sBox].parent;
             local oInput, oAlpha;
             local oWidget, dWidget, oPot, dPot, oGradient;
             local oCFGPath, oApplyCFG, oFixedColor, oColorSource;
             local oColorLayout;
             local oCell = wx.wxBoxSizer(wx.wxHORIZONTAL);
             if (sKind == "boolean") then
-                oInput = wx.wxCheckBox(dPage, wx.wxID_ANY, "");
+                oInput = wx.wxCheckBox(dFieldParent, wx.wxID_ANY, "");
                 oInput:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, protect(function() edited(sKey, oInput:GetValue() and "true" or "false"); end));
             elseif (sKind == "choice") then
-                oInput = wx.wxChoice(dPage, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxDefaultSize, tField[5]);
+                oInput = wx.wxChoice(dFieldParent, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxDefaultSize, tField[5]);
                 oInput:Connect(wx.wxEVT_COMMAND_CHOICE_SELECTED, protect(function() edited(sKey, oInput:GetStringSelection()); end));
             elseif (sKind == "number") then
                 local bPot = _tPotFields[sKey] == true;
                 local fFactory = bPot and Controls.numericField or Controls.spinner;
                 local function changed(nValue)
                     if (bLoading) then return; end
-                    commitWidget(sKey, string.format("%.0f", math.floor(nValue + 0.5)));
+                    commitWidget(sKey, string.format("%.0f", math.floor(nValue + 0.5)), bPot);
                 end
-                oWidget, dWidget = widget(dPage, fFactory, {Skin = oSkin, Min = tField[5], Max = tField[6],
-                    Precision = 0, Step = 1, StepButtons = false, Value = tonumber(tField[4]), OnChange = protect(changed)}, 120, 40);
+                oWidget, dWidget = widget(dFieldParent, fFactory, {Theme = oTheme, Min = tField[5], Max = tField[6],
+                    Precision = 0, Step = 1, StepButtons = false, Value = tonumber(tField[4]), OnChange = protect(changed)}, 86, 32);
                 oInput = oWidget.Control;
                 if (bPot) then
-                    oPot, dPot = widget(dPage, Controls.knob, {Skin = oSkin, Min = tField[5], Max = tField[6],
+                    oPot, dPot = widget(dFieldParent, Controls.knob, {Theme = oTheme, ShowBackground = false, ShowValue = false, Min = tField[5], Max = tField[6],
                         Value = tonumber(tField[4]), Rate = 1, Continuity = sKey == "BevelLightAngle" and "revolve" or "none",
-                        OnChange = protect(changed)}, 40, 40);
+                        OnChange = protect(changed)}, 56, 56);
                     oPot.Control:SetToolTip(tField[2]);
                 end
             elseif (sKind == "stops") then
-                oGradient = gradientEditor(dPage, Controls, oSkin, track, protect,
+                oGradient = gradientEditor(dFieldParent, Controls, oTheme, track, protect,
                     function(sValue) return commitWidget(sKey, sValue); end, tTyping);
                 oInput, dWidget = oGradient.Control, oGradient.Control;
             elseif (sKind == "color") then
-                oWidget, dWidget = widget(dPage, Controls.colorPicker, {Skin = oSkin,
+                oWidget, dWidget = widget(dFieldParent, Controls.colorPicker, {Theme = oTheme,
                     OnChange = protect(function(tColor)
                         if (not bLoading) then commitWidget(sKey, table.concat({tColor.R, tColor.G, tColor.B, tColor.A}, ",")); end
-                    end)}, 180, 40);
+                    end)}, 140, 32);
                 oInput = oWidget.Control;
             else
-                oInput = wx.wxTextCtrl(dPage, wx.wxID_ANY, "", wx.wxDefaultPosition, wx.wxDefaultSize, wx.wxTE_PROCESS_ENTER);
+                oInput = wx.wxTextCtrl(dFieldParent, wx.wxID_ANY, "", wx.wxDefaultPosition, wx.wxDefaultSize, wx.wxTE_PROCESS_ENTER);
                 tTyping[oInput:GetId()] = true;
                 oInput:Connect(wx.wxEVT_COMMAND_TEXT_UPDATED, protect(function() edited(sKey, oInput:GetValue()); end));
             end
-            oCell:Add(dWidget or oInput, 1, wx.wxEXPAND);
+            oCell:Add(dWidget or oInput, 1, dPot and wx.wxALIGN_CENTER_VERTICAL or wx.wxEXPAND);
             if (dPot) then oCell:Add(dPot, 0, wx.wxLEFT + wx.wxALIGN_CENTER_VERTICAL, 6); end
             if (sKey == "Color") then
                 --Keep the resolved swatch visible, with an explicit editor for its live source.
                 oColorLayout = wx.wxBoxSizer(wx.wxVERTICAL);
                 oColorLayout:Add(oCell, 0, wx.wxEXPAND);
                 local oPathRow = wx.wxBoxSizer(wx.wxHORIZONTAL);
-                oCFGPath = wx.wxTextCtrl(dPage, wx.wxID_ANY, "", wx.wxDefaultPosition, wx.wxDefaultSize, wx.wxTE_PROCESS_ENTER);
+                oCFGPath = wx.wxTextCtrl(dFieldParent, wx.wxID_ANY, "", wx.wxDefaultPosition, wx.wxDefaultSize, wx.wxTE_PROCESS_ENTER);
                 oCFGPath:SetToolTip("Case-sensitive CFG path. Press Enter to commit a typed path, or Browse to select a color.");
                 tTyping[oCFGPath:GetId()] = true;
-                oApplyCFG = wx.wxButton(dPage, wx.wxID_ANY, "Browse...");
-                oFixedColor = wx.wxButton(dPage, wx.wxID_ANY, "Use fixed color");
-                oPathRow:Add(wx.wxStaticText(dPage, wx.wxID_ANY, "CFG path:"), 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 6);
+                oApplyCFG = wx.wxButton(dFieldParent, wx.wxID_ANY, "Browse...");
+                oFixedColor = wx.wxButton(dFieldParent, wx.wxID_ANY, "Use fixed color");
+                oPathRow:Add(wx.wxStaticText(dFieldParent, wx.wxID_ANY, "CFG path:"), 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 6);
                 oPathRow:Add(oCFGPath, 1, wx.wxEXPAND + wx.wxRIGHT, 6);
-                oPathRow:Add(oApplyCFG, 0, wx.wxRIGHT, 6);
-                oPathRow:Add(oFixedColor, 0);
                 oColorLayout:Add(oPathRow, 0, wx.wxEXPAND + wx.wxTOP, 6);
-                oColorSource = wx.wxStaticText(dPage, wx.wxID_ANY, "");
+                local oPathActions = wx.wxBoxSizer(wx.wxHORIZONTAL);
+                oPathActions:Add(oApplyCFG, 0, wx.wxRIGHT, 6); oPathActions:Add(oFixedColor, 0);
+                oColorLayout:Add(oPathActions, 0, wx.wxTOP, 4);
+                oColorSource = wx.wxStaticText(dFieldParent, wx.wxID_ANY, "");
                 oColorLayout:Add(oColorSource, 0, wx.wxEXPAND + wx.wxTOP, 4);
 
                 --[[!
@@ -1201,11 +1252,11 @@ function StyleEditor.create(dParent, pFile, tOptions)
                     local sDraftPath = oCFGPath:GetValue():match("^%s*(.-)%s*$");
                     local sPending = sDraftPath ~= (sActivePath or "") and "; path edit not applied" or "";
                     oColorSource:SetLabel((tControl.sourceText or "")..sPending);
-                    oColorSource:Wrap(500);
+                    oColorSource:Wrap(260);
                     dPanel:Layout();
                 end);
                 oApplyCFG:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(function()
-                    local sPath = cfgPicker(dFrame, Controls, oSkin, widget, oCFGPath:GetValue());
+                    local sPath = cfgPicker(dFrame, Controls, oTheme, widget, oCFGPath:GetValue());
                     if (sPath) then commitWidget(sKey, sPath); end
                 end));
                 oCFGPath:Connect(wx.wxEVT_COMMAND_TEXT_ENTER, protect(fApplyCFGPath));
@@ -1213,17 +1264,19 @@ function StyleEditor.create(dParent, pFile, tOptions)
             end
             local tChoices = {"Own value"};
             for _, sName in ipairs(tModel.names) do tChoices[#tChoices + 1] = sName; end
-            local oLink = wx.wxChoice(dPage, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(170, -1), tChoices);
+            local oLink = wx.wxChoice(dFieldParent, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxSize(150, -1), tChoices);
             oLink:SetToolTip("Inherit this property from another style, or use an own value.");
             oLink:Connect(wx.wxEVT_COMMAND_CHOICE_SELECTED, protect(function()
                 local sSource = oLink:GetStringSelection();
                 edited(sKey, sSource == "Own value" and (tModel.resolve(sSelected, sKey) ~= "" and tModel.resolve(sSelected, sKey) or tField[4]) or "<"..sSource..">");
             end));
-            local oLabel = wx.wxStaticText(dPage, wx.wxID_ANY, tField[2]);
-            oLabel:Wrap(170);
-            oGrid:Add(oLabel, 0, wx.wxALIGN_CENTER_VERTICAL);
-            oGrid:Add(oColorLayout or oCell, 1, wx.wxEXPAND);
-            oGrid:Add(oLink, 0, wx.wxEXPAND);
+            local oLabel = wx.wxStaticText(dFieldParent, wx.wxID_ANY, tField[2]);
+            local oField = wx.wxBoxSizer(wx.wxVERTICAL);
+            oLabel:Wrap(160);
+            oField:Add(oLabel, 0, wx.wxBOTTOM, 2);
+            oField:Add(oColorLayout or oCell, 0, wx.wxEXPAND);
+            oField:Add(oLink, 0, wx.wxEXPAND + wx.wxTOP, 3);
+            tBoxes[sBox].fields:Add(oField, 1, wx.wxEXPAND);
             tControls[sKey] = {
                 input = oInput, alpha = oAlpha, link = oLink, field = tField,
                 widget = oWidget, pot = oPot, gradient = oGradient,
@@ -1231,8 +1284,22 @@ function StyleEditor.create(dParent, pFile, tOptions)
             };
         end
         local oPageLayout = wx.wxBoxSizer(wx.wxVERTICAL);
-        oPageLayout:Add(oGrid, 1, wx.wxEXPAND + wx.wxALL, 12);
+        oPageLayout:Add(oBoxes, 0, wx.wxEXPAND + wx.wxALL, 8);
         dPage:SetSizer(oPageLayout);
+        local function layoutPage()
+            if (bLayingOut) then return; end
+            bLayingOut = true;
+            local nNext = dPage:GetClientSize():GetWidth() >= 740 and 2 or 1;
+            if (nNext ~= nColumns) then
+                if (nNext == 1) then oBoxes:RemoveGrowableCol(1); end
+                oBoxes:SetCols(nNext);
+                if (nNext == 2) then oBoxes:AddGrowableCol(1, 1); end
+                nColumns = nNext;
+            end
+            dPage:Layout(); dPage:FitInside();
+            bLayingOut = false;
+        end
+        dPage:Connect(wx.wxEVT_SIZE, function(oEvent) layoutPage(); oEvent:Skip(); end);
         dPage:FitInside();
         dBook:AddPage(dPage, tGroup[1]);
     end
@@ -1256,11 +1323,11 @@ function StyleEditor.create(dParent, pFile, tOptions)
         oZoomLabel:SetLabel(string.format("%.0f%%", nPreviewZoom * 100));
         for _, dCanvas in ipairs(tSamples) do dCanvas:Refresh(false); end
     end
-    local _, dZoomOut = widget(dPanel, Controls.button, {Skin = oSkin, Text = "-",
+    local _, dZoomOut = widget(dPanel, Controls.button, {Theme = oTheme, Text = "-",
         OnClick = function() setZoom(nPreviewZoom / 1.25); end}, 36, 36);
-    local _, dZoomIn = widget(dPanel, Controls.button, {Skin = oSkin, Text = "+",
+    local _, dZoomIn = widget(dPanel, Controls.button, {Theme = oTheme, Text = "+",
         OnClick = function() setZoom(nPreviewZoom * 1.25); end}, 36, 36);
-    local _, dActual = widget(dPanel, Controls.button, {Skin = oSkin, Text = "Actual Size (=)",
+    local _, dActual = widget(dPanel, Controls.button, {Theme = oTheme, Text = "Actual Size (=)",
         OnClick = function() setZoom(1); end}, 150, 36);
     oZoomRow:Add(wx.wxStaticText(dPanel, wx.wxID_ANY, "Preview zoom"), 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxRIGHT, 8);
     oZoomRow:Add(dZoomOut, 0); oZoomRow:Add(oZoomLabel, 0, wx.wxALIGN_CENTER_VERTICAL + wx.wxLEFT + wx.wxRIGHT, 8);
@@ -1309,62 +1376,64 @@ function StyleEditor.create(dParent, pFile, tOptions)
     --[[!
     @fqxn CFS.Windows.StyleEditor.Private.Functions.refresh
     @desc Refreshes style controls, validation state, and the live preview.
-    @param any sEditedKey Edited key.
+    @param string|nil sEditedKey Optional numeric field to refresh without reloading other fields or layout.
     @vis private
     !]]
     refresh = function(sEditedKey)
         bLoading = true;
         for sKey, tControl in pairs(tControls) do
-            local sRaw = tModel.sections[sSelected][sKey] or "";
-            local sValue = tModel.resolve(sSelected, sKey);
-            if (sValue == "") then sValue = tControl.field[4]; end
-            local sSource = sRaw:match("^%s*<%s*(.-)%s*>%s*$");
-            tControl.link:SetStringSelection(sSource or "Own value");
-            local tChain, tSeen = {}, {};
-            local sChainName = sSelected;
-            while (sChainName and not tSeen[sChainName]) do
-                tChain[#tChain + 1] = sChainName;
-                tSeen[sChainName] = true;
-                local tSection = tModel.sections[sChainName];
-                local sChainValue = tSection and tSection[sKey] or "";
-                sChainName = sChainValue:match("^%s*<%s*(.-)%s*>%s*$");
-            end
-            tControl.link:SetToolTip(table.concat(tChain, " -> ").."\n"..tControl.field[2]..": "..sValue);
-            if (tControl.widget) then enableWidget(tControl.widget, not sSource);
-            elseif (tControl.gradient) then tControl.gradient.setEnabled(not sSource);
-            else tControl.input:Enable(not sSource); end
-            if (tControl.pot) then enableWidget(tControl.pot, not sSource); end
-            if (tControl.alpha) then tControl.alpha:Enable(not sSource); end
-            local sKind = tControl.field[3];
-            if (sKind == "boolean") then tControl.input:SetValue(sValue:lower() == "true");
-            elseif (sKind == "choice") then tControl.input:SetStringSelection(sValue);
-            elseif (sKind == "number") then
-                tControl.widget.setValue(tonumber(sValue));
-                if (tControl.pot) then tControl.pot.setValue(tonumber(sValue)); end
-            elseif (sKind == "stops") then
-                tControl.gradient.setValue(sValue);
-            elseif (sKind == "color") then
-                local tColor = channels(sValue, sKey == "Color");
-                tControl.widget.setValue({R = tColor[1], G = tColor[2], B = tColor[3], A = tColor[4]});
-                if (sKey == "Color") then
-                    local nResolved, sPath = FontStyle.ResolveColor(sValue);
-                    local sStatus = sPath and ("CFG -> "..sPath) or "Fixed color";
-                    if (sPath and not nResolved) then sStatus = "Unresolved CFG path -> "..sPath.." (black preview)"; end
-                    if (sSource) then sStatus = "Inherited from "..table.concat(tChain, " -> ", 2).." -> "..sStatus; end
-                    tControl.cfgPath:ChangeValue(sPath or "");
-                    tControl.cfgPath:Enable(not sSource);
-                    tControl.applyCFG:Enable(not sSource);
-                    tControl.fixedColor:Enable(not sSource and sPath ~= nil);
-                    enableWidget(tControl.widget, not sSource and not sPath);
-                    tControl.sourceText = sStatus;
-                    tControl.colorSource:SetLabel(sStatus);
-                    tControl.colorSource:Wrap(500);
-                    tControl.colorSource:SetForegroundColour(sPath and not nResolved and wx.wxColour(175, 55, 25) or wx.wxColour(50, 65, 85));
+            if (not sEditedKey or sKey == sEditedKey) then
+                local sRaw = tModel.sections[sSelected][sKey] or "";
+                local sValue = tModel.resolve(sSelected, sKey);
+                if (sValue == "") then sValue = tControl.field[4]; end
+                local sSource = sRaw:match("^%s*<%s*(.-)%s*>%s*$");
+                tControl.link:SetStringSelection(sSource or "Own value");
+                local tChain, tSeen = {}, {};
+                local sChainName = sSelected;
+                while (sChainName and not tSeen[sChainName]) do
+                    tChain[#tChain + 1] = sChainName;
+                    tSeen[sChainName] = true;
+                    local tSection = tModel.sections[sChainName];
+                    local sChainValue = tSection and tSection[sKey] or "";
+                    sChainName = sChainValue:match("^%s*<%s*(.-)%s*>%s*$");
                 end
-            elseif (sKey ~= sEditedKey) then tControl.input:ChangeValue(sValue); end
+                tControl.link:SetToolTip(table.concat(tChain, " -> ").."\n"..tControl.field[2]..": "..sValue);
+                if (tControl.widget) then enableWidget(tControl.widget, not sSource);
+                elseif (tControl.gradient) then tControl.gradient.setEnabled(not sSource);
+                else tControl.input:Enable(not sSource); end
+                if (tControl.pot) then enableWidget(tControl.pot, not sSource); end
+                if (tControl.alpha) then tControl.alpha:Enable(not sSource); end
+                local sKind = tControl.field[3];
+                if (sKind == "boolean") then tControl.input:SetValue(sValue:lower() == "true");
+                elseif (sKind == "choice") then tControl.input:SetStringSelection(sValue);
+                elseif (sKind == "number") then
+                    tControl.widget.setValue(tonumber(sValue));
+                    if (tControl.pot) then tControl.pot.setValue(tonumber(sValue)); end
+                elseif (sKind == "stops") then
+                    tControl.gradient.setValue(sValue);
+                elseif (sKind == "color") then
+                    local tColor = channels(sValue, sKey == "Color");
+                    tControl.widget.setValue({R = tColor[1], G = tColor[2], B = tColor[3], A = tColor[4]});
+                    if (sKey == "Color") then
+                        local nResolved, sPath = FontStyle.ResolveColor(sValue);
+                        local sStatus = sPath and ("CFG -> "..sPath) or "Fixed color";
+                        if (sPath and not nResolved) then sStatus = "Unresolved CFG path -> "..sPath.." (black preview)"; end
+                        if (sSource) then sStatus = "Inherited from "..table.concat(tChain, " -> ", 2).." -> "..sStatus; end
+                        tControl.cfgPath:ChangeValue(sPath or "");
+                        tControl.cfgPath:Enable(not sSource);
+                        tControl.applyCFG:Enable(not sSource);
+                        tControl.fixedColor:Enable(not sSource and sPath ~= nil);
+                        enableWidget(tControl.widget, not sSource and not sPath);
+                        tControl.sourceText = sStatus;
+                        tControl.colorSource:SetLabel(sStatus);
+                        tControl.colorSource:Wrap(260);
+                        tControl.colorSource:SetForegroundColour(sPath and not nResolved and wx.wxColour(175, 55, 25) or wx.wxColour(50, 65, 85));
+                    end
+                elseif (sKey ~= sEditedKey) then tControl.input:ChangeValue(sValue); end
+            end
         end
         bLoading = false;
-        dBook:Layout(); dPanel:Layout();
+        if (not sEditedKey) then dBook:Layout(); dPanel:Layout(); end
         local tParsed = assert(tModel.parsed(sSelected), "Could not parse selected style.");
         local sFont = tParsed.FontFamily..":"..tParsed.FontSize..":"..tostring(tParsed.FontOptions.Bold)..":"..tostring(tParsed.FontOptions.Italic)..":"..tostring(tParsed.FontOptions.Underline)..":"..tostring(tParsed.FontOptions.StrikeOut);
         if (oPreview) then oPreview.ApplyParsed(tParsed, sFont ~= sPreviewFont); else oPreview = FontStyle("STYLE_EDITOR_PREVIEW", tParsed); end
@@ -1536,11 +1605,11 @@ function StyleEditor.create(dParent, pFile, tOptions)
         oEvent:Skip();
     end);
     dFrame:Connect(wx.wxEVT_DESTROY, function(oEvent)
-        if (oEvent:GetId() == dFrame:GetId() and not bSkinDisposed) then
+        if (oEvent:GetId() == dFrame:GetId() and not bThemeDisposed) then
             bClosed = true;
             for _, tControl in pairs(tControls) do if (tControl.gradient) then tControl.gradient.destroy(); end end
             for oComponent in pairs(tWidgets) do oComponent.destroy(); end
-            oSkin.destroy(); bSkinDisposed = true;
+            oTheme.destroy(); bThemeDisposed = true;
         end
         oEvent:Skip();
     end);

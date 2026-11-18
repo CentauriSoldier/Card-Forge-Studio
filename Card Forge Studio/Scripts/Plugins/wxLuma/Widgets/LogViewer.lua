@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Artwork = require("wxLuma.Core.ControlArtwork");
@@ -11,7 +12,9 @@ local LogViewer = {};
 --[[!
 @fqxn wxLuma.UI.LogViewer.create
 @desc Creates an owner-drawn, selectable UTF-8 action/output log. Entries have
-    stable Id, required Text and optional Icon path, Severity and Timestamp text.
+    stable Id, required Text and optional Icon path or IconArtwork skin part,
+    Severity and Timestamp text. IconArtwork follows the selected skin; Icon
+    remains application-owned artwork and is displayed without recoloring.
     Severity is disabled by default. Only visible entries are painted; layout
     and glyph widths are cached. Plain dragging selects text within one entry;
     Ctrl/Shift clicks select entries. Ctrl+A/C and a skinned context menu copy
@@ -21,6 +24,7 @@ local LogViewer = {};
     LogOptions settings all expose get/set<Property>(value, notify) methods.
 !]]
 function LogViewer.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "LogViewer requires Skin.");
     local oComponent = _Surface.create(oParent, tOptions, "LogViewer");
     local tArt = _Artwork.create(tOptions.Skin, tOptions.Artwork or "Log Viewer");
@@ -91,6 +95,11 @@ function LogViewer.create(oParent, tOptions)
         if (tEntry.Severity ~= nil) then assert(_tSeverities[tEntry.Severity], "Unknown entry severity."); tResult.Severity = tEntry.Severity; end
         if (tEntry.Timestamp ~= nil) then tResult.Timestamp = _Options.text(tEntry.Timestamp); end
         if (tEntry.Icon ~= nil) then assert(type(tEntry.Icon) == "string", "Icon must be an image path."); tArt.prepare(tEntry.Icon); tResult.Icon = tEntry.Icon; end
+        if (tEntry.IconArtwork ~= nil) then
+            assert(type(tEntry.IconArtwork) == "string" and tEntry.IconArtwork ~= "" and not tEntry.Icon,
+                "Specify a nonempty IconArtwork part or an Icon path.");
+            tResult.IconArtwork = tEntry.IconArtwork;
+        end
         return tResult;
     end
 
@@ -357,7 +366,7 @@ function LogViewer.create(oParent, tOptions)
                     if (tSettings.Timestamps and tEntry.Timestamp) then sPrefix = tEntry.Timestamp.." "; end
                     if (tSettings.SeverityEnabled and tSettings.ShowSeverity and tEntry.Severity) then sPrefix = sPrefix.."["..tEntry.Severity.."] "; end
                     local nPrefix = oDC:GetTextExtent(sPrefix);
-                    local nIcon = tEntry.Icon and tSettings.IconSize > 0 and tSettings.IconSize + 6 or 0;
+                    local nIcon = (tEntry.Icon or tEntry.IconArtwork) and tSettings.IconSize > 0 and tSettings.IconSize + 6 or 0;
                     tRow = {Id = tEntry.Id, Lines = {}, Prefix = sPrefix,
                         TextX = tSettings.RowPadding + nIcon + nPrefix, Chars = {}};
                     local nAvailable = math.max(16, nViewW - tRow.TextX - tSettings.RowPadding);
@@ -729,21 +738,47 @@ function LogViewer.create(oParent, tOptions)
                 local sRow = not oComponent.isEnabled() and "Disabled" or tSet[tRow.Id] and "Selected" or sHovered == tRow.Id and "Hover"
                     or tSettings.AlternatingRows and nIndex % 2 == 0 and "Alternate" or "Normal";
                 if (not tSettings.Transparent or sRow ~= "Normal" and sRow ~= "Alternate") then tArt.part(oDC, "Entry "..sRow, 0, nY, nViewW, tRow.Height); end
-                if (tEntry.Icon and tSettings.IconSize > 0) then tArt.image(oDC, tEntry.Icon, tSettings.RowPadding - nScrollX, nY + tSettings.RowPadding, tSettings.IconSize); end
+                if (tSettings.IconSize > 0) then
+                    if (tEntry.IconArtwork) then
+                        local sPart = tEntry.IconArtwork;
+                        if (sRow == "Selected" and _Theme.isTheme(oComponent.Skin) and oComponent.Skin.getName() == "System") then
+                            sPart = sPart:gsub(" Normal$", " Selected");
+                        end
+                        tArt.part(oDC, sPart, tSettings.RowPadding - nScrollX, nY + tSettings.RowPadding, tSettings.IconSize, tSettings.IconSize);
+                    elseif (tEntry.Icon) then
+                        tArt.image(oDC, tEntry.Icon, tSettings.RowPadding - nScrollX, nY + tSettings.RowPadding, tSettings.IconSize);
+                    end
+                end
                 local sColor = not oComponent.isEnabled() and "Text Disabled"
+                    or sRow == "Selected" and _Theme.isTheme(oComponent.Skin) and oComponent.Skin.getName() == "System" and "Text Selected"
                     or tSettings.SeverityEnabled and tEntry.Severity and "Severity "..tEntry.Severity or "Text Normal";
                 oDC:SetTextForeground(tArt.color(sColor));
-                local nBaseX = tSettings.RowPadding + (tEntry.Icon and tSettings.IconSize > 0 and tSettings.IconSize + 6 or 0) - nScrollX;
+                local nBaseX = tSettings.RowPadding + ((tEntry.Icon or tEntry.IconArtwork) and tSettings.IconSize > 0 and tSettings.IconSize + 6 or 0) - nScrollX;
                 oDC:DrawText(tRow.Prefix, nBaseX, nY + tSettings.RowPadding);
                 for nLine, tLine in ipairs(tRow.Lines) do
                     local nTextY = nY + tSettings.RowPadding + (nLine - 1) * (nLineHeight + tSettings.LineSpacing);
                     local nTextX = tRow.TextX - nScrollX;
+                    local bDrawn = false;
                     if (tTextSelection and tTextSelection.Id == tRow.Id) then
                         local nA, nB = math.max(tLine.Start, tTextSelection.Start), math.min(tLine.Finish, tTextSelection.Finish);
-                        if (nA < nB) then tArt.part(oDC, "Text Selection", nTextX + (tLine.Positions[nA] or 0), nTextY,
-                            (tLine.Positions[nB] or tLine.Width) - (tLine.Positions[nA] or 0), nLineHeight); end
+                        if (nA < nB) then
+                            local bSystem = _Theme.isTheme(oComponent.Skin) and oComponent.Skin.getName() == "System";
+                            -- Paint unselected text first, then replace just the
+                            -- selected span with the paired OS selection colors.
+                            if (bSystem) then
+                                oDC:DrawText(table.concat(tRow.Chars, "", tLine.Start + 1, tLine.Finish), nTextX, nTextY);
+                            end
+                            local nSelectionX = nTextX + (tLine.Positions[nA] or 0);
+                            tArt.part(oDC, "Text Selection", nSelectionX, nTextY,
+                                (tLine.Positions[nB] or tLine.Width) - (tLine.Positions[nA] or 0), nLineHeight);
+                            if (bSystem) then
+                                oDC:SetTextForeground(tArt.color("Text Selected"));
+                                oDC:DrawText(table.concat(tRow.Chars, "", nA + 1, nB), nSelectionX, nTextY);
+                                oDC:SetTextForeground(tArt.color(sColor)); bDrawn = true;
+                            end
+                        end
                     end
-                    oDC:DrawText(table.concat(tRow.Chars, "", tLine.Start + 1, tLine.Finish), nTextX, nTextY);
+                    if (not bDrawn) then oDC:DrawText(table.concat(tRow.Chars, "", tLine.Start + 1, tLine.Finish), nTextX, nTextY); end
                 end
             end
         end
@@ -786,6 +821,7 @@ function LogViewer.create(oParent, tOptions)
     oComponent.onEnable = function(bEnabled) oMenu.setEnabled(bEnabled); if (not bEnabled) then oMenu.close(); end; end;
     oComponent.onDestroy = function() oMenu.destroy(); tArt.destroy(); tEntries, tById, tRows, tGlyphs, tRowCache = {}, {}, {}, {}, {}; end;
     oComponent.setEntries(tOptions.Entries or {});
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

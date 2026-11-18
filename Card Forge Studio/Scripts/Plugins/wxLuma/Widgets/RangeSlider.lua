@@ -1,8 +1,12 @@
+local _SliderArtwork = require("wxLuma.Core.ControlSliderArtwork");
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events = require("wxLuma.Core.ControlEvents");
 local _Artwork = require("wxLuma.Core.ControlArtwork");
-local _finite = require("wxLuma.Core.ControlNumeric").finite;
+local _Numeric = require("wxLuma.Core.ControlNumeric");
+local _finite = _Numeric.finite;
 local RangeSlider = {};
 
 --[[!
@@ -16,9 +20,11 @@ local RangeSlider = {};
 @ret table oComponent Standard surface, get/setValue, get/setRange and get/setStep.
 !]]
 function RangeSlider.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
+    assert(tOptions.FocusBorder == nil or type(tOptions.FocusBorder) == "boolean", "FocusBorder must be boolean.");
     local nMin, nMax, nStep = tOptions.Min or 0, tOptions.Max or 100, tOptions.Step or 1;
-    assert(_finite(nMin) and _finite(nMax) and nMax > nMin and _finite(nMax - nMin), "Invalid range.");
-    assert(_finite(nStep) and nStep > 0, "Invalid Step.");
+    _Numeric.validateRange(nMin, nMax, nStep);
     local tValue = tOptions.Value or {Low = nMin, High = nMax};
     assert(type(tValue) == "table" and _finite(tValue.Low) and _finite(tValue.High) and tValue.Low <= tValue.High, "Invalid interval.");
     local oComponent = _Surface.create(oParent, tOptions, "RangeSlider");
@@ -32,8 +38,7 @@ function RangeSlider.create(oParent, tOptions)
     @desc Clamps and snaps a position to the nearest step from Min.
     !]]
     local function fSnap(nValue)
-        local nClamped = math.max(nMin, math.min(nMax, nValue));
-        return math.max(nMin, math.min(nMax, nMin + math.floor((nClamped - nMin) / nStep + 0.5) * nStep));
+        return _Numeric.snap(nValue, nMin, nMax, nStep);
     end
 
     --[[!
@@ -70,11 +75,10 @@ function RangeSlider.create(oParent, tOptions)
 
     --[[!
     @fqxn wxLuma.UI.RangeSlider.setRange
-    @desc Validates new bounds, then silently fits the interval before optional rangeChanged.
+    @desc Requires a finite span and step count before changing bounds, then silently fits the interval before optional rangeChanged.
     !]]
     function oComponent.setRange(nLowBound, nHighBound, bNotify)
-        assert(_finite(nLowBound) and _finite(nHighBound) and nHighBound > nLowBound
-            and _finite(nHighBound - nLowBound), "Invalid range.");
+        _Numeric.validateRange(nLowBound, nHighBound, nStep);
         if (not oComponent.Disposed and (nMin ~= nLowBound or nMax ~= nHighBound)) then
             nMin, nMax = nLowBound, nHighBound;
             oComponent.setValue(oComponent.getValue()); oComponent.refresh();
@@ -90,11 +94,35 @@ function RangeSlider.create(oParent, tOptions)
     function oComponent.getStep() return nStep; end
 
     --[[!
+    @fqxn wxLuma.UI.RangeSlider.getRangeAndStep
+    @desc Returns bounds and step together so persistence can restore coupled numeric settings atomically.
+    @ret number nMin Minimum, followed by maximum and step.
+    !]]
+    function oComponent.getRangeAndStep() return nMin, nMax, nStep; end
+
+    --[[!
+    @fqxn wxLuma.UI.RangeSlider.setRangeAndStep
+    @desc Validates and silently applies bounds and step together, then fits the current interval.
+    @param number nLowBound New minimum.
+    @param number nHighBound New maximum.
+    @param number nNextStep New positive step.
+    @ret table oComponent This object.
+    !]]
+    function oComponent.setRangeAndStep(nLowBound, nHighBound, nNextStep)
+        _Numeric.validateRange(nLowBound, nHighBound, nNextStep);
+        if (not oComponent.Disposed) then
+            nMin, nMax, nStep = nLowBound, nHighBound, nNextStep;
+            oComponent.setValue(oComponent.getValue()); oComponent.refresh();
+        end
+        return oComponent;
+    end
+
+    --[[!
     @fqxn wxLuma.UI.RangeSlider.setStep
-    @desc Changes positive finite snapping step and fits the interval; optional notification is changed-only.
+    @desc Requires a positive finite step with a finite step count before fitting the interval; optional notification is changed-only.
     !]]
     function oComponent.setStep(nNext, bNotify)
-        assert(_finite(nNext) and nNext > 0, "Invalid Step.");
+        _Numeric.validateRange(nMin, nMax, nNext);
         if (not oComponent.Disposed and nNext ~= nStep) then
             nStep = nNext; oComponent.setValue(oComponent.getValue());
             if (bNotify) then tEvents.emit("stepChanged", {Step = nStep}); end
@@ -113,7 +141,9 @@ function RangeSlider.create(oParent, tOptions)
 
     oComponent.pointer = function(sEvent, nX)
         local nWidth = oComponent.Control:GetClientSizeWH();
-        local nValue = nMin + (nX - 16) / math.max(1, nWidth - 32) * (nMax - nMin);
+        local nMargin = _SliderArtwork.margin(oComponent.Control, oComponent.Skin);
+        local nFraction = math.max(0, math.min(1, (nX - nMargin) / math.max(1, nWidth - nMargin * 2)));
+        local nValue = nMin + nFraction * (nMax - nMin);
         if (sEvent == "down") then
             tDragStart = oComponent.getValue();
             -- Compare both distances directly. A point just left of the upper
@@ -129,10 +159,10 @@ function RangeSlider.create(oParent, tOptions)
     oComponent.key = function(nKey)
         local nCurrent = sActive == "Low" and nLow or nHigh;
         if (nKey == _wx.WXK_SPACE) then sActive = sActive == "Low" and "High" or "Low"; oComponent.refresh();
-        elseif (nKey == _wx.WXK_LEFT or nKey == _wx.WXK_DOWN) then fMove(nCurrent - nStep);
-        elseif (nKey == _wx.WXK_RIGHT or nKey == _wx.WXK_UP) then fMove(nCurrent + nStep);
-        elseif (nKey == _wx.WXK_PAGEUP) then fMove(nCurrent + 10 * nStep);
-        elseif (nKey == _wx.WXK_PAGEDOWN) then fMove(nCurrent - 10 * nStep);
+        elseif (nKey == _wx.WXK_LEFT or nKey == _wx.WXK_DOWN) then fMove(_Numeric.advance(nCurrent, nMin, nMax, nStep, -1));
+        elseif (nKey == _wx.WXK_RIGHT or nKey == _wx.WXK_UP) then fMove(_Numeric.advance(nCurrent, nMin, nMax, nStep, 1));
+        elseif (nKey == _wx.WXK_PAGEUP) then fMove(_Numeric.advance(nCurrent, nMin, nMax, nStep, 10));
+        elseif (nKey == _wx.WXK_PAGEDOWN) then fMove(_Numeric.advance(nCurrent, nMin, nMax, nStep, -10));
         elseif (nKey == _wx.WXK_HOME) then fMove(nMin);
         elseif (nKey == _wx.WXK_END) then fMove(nMax);
         elseif (nKey == _wx.WXK_ESCAPE and tDragStart) then oComponent.setValue(tDragStart, true); oComponent.cancel();
@@ -142,19 +172,21 @@ function RangeSlider.create(oParent, tOptions)
     oComponent.draw = function(oDC, nWidth, nHeight)
         if (oComponent.Disposed) then return; end
         local sState = oComponent.getState();
-        tArt.part(oDC, "Surface "..sState, 0, 0, nWidth, nHeight);
-        tArt.part(oDC, "Track "..sState, 16, (nHeight - 8) / 2, math.max(1, nWidth - 32), 8);
-        local nXLow = 16 + (nWidth - 32) * (nLow - nMin) / (nMax - nMin);
-        local nXHigh = 16 + (nWidth - 32) * (nHigh - nMin) / (nMax - nMin);
-        tArt.part(oDC, "Fill "..sState, nXLow, (nHeight - 8) / 2, nXHigh - nXLow, 8);
-        for _, tHandle in ipairs({{"Low", nXLow}, {"High", nXHigh}}) do
-            tArt.part(oDC, "Thumb "..(oComponent.isEnabled() and sActive == tHandle[1] and "Hover" or sState),
-                tHandle[2] - 12, (nHeight - 28) / 2, 24, 28);
+        -- Match the single slider's backdrop as well as its track and thumbs.
+        if (tOptions.Background) then
+            tOptions.Background(oDC, oComponent);
+        else
+            local oColor = _Theme.colour(oComponent.Skin, "Background", 24, 29, 36);
+            local oBrush = _wx.wxBrush(oColor);
+            oDC:SetBackground(oBrush); oDC:Clear(); oBrush:delete(); oColor:delete();
         end
-        if (oComponent.Control:HasFocus()) then tArt.part(oDC, "Focus", 0, 0, nWidth, nHeight); end
+        _SliderArtwork.draw(oComponent.Control, oComponent.Skin, oComponent.Skin.drawOpaque,
+            oDC, nWidth, nHeight, sState, false,
+            {(nLow - nMin) / (nMax - nMin), (nHigh - nMin) / (nMax - nMin)});
     end;
     oComponent.onDestroy = tArt.destroy;
     oComponent.setValue(tValue);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

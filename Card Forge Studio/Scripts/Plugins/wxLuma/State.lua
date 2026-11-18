@@ -12,14 +12,14 @@ local State = {};
 -- explicit public state APIs are included; constructors, item definitions,
 -- event subscriptions and native transient interaction are never inspected.
 local _tProperties = {
-    {"LogOptions"}, {"ChartOptions"}, {"Entries"}, {"Series"},
-    {"Precision"}, {"Range"}, {"Step"}, {"Continuity"}, {"Rate"}, {"MotionDirection"},
+    {"LogOptions"}, {"ChartOptions"}, {"Entries"}, {"Series"}, {"Polygon"},
+    {"NumericSettings"}, {"RangeAndStep"}, {"Precision"}, {"Range"}, {"Step"}, {"Continuity"}, {"Rate"}, {"MotionDirection"},
     {"Severity"}, {"Duration"}, {"DockState"}, {"Reserved"}, {"Orientation"}, {"Reversed"},
     {"Glow"}, {"GlowRadius"}, {"Glass"}, {"Brightness"}, {"Size"}, {"Color"}, {"Origin"},
     {"Direction"}, {"StartAngle"}, {"ReserveOrigin"}, {"ReserveDirection"},
     {"ReserveStartAngle"}, {"Radii"}, {"Appearance"}, {"ReserveRenderer"},
     {"Supersampling"}, {"BladeCount"}, {"Rotation"}, {"BackgroundImage"},
-    {"BackgroundImageFit"}, {"AutoComplete"}, {"ScaleMode"}, {"Position"}, {"LayoutMode"},
+    {"BackgroundImageFit"}, {"AutoComplete"}, {"ScaleMode"}, {"Position"}, {"LayoutMode"}, {"Layout"},
     {"MultiSelectEnabled", "isMultiSelectEnabled"}, {"CheckboxesEnabled", "isCheckboxesEnabled"},
     {"CheckPropagationEnabled", "isCheckPropagationEnabled"}, {"Value"}, {"Selected"},
     {"CheckedItems", "getChecked"}, {"ReadOnly", "isReadOnly"}, {"TextSelection"}, {"FollowingTail"}
@@ -309,10 +309,13 @@ end
     existing objects only and must return plain data; they never create children.
 @param string sType Full object type, such as wxLuma.UI.CustomControl.
 @param table tAdapter capture(object), restore(object,data), optional validate(data).
+    OwnsChildren=true lets a composite adapter own its entire existing subtree;
+    private child controls are then omitted from capture and matched restoration.
 !]]
 function State.register(sType, tAdapter)
     assert(type(sType) == "string" and type(tAdapter) == "table" and type(tAdapter.capture) == "function"
-        and type(tAdapter.restore) == "function" and (tAdapter.validate == nil or type(tAdapter.validate) == "function"),
+        and type(tAdapter.restore) == "function" and (tAdapter.validate == nil or type(tAdapter.validate) == "function")
+        and (tAdapter.OwnsChildren == nil or type(tAdapter.OwnsChildren) == "boolean"),
         "State adapter requires capture/restore and optional validate functions.");
     assert(not _tAdapters[sType] or _tAdapters[sType] == tAdapter, "State adapter already registered.");
     _tAdapters[sType] = tAdapter;
@@ -342,8 +345,11 @@ function State.capture(oRoot)
         nNext = nNext + 1;
         local tIds = {};
 
-        for sId in pairs(tChildren[oObject]) do
-            tIds[#tIds + 1] = sId;
+        -- A composite adapter restores its private controls from its own model.
+        -- Capturing those controls again would replay stale view-derived values.
+        local tAdapter = _tAdapters[sType];
+        if (not tAdapter or not tAdapter.OwnsChildren) then
+            for sId in pairs(tChildren[oObject]) do tIds[#tIds + 1] = sId; end
         end
 
         table.sort(tIds);
@@ -445,11 +451,10 @@ function State.restore(oRoot, tSource)
 
             tMatched[#tMatched + 1] = tMatch;
 
-            for sId, nChild in pairs(tNode.Children) do
-                local oChild = tChildren[oObject][sId];
-
-                if (oChild) then
-                    tPending[#tPending + 1] = {Object = oChild, Node = nChild};
+            if (not tAdapter or not tAdapter.OwnsChildren) then
+                for sId, nChild in pairs(tNode.Children) do
+                    local oChild = tChildren[oObject][sId];
+                    if (oChild) then tPending[#tPending + 1] = {Object = oChild, Node = nChild}; end
                 end
             end
         end

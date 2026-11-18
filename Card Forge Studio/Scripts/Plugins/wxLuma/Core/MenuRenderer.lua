@@ -1,4 +1,5 @@
 local _wx = require("wx");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local MenuRenderer = {};
 
 --[[!
@@ -63,10 +64,11 @@ end
 @desc Owns bounded decoded-image and rendered-item caches. Every shape and image
     clip is supersampled before alpha-aware scaling; the supplied skin is borrowed.
 !]]
-function MenuRenderer.create(oSkin, sArtwork, bRadial, fImageError)
+function MenuRenderer.create(oSkin, sArtwork, bRadial, fImageError, oWindow)
     local tRenderer = {};
     local tImages, tImageOrder, tCache, tOrder = {}, {}, {}, {};
     local nScale = 3;
+    local nRevision = oSkin.Revision;
     local oFont = _wx.wxFont(oSkin.Font);
     oFont:SetPointSize(math.max(1, oSkin.Font:GetPointSize() * nScale));
 
@@ -132,7 +134,8 @@ function MenuRenderer.create(oSkin, sArtwork, bRadial, fImageError)
             nHostWidth, nHostHeight);
         local oBitmap = _wx.wxBitmap(nWidth, nHeight);
         local oMemory = _wx.wxMemoryDC();
-        local oBackgroundBrush = _wx.wxBrush(_wx.wxColour(24, 29, 36));
+        local oBackground = _Theme.colour(oSkin, "Background", 24, 29, 36);
+        local oBackgroundBrush = _wx.wxBrush(oBackground); oBackground:delete();
         oMemory:SelectObject(oBitmap);
         oMemory:SetBackground(oBackgroundBrush);
         oMemory:Clear();
@@ -187,28 +190,32 @@ function MenuRenderer.create(oSkin, sArtwork, bRadial, fImageError)
             _wx.wxRect(nTextBoxX, nTextBoxY, math.max(1, nTextBoxWidth), math.max(1, nTextBoxHeight)));
         oMemory:SetFont(oFont);
         oMemory:SetBackgroundMode(_wx.wxTRANSPARENT);
-        oMemory:SetTextForeground(sState == "Disabled" and _wx.wxColour(114, 126, 139)
-            or _wx.wxColour(225, 233, 242));
+        local oTextColor = sState == "Disabled" and _Theme.colour(oSkin, "DisabledText", 114, 126, 139)
+            or _Theme.colour(oSkin, "Text", 225, 233, 242);
+        oMemory:SetTextForeground(oTextColor);
         local sText = tItem.Text;
         local nTextWidth, nTextHeight = oMemory:GetTextExtent(sText);
         local nTextX = bRadial and math.floor((nWidth - nTextWidth) / 2)
             or (tItem.Image and math.min(tItem.ImageWidth, tEntry.Height - 8) + 12 or 10) * nScale;
         local nTextY = bRadial and tItem.Image and nHostY + math.floor(nHostHeight * 0.6 - nTextHeight / 2)
             or math.floor((nHeight - nTextHeight) / 2);
-        if (tItem.Image and sText ~= "") then
+        if (tItem.Image and sText ~= "" and (not oSkin.getName or oSkin.getName() ~= "System")) then
             oMemory:SetTextForeground(_wx.wxColour(8, 12, 18));
             oMemory:DrawText(sText, nTextX + nScale, nTextY + nScale);
-            oMemory:SetTextForeground(sState == "Disabled" and _wx.wxColour(114, 126, 139)
-                or _wx.wxColour(225, 233, 242));
+            oMemory:SetTextForeground(oTextColor);
         end
 
         oMemory:DrawText(sText, nTextX, nTextY);
 
         if (tItem.Items and not bRadial) then
-            oMemory:DrawText(">", nWidth - 16 * nScale, math.floor((nHeight - nTextHeight) / 2));
+            if (not _Theme.isTheme(oSkin) or oSkin.getName() ~= "System") then
+                oSkin.draw(oMemory, sArtwork.." Arrow Right "..sState, nWidth - 16 * nScale,
+                    math.floor((nHeight - 12 * nScale) / 2), 12 * nScale, 12 * nScale);
+            end
         end
 
         oTextClip:delete();
+        oTextColor:delete();
         -- A separate monochrome bitmap describes exact host coverage. This clips
         -- artwork and captions without optional wxDC region-clipping bindings.
         local oMaskBitmap = _wx.wxBitmap(nWidth, nHeight, 1);
@@ -252,12 +259,18 @@ function MenuRenderer.create(oSkin, sArtwork, bRadial, fImageError)
         oWhite:delete();
         oMemory:SelectObject(_wx.wxNullBitmap);
         oMemory:delete();
-        oBitmap:SetMask(_wx.wxMask(oMaskBitmap));
+        -- Generated System materials already carry alpha. Adding a native mask
+        -- and unconditionally calling InitAlpha mixes two transparency paths
+        -- and triggers a native assertion during popup painting. Install the
+        -- independently rendered coverage explicitly for either provider.
+        local oCoverage = oMaskBitmap:ConvertToImage();
+        local sAlpha = oCoverage:GetData():gsub("(.)..", "%1");
+        oCoverage:delete();
         oMaskBitmap:delete();
         oBackgroundBrush:delete();
         local oImage = oBitmap:ConvertToImage();
-        oImage:InitAlpha();
-        oImage:SetMask(false);
+        if (not oImage:HasAlpha()) then oImage:InitAlpha(); end
+        oImage:SetAlpha(sAlpha);
         local oScaled = oImage:Scale(tEntry.Width, tEntry.Height, _wx.wxIMAGE_QUALITY_HIGH);
         local oResult = _wx.wxBitmap(oScaled);
         oScaled:delete();
@@ -271,6 +284,14 @@ function MenuRenderer.create(oSkin, sArtwork, bRadial, fImageError)
     @desc Alpha-draws one cached menu item in its measured footprint.
     !]]
     function tRenderer.draw(oDC, tEntry, sState)
+        if (nRevision ~= oSkin.Revision) then
+            -- A popup may first paint long after a provider switch. Refresh its
+            -- private font and rendered items before borrowing the new skin.
+            tRenderer.clear(); oFont:delete();
+            oFont = _wx.wxFont(oSkin.Font);
+            oFont:SetPointSize(math.max(1, oSkin.Font:GetPointSize() * nScale));
+            nRevision = oSkin.Revision;
+        end
         local sKey = table.concat({tEntry.Item.Id, sState, tEntry.Width, tEntry.Height}, ":");
 
         if (not tCache[sKey]) then
@@ -297,6 +318,12 @@ function MenuRenderer.create(oSkin, sArtwork, bRadial, fImageError)
         end
 
         oDC:DrawBitmap(tCache[sKey], tEntry.X, tEntry.Y, true);
+        if (not bRadial and tEntry.Item.Items and _Theme.isTheme(oSkin) and oSkin.getName() == "System") then
+            -- Native glyphs render at final device resolution, after the
+            -- supersampled menu body has been reduced to its display size.
+            oSkin.arrowGlyph(oWindow, oDC, "Right", tEntry.X + tEntry.Width - 16,
+                tEntry.Y + (tEntry.Height - 12) / 2, 12, 12, sState);
+        end
 
         while (#tOrder > 96) do
             local sOld = table.remove(tOrder, 1);

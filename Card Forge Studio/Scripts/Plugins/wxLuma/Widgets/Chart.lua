@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Artwork = require("wxLuma.Core.ControlArtwork");
@@ -20,6 +21,7 @@ local Chart = {};
     accept false/nil for automatic or {Min,Max}. State contains plain data only.
 !]]
 function Chart.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "Chart requires Skin.");
     local oComponent = _Surface.create(oParent, tOptions, "Chart");
     local sArtwork = tOptions.Artwork or "Chart";
@@ -138,7 +140,9 @@ function Chart.create(oParent, tOptions)
         local bOpacityOnly = true;
         for _, tChange in ipairs(tChanges) do if (tChange.Property ~= "AreaOpacity") then bOpacityOnly = false; break; end end
         fInvalidate(bOpacityOnly);
-        if (oTooltip) then oTooltip.setEnabled(tSettings.Tooltips and oComponent.isEnabled()); end
+        -- Keep tooltip policy independent of temporary ancestor disabling.
+        -- Tooltip.show still checks the target's effective availability.
+        if (oTooltip) then oTooltip.setEnabled(tSettings.Tooltips and oComponent.Control:IsThisEnabled()); end
         for _, tChange in ipairs(tChanges) do
             if (tChange.Property == "MaxPoints" and oComponent.setSeries) then oComponent.setSeries(tSeries, bNotify); end
             if (bNotify and (tChange.Property == "XRange" or tChange.Property == "YRange")) then
@@ -1124,7 +1128,9 @@ function Chart.create(oParent, tOptions)
     end;
     oComponent.key = function(nKey)
         if (nKey == _wx.WXK_ESCAPE) then oComponent.setValue(nil, true);
-        elseif (nKey == _wx.WXK_HOME) then oComponent.resetView(true);
+        elseif (nKey == _wx.WXK_HOME) then
+            if (not tSettings.ZoomEnabled) then return false; end
+            oComponent.resetView(true);
         elseif (nKey == _wx.WXK_ADD or nKey == string.byte("+")) then if (tSettings.ZoomEnabled) then oComponent.zoom(1 / tSettings.ZoomFactor, nil, nil, true); end
         elseif (nKey == _wx.WXK_SUBTRACT or nKey == string.byte("-")) then if (tSettings.ZoomEnabled) then oComponent.zoom(tSettings.ZoomFactor, nil, nil, true); end
         elseif (nKey == _wx.WXK_LEFT or nKey == _wx.WXK_RIGHT) then
@@ -1135,16 +1141,26 @@ function Chart.create(oParent, tOptions)
         return true;
     end;
     oComponent.onEnable = function(bEnabled) oTooltip.setEnabled(bEnabled and tSettings.Tooltips); fInvalidate(); end;
-    oComponent.onDestroy = function()
+    --[[!
+    @fqxn wxLuma.UI.Chart.onThemeChanged
+    @desc Releases decorative raster copies and redraws without altering series,
+        selection, zoom or application data colors.
+    !]]
+    oComponent.onThemeChanged = function()
         if (tRender) then tRender.Bitmap:delete(); tRender = nil; end
         for _, oImage in pairs(tPartSources) do oImage:delete(); end
         for _, oBitmap in pairs(tPartBitmaps) do oBitmap:delete(); end
         tPartSources, tPartBitmaps, tPartOrder = {}, {}, {};
         tLayerShapes = {};
+        fInvalidate();
+    end;
+    oComponent.onDestroy = function()
+        oComponent.onThemeChanged();
         oTooltipTimer:Stop(); oComponent.Control:Disconnect(nTooltipId, _wx.wxEVT_TIMER); oTooltipTimer:delete();
         oTooltip.destroy(); tArt.destroy(); tSeries, tById, tHits, tLegends, tFormatters = {}, {}, {}, {}, {};
     end;
     oComponent.setSeries(tOptions.Series or {});
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

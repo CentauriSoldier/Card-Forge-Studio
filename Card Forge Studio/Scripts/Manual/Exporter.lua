@@ -1,21 +1,23 @@
 --[[!
 @fqxn CFS.Manual.Exporter
-@desc Exports the shared manual renderer's HTML and game-owned assets. Each output is built in a unique sibling staging folder before replacing only Web or PDF under the bound game's Exports/Manual folder. PDF uses an installed Chromium-family browser in headless mode, without PHP or an installed-font collection.
+@desc Stages Lua-generated manual HTML and game-owned assets before replacing only Web or PDF under the bound game's Exports/Manual folder. PDF is serialized by the Lua writer. Native previews retain an in-memory layout, not a browser profile.
 !]]
 
 local wx		= require("wx");
 local Documents	= require("Manual.Documents");
 local JSON		= require("Manual.Lib.dkjson");
 local Exporter	= {};
+local _tCSS = {"bootstrap.min.css", "intro-preview.css", "glossary.css", "Reader.css", "Components.css", "Print.css"};
+local _tJS = {"glossary.js", "Reader.js", "bootstrap.bundle.min.js"};
 
 --[[!
-@fqxn CFS.Manual.Exporter.Private.Functions.fAbsolute
+@fqxn CFS.Manual.Exporter.Private.Functions.absolute
 @desc Normalizes a native path without changing the current working directory.
 @param string pPath Native path.
 @return string pAbsolute Absolute path with forward separators.
 @vis private
 !]]
-local function fAbsolute(pPath)
+local function absolute(pPath)
 	local oPath	= wx.wxFileName(pPath);
 	local sPath;
 	assert(oPath:Normalize(wx.wxPATH_NORM_DOTS + wx.wxPATH_NORM_ABSOLUTE), "Cannot normalize the export path.");
@@ -25,41 +27,45 @@ local function fAbsolute(pPath)
 end
 
 --[[!
-@fqxn CFS.Manual.Exporter.Private.Functions.fWrite
+@fqxn CFS.Manual.Exporter.Private.Functions.write
 @desc Writes a newly staged file and verifies its handle is closed.
 @param string pFile Owned staging filename.
 @param string sText Complete bytes.
 @vis private
 !]]
-local function fWrite(pFile, sText)
+local function write(pFile, sText)
 	local hFile = assert(io.open(pFile, "wb"));
 	assert(hFile:write(sText));
 	assert(hFile:close());
 end
 
 --[[!
-@fqxn CFS.Manual.Exporter.Private.Functions.fCopy
+@fqxn CFS.Manual.Exporter.Private.Functions.copy
 @desc Copies an asset tree using native wxWidgets APIs. Directory enumeration does not follow links; symbolic-link entries are refused rather than traversed.
 @param string pSource Existing asset folder.
 @param string pTarget Owned new staging folder.
+@param function|nil fProgress Reports asset progress.
+@param function fCheck Checks cancellation and yields through the job scheduler.
 @vis private
 !]]
-local function fCopy(pSource, pTarget)
+local function copy(pSource, pTarget, fProgress, fCheck)
 	local oDir;
 	local bFound;
 	local sName;
 	local pFrom;
 	assert(wx.wxDirExists(pSource), "Missing export asset folder: "..pSource);
-	assert(wx.wxFileName.Mkdir(pTarget, 511, wx.wxPATH_MKDIR_FULL), "Cannot create staged asset folder.");
+	assert(wx.wxDirExists(pTarget) or wx.wxMkdir(pTarget), "Cannot create staged asset folder.");
 	oDir = wx.wxDir(pSource);
 	assert(oDir:IsOpened(), "Cannot read export assets.");
 	bFound, sName = oDir:GetFirst("", wx.wxDIR_FILES + wx.wxDIR_DIRS + wx.wxDIR_HIDDEN + wx.wxDIR_NO_FOLLOW);
 	while (bFound) do
 		pFrom = pSource.."/"..sName;
+        if (fProgress) then fProgress("assets", "Copying asset: "..pFrom); end
+        fCheck();
 		-- wxFILE_EXISTS_SYMLINK is absent from this Lua binding; the documented
 		-- wxWidgets value includes NO_FOLLOW and is used only for this test.
 		assert(not wx.wxFileName.Exists(pFrom, 0x1004), "Linked export assets are not supported: "..pFrom);
-		if (wx.wxDirExists(pFrom)) then fCopy(pFrom, pTarget.."/"..sName);
+		if (wx.wxDirExists(pFrom)) then copy(pFrom, pTarget.."/"..sName, fProgress, fCheck);
 		else assert(wx.wxCopyFile(pFrom, pTarget.."/"..sName, false), "Cannot copy an export asset."); end
 		bFound, sName = oDir:GetNext();
 	end
@@ -67,15 +73,15 @@ local function fCopy(pSource, pTarget)
 end
 
 --[[!
-@fqxn CFS.Manual.Exporter.Private.Functions.fRemove
+@fqxn CFS.Manual.Exporter.Private.Functions.remove
 @desc Deletes only an explicitly selected child of the normalized Exports/Manual root. Uses native recursive removal, never a shell or a browser-supplied path.
 @param string pRoot Bound export root.
 @param string pFolder Owned child folder.
 @vis private
 !]]
-local function fRemove(pRoot, pFolder)
-	local pChecked = fAbsolute(pFolder);
-	pRoot = fAbsolute(pRoot);
+local function remove(pRoot, pFolder)
+	local pChecked = absolute(pFolder);
+	pRoot = absolute(pRoot);
 	assert(pChecked:sub(1, #pRoot + 1) == pRoot.."/" and not pChecked:sub(#pRoot + 2):find("/", 1, true), "Refusing cleanup outside the manual export folder.");
 	if (wx.wxDirExists(pChecked)) then
 		-- wxPATH_RMDIR_RECURSIVE (0x0002) is not exported by this Lua binding.
@@ -84,238 +90,186 @@ local function fRemove(pRoot, pFolder)
 end
 
 --[[!
-@fqxn CFS.Manual.Exporter.Private.Functions.fBrowser
-@desc Finds an installed headless-capable browser. An explicit executable override may be provided through CFS_MANUAL_PDF_BROWSER; no browser or font is downloaded or installed.
-@return string pBrowser Existing executable.
-@vis private
-!]]
-local function fBrowser()
-	local tPaths	= {};
-	local pOverride	= os.getenv("CFS_MANUAL_PDF_BROWSER");
-	if (pOverride and pOverride ~= "") then assert(wx.wxFileExists(pOverride), "CFS_MANUAL_PDF_BROWSER does not name an existing executable."); return pOverride; end
-	for _, sVariable in ipairs({"PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"}) do
-		local pBase = os.getenv(sVariable);
-		if (pBase) then
-			tPaths[#tPaths + 1] = pBase.."/Microsoft/Edge/Application/msedge.exe";
-			tPaths[#tPaths + 1] = pBase.."/Google/Chrome/Application/chrome.exe";
-		end
-	end
-	for _, pPath in ipairs({"/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome", "/opt/google/chrome/chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"}) do tPaths[#tPaths + 1] = pPath; end
-	for _, pPath in ipairs(tPaths) do if (wx.wxFileExists(pPath)) then return pPath; end end
-	error("PDF export needs installed Chrome, Chromium or Edge. Set CFS_MANUAL_PDF_BROWSER if it is installed in another location.", 2);
-end
-
---[[!
-@fqxn CFS.Manual.Exporter.Private.Functions.fQuote
-@desc Quotes one argument for wxExecute's native command parser, without involving a command shell. Rejects embedded quotes/control characters rather than accepting ambiguous paths.
-@param string sValue Native argument.
-@return string sQuoted Quoted argument.
-@vis private
-!]]
-local function fQuote(sValue)
-	assert(not sValue:find('["%z\1-\31]'), "An export executable or path contains an unsupported quote/control character.");
-	return '"'..sValue:gsub("\\", "/")..'"';
-end
-
---[[!
-@fqxn CFS.Manual.Exporter.Private.Functions.fPrintBrowser
-@desc Starts an isolated headless browser, gives its print page the private loopback connection, and waits for that page to finish pagination, print and deliver the PDF. Uses no fixed print delay. The editor retains ownership of Studio window modality; exporting does not disable its browser. Only the owned browser process can be terminated on timeout.
-@param string pBrowser Installed browser executable.
-@param string pStage Owned export staging directory.
-@param string sURL Staged print document URL.
-@param table tContext Bound context carrying shutdown cancellation.
-@vis private
-!]]
-local function fPrintBrowser(pBrowser, pStage, sURL, tContext)
-	local pProfile	= pStage.."/browser-profile";
-	local pPort		= pProfile.."/DevToolsActivePort";
-	local nPID;
-	local nStarted	= os.time();
-	local bOK;
-	local sFailure;
-	local sDeliveredPDF;
-	--[[!
-	@fqxn CFS.Manual.Exporter.Private.Functions.fPrintWait
-	@desc Processes pending native events while the guarded export dispatcher is busy, then pauses briefly. The editor browser remains enabled so it can process bridge responses.
-	@vis private
-	!]]
-	local function fPrintWait()
-		if (wx.wxGetApp()) then wx.wxYield(); end
-		assert(not tContext.cancelled, "PDF export cancelled for Studio shutdown; the previous export was preserved.");
-		wx.wxMilliSleep(25);
-	end
-	--[[!
-	@fqxn CFS.Manual.Exporter.Private.Functions.fPrintJob
-	@desc Connects only the owned print document to its isolated browser and waits for confirmed file delivery followed by browser shutdown.
-	@vis private
-	!]]
-	local function fPrintJob()
-		local sPort;
-		local sPath;
-		local tConnection;
-		local oDirectory;
-		local pDirectory;
-		local sProblem;
-		local bRead;
-		local sRead;
-		local sCommand = fQuote(pBrowser).." --headless --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --enable-logging --log-level=0 --disable-gpu --no-first-run --no-default-browser-check --remote-debugging-port=0 --remote-allow-origins=file://,null "..fQuote("--log-file="..pStage.."/print-debug.log").." "..fQuote("--user-data-dir="..pProfile).." "..fQuote(sURL);
-		nPID = wx.wxExecute(sCommand, wx.wxEXEC_ASYNC);
-		assert(nPID > 0, "Cannot start the isolated PDF browser.");
-		while (not sPort or not sPath) do
-			assert(wx.wxProcess.Exists(nPID) and os.time() - nStarted < 20, "The PDF browser did not open its local print connection.");
-			if (wx.wxFileExists(pPort)) then sPort, sPath = Documents.read(pPort):match("^(%d+)\r?\n(/devtools/browser/[A-Za-z0-9-]+)"); end
-			if (sPort and sPath) then break; end
-			fPrintWait();
-		end
-		assert(sPort and sPath, "Invalid local PDF connection information.");
-		oDirectory = wx.wxFileName(pStage);
-		pDirectory = oDirectory:GetFullPath(wx.wxPATH_NATIVE); oDirectory:delete();
-		tConnection = {url = "ws://127.0.0.1:"..sPort..sPath, directory = pDirectory};
-		fWrite(pStage.."/js/PrintConnection.tmp", "window.CFSPrintConnect("..JSON.encode(tConnection)..");");
-		assert(wx.wxRenameFile(pStage.."/js/PrintConnection.tmp", pStage.."/js/PrintConnection.js", false), "Cannot deliver the local print connection.");
-		-- Some browser launchers hand the job to a child process. Completion is
-		-- the delivered file, not the lifetime of the initial launcher PID.
-		while (not sDeliveredPDF and not sProblem) do
-			if (os.time() - nStarted >= 180) then
-				sRead = wx.wxFileExists(pStage.."/print-debug.log") and Documents.read(pStage.."/print-debug.log") or "";
-				sProblem = "browser startup";
-				for sStage in sRead:gmatch("CFS_PDF_STAGE: ([^\r\n]+)") do sProblem = sStage; end
-				error("PDF timed out during "..sProblem.."; the previous export was preserved.", 2);
-			end
-			if (wx.wxFileExists(pStage.."/Print-error.txt")) then sProblem = Documents.read(pStage.."/Print-error.txt"); end
-			if (wx.wxFileExists(pStage.."/Manual.pdf")) then
-				bRead, sRead = pcall(Documents.read, pStage.."/Manual.pdf");
-				if (bRead and sRead:sub(1, 5) == "%PDF-" and sRead:sub(-2048):find("%%%%EOF")) then sDeliveredPDF = sRead; end
-			end
-			if (sDeliveredPDF or sProblem) then break; end
-			fPrintWait();
-		end
-		fWrite(pStage.."/js/PrintDelivered.tmp", "window.CFSPrintDelivered();");
-		assert(wx.wxRenameFile(pStage.."/js/PrintDelivered.tmp", pStage.."/js/PrintDelivered.js", false), "Cannot acknowledge PDF delivery.");
-		for _ = 1, 80 do if (not wx.wxProcess.Exists(nPID)) then break; end fPrintWait(); end
-		if (sProblem) then error(sProblem, 2); end
-	end
-	bOK, sFailure = pcall(fPrintJob);
-	if (not bOK and nPID and wx.wxProcess.Exists(nPID)) then
-		-- A headless browser has no closeable window for SIGTERM on Windows.
-		-- Force termination only for the PID owned by this export job.
-		wx.wxProcess.Kill(nPID, wx.wxSIGKILL, wx.wxKILL_CHILDREN);
-		for _ = 1, 40 do if (not wx.wxProcess.Exists(nPID)) then break; end wx.wxMilliSleep(25); end
-	end
-	assert(bOK, sFailure);
-	return sDeliveredPDF;
-end
-
---[[!
 @fqxn CFS.Manual.Exporter.Functions.run
-@desc Builds one static Web site or paginated PDF from already sanitized shared-renderer HTML. Validates numeric PDF settings, keeps the previous output until generation succeeds, rolls back a failed replacement, and removes only the replaced type's old folder. Does not change source Markdown, font files, plugins or another export type.
-@param table tContext Bound game/manual/export paths.
+@desc Stages Lua-generated Web output or a completed Lua PDF layout, then replaces
+    only the selected published directory. No browser or subprocess is launched.
+@param table tContext Bound export paths and cancellation/progress callbacks.
 @param string sKind web or pdf.
-@param string sHTML Complete portable HTML produced by the editor renderer.
-@param table tSettings Persisted game PDF settings.
-@return table tResult Output path and message.
+@param string|table vDocument Web HTML or PDFLayout result.
+@param table tSettings Saved export settings.
+@param boolean|nil bPreview Retain a PDF layout without publishing a file.
+@return table tResult Output path or in-memory preview, with status.
 !]]
-function Exporter.run(tContext, sKind, sHTML, tSettings)
-	local pRoot		= fAbsolute(tContext.exportRoot.."/Manual");
-	local sType		= sKind == "web" and "Web" or "PDF";
-	local pOutput	= pRoot.."/"..sType;
-	local pStage;
-	local pPrevious;
-	local pUnique;
-	local oTemporary;
-	local pBrowser;
-	local sCommand;
-	local bOK;
-	local sFailure;
-	local bPrevious	= false;
-	assert(sKind == "web" or sKind == "pdf", "Unknown manual export type.");
-	assert(type(sHTML) == "string" and #sHTML > 0 and #sHTML <= 4000000, "Invalid or oversized rendered manual.");
-	if (sKind == "pdf") then
-		assert(type(tSettings) == "table" and type(tSettings.pdf) == "table" and tSettings.pdf.units == "in", "Invalid saved PDF settings.");
-		for _, sKey in ipairs({"width", "height", "bleed", "marginTop", "marginBottom", "marginInside", "marginOutside", "dpi"}) do
-			local nValue = tSettings.pdf[sKey];
-			assert(type(nValue) == "number" and nValue == nValue and nValue < math.huge and nValue >= 0, "Invalid saved PDF field: "..sKey);
-		end
-		assert(tSettings.pdf.width > tSettings.pdf.marginInside + tSettings.pdf.marginOutside and tSettings.pdf.height > tSettings.pdf.marginTop + tSettings.pdf.marginBottom and tSettings.pdf.dpi > 0, "PDF settings leave no content area.");
-		pBrowser = fBrowser();
-	end
-	assert(wx.wxFileName.Mkdir(pRoot, 511, wx.wxPATH_MKDIR_FULL), "Cannot create the manual export root.");
-	oTemporary = wx.wxFile();
-	pUnique = wx.wxFileName.CreateTempFileName(pRoot.."/."..sType.."-", oTemporary);
-	if (oTemporary:IsOpened()) then oTemporary:Close(); end
-	oTemporary:delete();
-	assert(pUnique ~= "" and wx.wxRemoveFile(pUnique), "Cannot reserve an export staging name.");
-	pStage, pPrevious = pUnique.."-stage", pUnique.."-previous";
-	assert(wx.wxMkdir(pStage), "Cannot create the export staging folder.");
+function Exporter.run(tContext, sKind, vDocument, tSettings, bPreview)
+    local pRoot = absolute(tContext.exportRoot.."/Manual");
+    local sType = sKind == "web" and "Web" or "PDF";
+    local pOutput = pRoot.."/"..sType;
+    local pStage, pPrevious, pUnique;
+    local oTemporary;
+    local bOK, sFailure;
+    local bPrevious = false;
+    local fCheck;
+    local fBuild;
 
-	--[[!
-	@fqxn CFS.Manual.Exporter.Private.Functions.fBuild
-	@desc Populates one owned staging directory and, for PDF, waits for the isolated headless print process. wxExecute runs outside browser callbacks through Adapter's guarded dispatcher.
-	@vis private
-	!]]
-	local function fBuild()
-		local sPDF;
-		local sDocument = sHTML;
-		local oPage;
-		local sURL;
-		local nExit;
-		--[[!
-		@fqxn CFS.Manual.Exporter.Private.Functions.fInlinePrintStyle
-		@desc Supplies local stylesheet text to the paginator without file-origin fetch requests. Rewrites the shared css-folder artwork URLs relative to the staged HTML document; Web output remains unchanged.
-		@param string sName Owned staged CSS filename.
-		@return string sStyle Inline style element.
-		@vis private
-		!]]
-		local function fInlinePrintStyle(sName)
-			local sCSS = Documents.read(pStage.."/css/"..sName):gsub("url%((['\"]?)%.%./", "url(%1"):gsub("<", "\\3C ");
-			return "<style>"..sCSS.."</style>";
-		end
-		assert(wx.wxMkdir(pStage.."/css"), "Cannot create export CSS folder.");
-		assert(wx.wxMkdir(pStage.."/js"), "Cannot create export script folder.");
-		for _, sName in ipairs({"bootstrap.min.css", "intro-preview.css", "glossary.css", "Reader.css", "Components.css", "Print.css"}) do
-			if (sKind == "pdf" and sName == "intro-preview.css") then
-				-- The Web file retains its browser-print fallback. PDF uses the
-				-- same screen components with a dedicated paginated layout.
-				fWrite(pStage.."/css/"..sName, (Documents.read(_Scripts.."/Manual/Web/css/"..sName):gsub("@media%s+print%s*(%b{})", "")));
-			else assert(wx.wxCopyFile(_Scripts.."/Manual/Web/css/"..sName, pStage.."/css/"..sName, false), "Cannot copy shared manual CSS."); end
-		end
-		assert(wx.wxCopyFile(_Scripts.."/Manual/Web/js/glossary.js", pStage.."/js/glossary.js", false), "Cannot copy glossary interactions.");
-		assert(wx.wxCopyFile(_Scripts.."/Manual/Web/js/Reader.js", pStage.."/js/Reader.js", false), "Cannot copy manual navigation.");
-		assert(wx.wxCopyFile(_Scripts.."/Manual/Web/js/bootstrap.bundle.min.js", pStage.."/js/bootstrap.bundle.min.js", false), "Cannot copy reader controls.");
-		fCopy(_Scripts.."/Manual/Web/images/components", pStage.."/images/components");
-		fCopy(tContext.manualRoot.."/Images", pStage.."/content-images");
-		fWrite(pStage.."/css/font-styles.css", Documents.read(tContext.manualRoot.."/Styles/font-styles.css"));
-		fWrite(pStage.."/css/web-font-styles.css", Documents.read(tContext.manualRoot.."/Styles/web-font-styles.css"));
-		if (sKind == "pdf") then sDocument = sDocument:gsub('<link rel="stylesheet" href="css/([%w_.-]+)">', fInlinePrintStyle); end
-		fWrite(pStage.."/index.html", sDocument);
-		fWrite(pStage.."/settings.json", JSON.encode(tSettings, {indent = true}));
-		if (sKind == "pdf") then
-			fCopy(_Scripts.."/Manual/Web/vendor/pagedjs", pStage.."/vendor/pagedjs");
-			assert(wx.wxCopyFile(_Scripts.."/Manual/Web/js/Print.js", pStage.."/js/Print.js", false), "Cannot copy PDF pagination bootstrap.");
-			oPage = wx.wxFileName(pStage.."/index.html");
-			sURL = wx.wxFileSystem.FileNameToURL(oPage); oPage:delete();
-			sPDF = fPrintBrowser(pBrowser, pStage, sURL, tContext);
-			assert(sPDF:sub(1, 5) == "%PDF-" and sPDF:sub(-2048):find("%%%%EOF"), "The browser returned an incomplete PDF.");
-			assert(not sPDF:find("/Title (PDF export incomplete)", 1, true), "PDF pagination did not finish. The previous export was preserved.");
-			-- Browser data is private to this export job and never shipped.
-			if (wx.wxDirExists(pStage.."/browser-profile")) then fRemove(pStage, pStage.."/browser-profile"); end
-			-- HTML, CSS, images and browser data are print inputs, not PDF output.
-			-- Keep the verified PDF in memory while rebuilding only our staging
-			-- folder, so the published PDF directory contains the PDF alone.
-			fRemove(pRoot, pStage);
-			assert(wx.wxMkdir(pStage), "Cannot prepare the final PDF-only folder.");
-			fWrite(pStage.."/Manual.pdf", sPDF);
-		end
-	end
-	bOK, sFailure = pcall(fBuild);
-	if (not bOK) then pcall(fRemove, pRoot, pStage); error(sFailure, 2); end
-	if (wx.wxDirExists(pOutput)) then assert(wx.wxRenameFile(pOutput, pPrevious, false), "Cannot hold the previous export; the staged replacement remains at "..pStage); bPrevious = true; end
-	if (not wx.wxRenameFile(pStage, pOutput, false)) then
-		if (bPrevious) then assert(wx.wxRenameFile(pPrevious, pOutput, false), "Cannot restore the previous export from "..pPrevious); end
-		error("Cannot install the export; the staged output remains at "..pStage, 2);
-	end
-	if (bPrevious) then fRemove(pRoot, pPrevious); end
-	return {ok = true, path = pOutput..(sKind == "pdf" and "/Manual.pdf" or "/index.html"), message = sType.." export saved to "..pOutput};
+    assert(sKind == "web" or sKind == "pdf", "Unknown manual export type.");
+    if (sKind == "pdf") then
+        assert(type(vDocument) == "table" and vDocument.document and vDocument.pageCount > 0, "PDF export requires a completed Lua layout.");
+        if (bPreview) then return {ok = true, layout = vDocument, message = "PDF preview ready: "..vDocument.pageCount.." pages, prepared entirely in Lua."}; end
+    else
+        assert(type(vDocument) == "string" and #vDocument > 0 and #vDocument <= 4000000, "Invalid or oversized rendered Web manual.");
+    end
+    fCheck = function()
+        if (tContext.checkpoint) then tContext.checkpoint(); end
+        assert(not tContext.cancelled, "Manual export cancelled; the previous export was preserved.");
+    end;
+    fCheck();
+    assert(wx.wxDirExists(tContext.exportRoot), "The game's export folder is unavailable.");
+    assert(wx.wxDirExists(pRoot) or wx.wxMkdir(pRoot), "Cannot create the manual export root.");
+    oTemporary = wx.wxFile();
+    pUnique = wx.wxFileName.CreateTempFileName(pRoot.."/."..sType.."-", oTemporary);
+    if (oTemporary:IsOpened()) then oTemporary:Close(); end
+    oTemporary:delete();
+    assert(pUnique ~= "" and wx.wxRemoveFile(pUnique), "Cannot reserve an export staging name.");
+    pStage, pPrevious = pUnique.."-stage", pUnique.."-previous";
+    assert(wx.wxMkdir(pStage), "Cannot create the export staging folder.");
+    fBuild = function()
+        if (sKind == "pdf") then
+            if (tContext.onProgress) then tContext.onProgress("writing", "Writing "..vDocument.pageCount.." PDF pages with embedded fonts and artwork."); end
+            fCheck();
+            vDocument.document.save(pStage.."/Manual.pdf", fCheck, tContext.onProgress);
+            return;
+        end
+        if (tContext.onProgress) then tContext.onProgress("assets", "Copying saved manual styles, scripts and artwork for Web export."); end
+        assert(wx.wxMkdir(pStage.."/css"), "Cannot create export CSS folder.");
+        assert(wx.wxMkdir(pStage.."/js"), "Cannot create export script folder.");
+        assert(wx.wxMkdir(pStage.."/images"), "Cannot create export artwork folder.");
+        for _, sName in ipairs(_tCSS) do
+            if (tContext.onProgress) then tContext.onProgress("assets", "Copying stylesheet: "..sName); end
+            fCheck();
+            assert(wx.wxCopyFile(_Scripts.."/Manual/Web/css/"..sName, pStage.."/css/"..sName, false), "Cannot copy shared manual CSS.");
+        end
+        for _, sName in ipairs(_tJS) do
+            if (tContext.onProgress) then tContext.onProgress("assets", "Copying script: "..sName); end
+            fCheck();
+            assert(wx.wxCopyFile(_Scripts.."/Manual/Web/js/"..sName, pStage.."/js/"..sName, false), "Cannot copy Web reader script: "..sName);
+        end
+        copy(tContext.manualRoot.."/Images", pStage.."/content-images", tContext.onProgress, fCheck);
+        assert(wx.wxMkdir(pStage.."/fonts"), "Cannot create export font folder.");
+        for _, tFont in ipairs(tContext.webFonts or {}) do
+            if (tContext.onProgress) then tContext.onProgress("assets", "Packaging font: "..tFont.source); end
+            fCheck();
+            assert(wx.wxCopyFile(tFont.source, pStage.."/fonts/"..tFont.name, false), "Cannot package font: "..tFont.source);
+        end
+        write(pStage.."/css/packaged-fonts.css", tContext.webFontCSS or "");
+        if (tContext.onProgress) then tContext.onProgress("writing", "Writing generated styles, index.html and export settings."); end
+        fCheck();
+        write(pStage.."/css/appearance.css", tContext.appearanceCSS or "");
+        write(pStage.."/css/font-styles.css", tContext.gameCSS or Documents.read(tContext.manualRoot.."/Styles/font-styles.css"));
+        write(pStage.."/index.html", vDocument);
+        write(pStage.."/settings.json", JSON.encode(tSettings, {indent = true}));
+    end;
+    bOK, sFailure = pcall(function()
+        fBuild();
+        fCheck();
+        if (tContext.onProgress) then tContext.onProgress("publishing", "Installing the verified "..sType.." export."); end
+        fCheck();
+    end);
+    if (not bOK) then
+        local bRemoved, sRemoveError = pcall(remove, pRoot, pStage);
+
+        if (not bRemoved) then sFailure = tostring(sFailure).." Temporary files remain at "..pStage..": "..tostring(sRemoveError); end
+        error(sFailure, 2);
+    end
+    if (wx.wxDirExists(pOutput)) then
+        assert(wx.wxRenameFile(pOutput, pPrevious, false), "Cannot hold the previous export; staged output remains at "..pStage);
+        bPrevious = true;
+    end
+    if (not wx.wxRenameFile(pStage, pOutput, false)) then
+        if (bPrevious) then assert(wx.wxRenameFile(pPrevious, pOutput, false), "Cannot restore the previous export from "..pPrevious); end
+        error("Cannot install the export; staged output remains at "..pStage, 2);
+    end
+    if (bPrevious) then remove(pRoot, pPrevious); end
+    if (tContext.onProgress) then tContext.onProgress("done", sType.." export saved to "..pOutput); end
+    return {ok = true, path = pOutput..(sKind == "pdf" and "/Manual.pdf" or "/index.html"), layout = sKind == "pdf" and vDocument or nil,
+        message = sType.." export saved to "..pOutput};
+end
+
+--[[!
+@fqxn CFS.Manual.Exporter.Functions.discard
+@desc Releases an in-memory native preview; accepts legacy owned staging folders
+    only for cleanup. Published Web/PDF folders cannot be removed here.
+@param table tContext Bound export paths.
+@param table tPreview Preview result.
+!]]
+function Exporter.discard(tContext, tPreview)
+    if (tPreview.layout and tPreview.layout.dispose) then tPreview.layout.dispose(); end
+    if (tPreview.stage) then
+        local pRoot = absolute(tContext.exportRoot.."/Manual");
+        local pStage = absolute(tPreview.stage);
+
+        assert(pStage:sub(#pRoot + 2):match("^%.PD[^/]+%-stage$"), "Refusing cleanup of a non-preview folder.");
+        remove(pRoot, pStage);
+    end
+end
+
+--[[!
+@fqxn CFS.Manual.Exporter.Functions.preflight
+@desc Checks required website assets and CSS-local references before staging. Returns a validator for output-relative content links and images. External URLs are not fetched.
+@param table tData Saved manual snapshot.
+@param table tIssues Blocking issues accumulated by the coordinator.
+@return function fAsset Local reference validator.
+!]]
+function Exporter.preflight(tData, tIssues)
+    local tContext = tData.context;
+    local tGenerated = {['index.html'] = true, ['settings.json'] = true,
+        ['css/appearance.css'] = true, ['css/font-styles.css'] = true};
+    local tSources, tChecked = {}, {};
+    for _, sName in ipairs(_tCSS) do tSources['css/'..sName] = _Scripts..'/Manual/Web/css/'..sName; end
+    for _, sName in ipairs(_tJS) do tSources['js/'..sName] = _Scripts..'/Manual/Web/js/'..sName; end
+    local function asset(sURL, sOwner, sBase)
+        if (sURL:match('^[%a][%w+.-]*:') or sURL:sub(1, 2) == '//') then return; end
+        if (sURL == '' or sURL:sub(1, 1) == '#') then return; end
+        local sPath = sURL:match('^[^?#]*'):gsub('%%(%x%x)', function(sHex) return string.char(tonumber(sHex, 16)); end);
+        local tParts = {};
+        if (sPath:find('[%z\1-\31]') or sPath:find('\\', 1, true) or sPath:sub(1, 1) == '/') then
+            tIssues[#tIssues + 1] = sOwner..': invalid local URL '..sURL; return;
+        end
+        for sPart in ((sBase or '')..sPath):gmatch('[^/]+') do
+            if (sPart == '..') then
+                if (#tParts == 0) then tIssues[#tIssues + 1] = sOwner..': URL leaves the website: '..sURL; return; end
+                tParts[#tParts] = nil;
+            elseif (sPart ~= '.') then tParts[#tParts + 1] = sPart; end
+        end
+        sPath = table.concat(tParts, '/');
+        if (tGenerated[sPath]) then return; end
+        local pSource = tSources[sPath];
+        if (sPath:sub(1, 15) == 'content-images/') then pSource = tContext.manualRoot..'/Images/'..sPath:sub(16);
+        elseif (sPath:sub(1, 18) == 'images/components/') then pSource = _Scripts..'/Manual/Web/'..sPath; end
+        if (not pSource or not wx.wxFileExists(pSource)) then
+            tIssues[#tIssues + 1] = sOwner..': missing exported asset '..sURL;
+        end
+    end
+    for sTarget, pSource in pairs(tSources) do
+        if (tContext.checkpoint) then tContext.checkpoint(); end
+        local bOK, sText = pcall(Documents.read, pSource);
+        if (not bOK) then tIssues[#tIssues + 1] = 'Missing or unreadable website asset: '..pSource;
+        elseif (sTarget:sub(-4) == '.css') then
+            tChecked[#tChecked + 1] = {name = sTarget, text = sText};
+        end
+    end
+    tChecked[#tChecked + 1] = {name = 'css/appearance.css', text = tData.appearanceCSS or ''};
+    tChecked[#tChecked + 1] = {name = 'css/font-styles.css', text = tData.gameCSS};
+    for _, tCSS in ipairs(tChecked) do
+        for sURL in tCSS.text:gsub('/%*.-%*/', ''):gmatch('url%s*%((.-)%)') do
+            sURL = sURL:match('^%s*(.-)%s*$');
+            if (sURL:sub(1, 1) == '"' or sURL:sub(1, 1) == "'") then sURL = sURL:sub(2, -2); end
+            asset(sURL, tCSS.name, 'css/');
+        end
+    end
+    for _, pRoot in ipairs({tContext.manualRoot..'/Images'}) do
+        if (not wx.wxDirExists(pRoot)) then tIssues[#tIssues + 1] = 'Missing asset directory: '..pRoot; end
+    end
+    return asset;
 end
 
 return Exporter;

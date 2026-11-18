@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _List = require("wxLuma.Widgets.List");
 local ListEx = {};
 
@@ -22,6 +23,7 @@ local ListEx = {};
 @ret table oComponent One actual/decoy/metatable ListEx instance sharing List's engine.
 !]]
 function ListEx.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(type(tOptions) == "table" and type(tOptions.Columns) == "table", "ListEx requires Columns.");
     local tCopy = {};
 

@@ -1,3 +1,5 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _wx     = require("wx");
 local _Input  = require("wxLuma.Core.ControlInput");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -13,6 +15,8 @@ local ToggleButton = {};
 @ret table oComponent Independent actual/decoy button with shared input/containment.
 !]]
 function ToggleButton.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
     assert(tOptions and tOptions.Skin, "ToggleButton requires Skin.");
     assert(tOptions.Value == nil or type(tOptions.Value) == "boolean", "Value must be boolean.");
     local sArtwork = tOptions.Artwork or "Toggle Button";
@@ -21,6 +25,24 @@ function ToggleButton.create(oParent, tOptions)
         oButton.Value = tOptions.Value == true;
         oButton.Skin  = tOptions.Skin;
         tInput.Toggle, tInput.Enter = true, true;
+        tInput.focus = false;
+
+        --[[!
+        @fqxn wxLuma.UI.ToggleButton.hitTest
+        @desc Accepts enabled points strictly inside the button client rectangle.
+        @param number nX Client x.
+        @param number nY Client y.
+        @ret boolean bHit Whether the button accepts the point.
+        !]]
+        function oButton.hitTest(nX, nY)
+            if (not tInput.enabled() or type(nX) ~= "number" or type(nY) ~= "number") then return false; end
+            local nWidth, nHeight = oButton.Control:GetClientSizeWH();
+            return nX >= 0 and nY >= 0 and nX < nWidth and nY < nHeight;
+        end
+
+        -- Keep semantic pointer events consistent with activation bounds.
+        tInput.inside = oButton.hitTest;
+        oButton.PointerHitTest = oButton.hitTest;
 
         --[[!
         @fqxn wxLuma.UI.ToggleButton.isEnabled
@@ -61,6 +83,9 @@ function ToggleButton.create(oParent, tOptions)
             oButton.setValue(not oButton.Value, true);
         end;
         tInput.draw = function(oDC, nWidth, nHeight, sState)
+            if (_Theme.isTheme(oButton.Skin) and oButton.Skin.getName() == "System") then
+                oButton.Skin.button(oButton, oDC, nWidth, nHeight, sState); return;
+            end
             local sName = sArtwork..(oButton.Value and " On " or " Off ")..sState;
             tInput.drawPart(oDC, sName, 0, 0, math.max(1, nWidth), math.max(1, nHeight));
             oDC:SetFont(oButton.Skin.Font);
@@ -75,6 +100,7 @@ function ToggleButton.create(oParent, tOptions)
 
     -- Observe native input after policy handlers so both paths receive events.
     tEvents = _Events.attach(oComponent);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

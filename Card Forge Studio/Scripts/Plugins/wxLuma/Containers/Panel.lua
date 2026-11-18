@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx           = require("wx");
 local Panel         = {};
 local createSurface = require("wxLuma.Core.ControlSurface").create;
@@ -10,6 +11,7 @@ local createSurface = require("wxLuma.Core.ControlSurface").create;
       (Shift for ten pixels) within parent bounds. Escape cancels a drag. show toggles visibility.
 !]]
 function Panel.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local oComponent = createSurface(oParent, tOptions, "Panel");
     oComponent.MinWidth, oComponent.MinHeight = tOptions.MinWidth or 220, tOptions.MinHeight or 140;
     oComponent.Content                        = _wx.wxPanel(oComponent.Control, _wx.wxID_ANY, _wx.wxDefaultPosition,
@@ -124,6 +126,7 @@ function Panel.create(oParent, tOptions)
         end;
         oPen:delete();
     end;
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

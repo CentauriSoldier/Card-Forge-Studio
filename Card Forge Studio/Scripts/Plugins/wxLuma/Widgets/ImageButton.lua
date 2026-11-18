@@ -1,3 +1,5 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _wx     = require("wx");
 local _Input  = require("wxLuma.Core.ControlInput");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -9,6 +11,9 @@ local ImageButton = {};
     Keeps one decoded source and one scaled bitmap per visual state at the current
     size. Transparent pixels reveal the optional Background painter. Parent owns
     the native control; destroy releases only this component's artwork.
+    In System mode, inherited background/caption/font defaults follow the system
+    palette. Explicit text styling, background callbacks and image data remain
+    application-owned across provider changes.
 @param wxWindow oParent Native owner.
 @param table tOptions Skin, Image (path); optional Text, Enabled, Background(DC, component),
     OnClick(component), AlphaHit (true). AlphaHit=false uses the full control rectangle.
@@ -20,6 +25,8 @@ local ImageButton = {};
 @ret table oComponent Shared input/events, image, text and style accessors.
 !]]
 function ImageButton.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
     assert(tOptions and tOptions.Skin, "ImageButton requires Skin.");
     assert(type(tOptions.Image) == "string" and tOptions.Image ~= "", "Image path is required.");
     assert(tOptions.Text == nil or type(tOptions.Text) == "string", "Text must be a string.");
@@ -76,6 +83,8 @@ function ImageButton.create(oParent, tOptions)
         function oButton.getImage() return pImage; end
 
         local tTextOptions;
+        local tExplicitText = {};
+        local bThemeDefaults = false;
         local oTextFont;
         local sMeasuredText;
         local nTextWidth, nTextHeight = 0, 0;
@@ -83,6 +92,17 @@ function ImageButton.create(oParent, tOptions)
             TextGap = true, FontSize = true, FontFace = true, Bold = true, Italic = true,
             Underline = true, Strikethrough = true, TextColour = true, DisabledTextColour = true,
             TextShadow = true, TextOutline = true};
+
+        --[[!
+        @fqxn wxLuma.UI.ImageButton.fDefaultColour
+        @desc Resolves inherited caption colors from the current appearance,
+            retaining the legacy palette for application-supplied image skins.
+        !]]
+        local function fDefaultColour(sRole, nR, nG, nB)
+            local oColor = _Theme.colour(oButton.Skin, sRole, nR, nG, nB);
+            local tColor = {R = oColor:Red(), G = oColor:Green(), B = oColor:Blue(), A = 255};
+            oColor:delete(); return tColor;
+        end
 
         local function fFinite(nValue)
             return type(nValue) == "number" and nValue == nValue and math.abs(nValue) < math.huge;
@@ -134,8 +154,8 @@ function ImageButton.create(oParent, tOptions)
                 Bold = tOptions.Skin.Font:GetWeight() >= _wx.wxFONTWEIGHT_BOLD,
                 Italic = tOptions.Skin.Font:GetStyle() ~= _wx.wxFONTSTYLE_NORMAL,
                 Underline = tOptions.Skin.Font:GetUnderlined(), Strikethrough = tOptions.Skin.Font:GetStrikethrough(),
-                TextColour = {R = 208, G = 218, B = 230, A = 255},
-                DisabledTextColour = {R = 114, G = 126, B = 139, A = 255},
+                TextColour = fDefaultColour("Text", 208, 218, 230),
+                DisabledTextColour = fDefaultColour("DisabledText", 114, 126, 139),
                 TextShadow = false, TextOutline = false
             };
             for sKey, vValue in pairs(tChanges) do
@@ -177,6 +197,9 @@ function ImageButton.create(oParent, tOptions)
             oReplacement:SetStrikethrough(tNext.Strikethrough);
             local oOldFont = oTextFont;
             oTextFont, tTextOptions, sMeasuredText = oReplacement, tNext, nil;
+            if (not bThemeDefaults) then
+                for sKey in pairs(tChanges) do tExplicitText[sKey] = true; end
+            end
             fMeasure(); fClear();
             if (oOldFont) then oOldFont:delete(); end
             tInput.refresh();
@@ -313,6 +336,8 @@ function ImageButton.create(oParent, tOptions)
         !]]
         function oButton.getAlphaHit() return bAlphaHit; end
         tInput.inside = oButton.hitTest;
+        -- Transparent image surroundings must not emit semantic button clicks.
+        oButton.PointerHitTest = oButton.hitTest;
         tInput.draw = function(oDC, nWidth, nHeight, sState)
             if (not oImage or nWidth < 1 or nHeight < 1) then return; end
             if (nWidth ~= nCachedWidth or nHeight ~= nCachedHeight) then
@@ -339,11 +364,34 @@ function ImageButton.create(oParent, tOptions)
             if (tOptions.Background) then
                 tOptions.Background(oDC, oButton);
             else
-                local oBrush = _wx.wxBrush(_wx.wxColour(24, 29, 36));
+                local oColor = _Theme.colour(oButton.Skin, "Background", 24, 29, 36);
+                local oBrush = _wx.wxBrush(oColor); oColor:delete();
                 oDC:SetBackground(oBrush); oDC:Clear(); oBrush:delete();
             end
             local sState = oButton.getState();
             tInput.draw(oDC, nWidth, nHeight, sState);
+        end
+        --[[!
+        @fqxn wxLuma.UI.ImageButton.onThemeChanged
+        @desc Refreshes inherited caption colors and font attributes. Explicit
+            constructor/setTextOptions styling remains application-owned.
+        !]]
+        function oButton.onThemeChanged()
+            local oFont = oButton.Skin.Font;
+            local tDefaults = {FontSize = oFont:GetPointSize(), FontFace = oFont:GetFaceName(),
+                Bold = oFont:GetWeight() >= _wx.wxFONTWEIGHT_BOLD,
+                Italic = oFont:GetStyle() ~= _wx.wxFONTSTYLE_NORMAL,
+                Underline = oFont:GetUnderlined(), Strikethrough = oFont:GetStrikethrough(),
+                TextColour = fDefaultColour("Text", 208, 218, 230),
+                DisabledTextColour = fDefaultColour("DisabledText", 114, 126, 139)};
+            local tChanges = {};
+            for sKey, vValue in pairs(tDefaults) do
+                if (not tExplicitText[sKey]) then tChanges[sKey] = vValue; end
+            end
+            bThemeDefaults = true;
+            local bOK, sError = pcall(oButton.setTextOptions, tChanges);
+            bThemeDefaults = false;
+            assert(bOK, sError);
         end
         tInput.destroy = function()
             fClear();
@@ -357,6 +405,7 @@ function ImageButton.create(oParent, tOptions)
         oButton.setImage(tOptions.Image);
     end);
     tEvents = _Events.attach(oComponent, nil, {"activated"});
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 return ImageButton;

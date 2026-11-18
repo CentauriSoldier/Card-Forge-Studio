@@ -52,6 +52,7 @@ local _sOriginalPackagePath = package.path;
 @pulsarlua table FS.Game
 @desc Read-only active Game paths populated during filesystem preparation.
 @field string Root Active Root path.
+@field string Fonts Active game font folder.
 @field string Wiki Active Wiki path.
 @field string Docs Active Docs path.
 @field string CardSets Active CardSets path.
@@ -68,6 +69,7 @@ local _sOriginalPackagePath = package.path;
 !]]
 local tGame     = {
     Root        = "",
+    Fonts       = "",
     Wiki        = "",
 	Manual		= "",
     Docs        = "",
@@ -139,6 +141,8 @@ setmetatable(tCardSetDecoy, tCardSetMeta);
 local pTemplates   = _Scripts.."/../Docs/Templates";
 local pAppDir      = _AppDataLocal;
 local pGames       = pAppDir.."\\Games";
+local pFonts       = pAppDir.."\\Fonts";
+assert(wx.wxDirExists(pFonts) or wx.wxMkdir(pFonts), "Cannot create application font folder: "..pFonts);
 local pAppCFG_T    = pTemplates.."\\"..APP_CFG; --template
 local pAppCFG      = pAppDir.."\\"..APP_CFG;
 local pTutorials   = _Docs.."\\Tutorials";
@@ -147,6 +151,7 @@ local pExporters   = _Scripts.."\\Exporters";
 local tFS       = {
     Templates       = pTemplates,
     AppDir          = pAppDir,
+    Fonts           = pFonts,
     Games           = pGames,
     AppCFG_T        = pAppCFG_T,
     AppCFG          = pAppCFG,
@@ -167,7 +172,7 @@ local _tManualFiles = {
 	"Content/intro.md", "Content/glossary.md", "Content/_ORDER_.txt",
 	"Config/glossary-alternatives.json", "Config/glossary-settings.json",
 	"Config/editor-settings.json", "Config/export-settings.json",
-	"Styles/web-font-styles.css", "Styles/font-styles.css",
+	"Styles/font-styles.css",
 };
 
 --[[!
@@ -218,7 +223,7 @@ tFS.GetManifest = function(sKind, tContext)
 		for sTarget, sContents in pairs(GetManualStarterFiles()) do
 			tFiles[sTarget] = sContents;
 		end
-		tFolders = {"", FOLDER_CARD_SETS, "CSV Backup", "Docs", "Exports", "Scripts", "Scripts/CFG", "Scripts/ENV", "Symbols", FOLDER_WIKI};
+		tFolders = {"", FOLDER_CARD_SETS, "CSV Backup", "Docs", "Exports", "Fonts", "Scripts", "Scripts/CFG", "Scripts/ENV", "Symbols", FOLDER_WIKI};
 		for _, sFolder in ipairs(_tManualFolders) do
 			if (sFolder ~= "Exports") then tFolders[#tFolders + 1] = sFolder; end
 		end
@@ -511,7 +516,7 @@ end
 --[[!
 @fqxn CFS.Modules.FS.Game.Functions.Prep
 @pulsarlua function FS.Game.Prep
-@desc Validates a game's required paths before publishing them. Missing Manual content directories and Exports/Web are created on game loading. Existing contents are preserved; missing generated autocomplete and Scripts/Effects.lua files are also created.
+@desc Validates a game's required paths before publishing them. Missing Fonts, Manual content directories and Exports/Web are created on game loading. Existing contents are preserved; missing generated autocomplete and Scripts/Effects.lua files are also created.
 @param Game oGame Game to prepare.
 !]]
 tGame.Prep = function(oGame)
@@ -528,6 +533,7 @@ tGame.Prep = function(oGame)
         ENV         = pScripts.."\\ENV",
         Effects     = pScripts.."\\Effects.lua",
         Exports     = pRoot.."\\Exports",
+        Fonts       = pRoot.."\\Fonts",
         Info        = pRoot.."\\Info.ini",
         Root        = pRoot,
         Scripts     = pScripts,
@@ -539,7 +545,7 @@ tGame.Prep = function(oGame)
     for sKey, pPath in pairs(tPaths) do
         if (sKey == "Info" or sKey == "Styles") then
             CheckFile(pPath);
-        elseif (sKey ~= "Wiki" and sKey ~= "Manual" and sKey ~= "Exports" and sKey ~= "Effects") then
+        elseif (sKey ~= "Wiki" and sKey ~= "Manual" and sKey ~= "Exports" and sKey ~= "Effects" and sKey ~= "Fonts") then
             CheckFolder(pPath);
         end
     end
@@ -547,6 +553,8 @@ tGame.Prep = function(oGame)
     CheckFile(pScripts.."\\CFG.lua");
     CheckFile(pScripts.."\\ENV.lua");
 	PrepareManualFolders(pRoot);
+	require("Manual.Appearance").ensure(pRoot.."/Manual");
+    assert(wx.wxDirExists(tPaths.Fonts) or wx.wxMkdir(tPaths.Fonts), "Cannot create game font folder: "..tPaths.Fonts);
 
     --Add the optional processor starter only when absent; never replace game edits.
     if (not wx.wxFileExists(tPaths.Effects)) then

@@ -1,3 +1,6 @@
+local _Outline = require("wxLuma.Core.ControlProgressOutline");
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _Reserve = require("wxLuma.Core.ControlProgressReserve");
 local _wx             = require("wx");
 local _ControlSurface = require("wxLuma.Core.ControlSurface");
@@ -20,9 +23,14 @@ local CircularProgress = {};
     Reserved defaults to zero; ReserveDirection and ReserveStartAngle optionally
     place it independently. InnerRadius/OuterRadius select percentage-based bands;
     inner zero allows a solid pie instead of the default pixel-thickness ring.
+    Outline (true), OutlineColour ({R,G,B}) and OutlineWidth (1..8, default 2)
+    configure the outer circular edge independently of the native Border.
 @ret table oComponent An independent public object with shared surface/events API.
 !]]
 function CircularProgress.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
+    local tOutline = _Outline.create(tOptions);
     assert(_finite(tOptions.Min) and _finite(tOptions.Max)
         and tOptions.Max > tOptions.Min, "Invalid circular progress range.");
     assert(_finite(tOptions.Value), "Circular progress value must be finite.");
@@ -212,6 +220,7 @@ function CircularProgress.create(oParent, tOptions)
             oMemory:DrawCircle(nCenter, nCenter, nInner);
         end
 
+        tOutline.circle(oMemory, oComponent.Skin, bEnabled, nCenter, nRadius, nScale);
         oMemory:SelectObject(_wx.wxNullBitmap);
         oMemory:delete();
         oTrack:delete();
@@ -387,6 +396,17 @@ function CircularProgress.create(oParent, tOptions)
 
         oBackground:delete();
     end;
+    --[[!
+    @fqxn wxLuma.UI.CircularProgress.onThemeChanged
+    @desc Discards the previous skin raster and refreshes the system background.
+    !]]
+    oComponent.onThemeChanged = function()
+        sCachedRaster = nil;
+        oBackground:delete();
+        local oColor = _Theme.colour(oComponent.Skin, "Background", 24, 29, 36);
+        oBackground = _wx.wxBrush(oColor); oColor:delete();
+    end;
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

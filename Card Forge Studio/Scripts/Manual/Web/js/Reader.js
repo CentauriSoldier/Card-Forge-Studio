@@ -6,8 +6,15 @@
 	const chapters = [...document.querySelectorAll('.connected-sections [data-chapter]')];
 	const home = data.groups.find(group => group.id === 'intro') || data.groups[0];
 
-	/** Maintains the original expandable contents plates. */
+	const accordion = document.getElementById('reader-accordion');
+	const accordionKey = 'cfs.manual.navigation.autoCollapse';
+	try { accordion.checked = localStorage.getItem(accordionKey) !== 'false'; } catch (_) {}
+
+	/** Maintains the expandable contents plates and optional accordion behavior. */
 	function expand(group, value) {
+		if (value && accordion.checked) {
+			document.querySelectorAll('[data-toc-group]').forEach(other => { if (other !== group) expand(other, false); });
+		}
 		const button = group.querySelector('[data-group-toggle]');
 		button.setAttribute('aria-expanded', String(value));
 		document.getElementById(button.getAttribute('aria-controls')).hidden = !value;
@@ -39,6 +46,14 @@
 		if (target && !quick) target.scrollIntoView();
 	}
 	document.querySelectorAll('[data-toc-group]').forEach(group => group.querySelector('[data-group-toggle]').addEventListener('click', () => expand(group, group.querySelector('[data-group-toggle]').getAttribute('aria-expanded') !== 'true')));
+	accordion.addEventListener('change', () => {
+		try { localStorage.setItem(accordionKey, String(accordion.checked)); } catch (_) {}
+		if (accordion.checked) {
+			const open = [...document.querySelectorAll('[data-toc-group]')].filter(group => group.querySelector('[data-group-toggle]').getAttribute('aria-expanded') === 'true');
+			const keep = open.find(group => group.classList.contains('has-current')) || open[0];
+			if (keep) expand(keep, true);
+		}
+	});
 	document.querySelector('.brand-link').href = '#' + home.id;
 	document.getElementById('full-rulebook').href = '#' + home.id;
 	window.addEventListener('hashchange', select);

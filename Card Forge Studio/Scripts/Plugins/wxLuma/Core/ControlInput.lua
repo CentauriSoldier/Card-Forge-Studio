@@ -1,3 +1,5 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _Containment = require("wxLuma.Core.ControlContainment");
 local _ControlObject = require("wxLuma.Core.ControlObject");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -15,21 +17,24 @@ local ControlInput = {};
 @param table tOptions The factory options, including optional Containment
     (ancestor native window/visual component) and ContainmentOverflow (hide/allow).
     Nil settings inherit ancestor policy, then top-level/default policy.
+    Border defaults to wxBORDER_DEFAULT; native border constants provide overrides.
 @param string sKind The component kind.
 @param function fConfigure The nested configurator for the public object and private input helpers.
 @ret table oComponent The public component object.
 !]]
 function ControlInput.create(oParent, tOptions, sKind, fConfigure)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "Control options require a shared Skin.");
     local oSkin    = tOptions.Skin;
     local oControl = _wx.wxControl(oParent, _wx.wxID_ANY, _wx.wxDefaultPosition,
-        _wx.wxDefaultSize, _wx.wxBORDER_NONE + _wx.wxWANTS_CHARS);
+        _wx.wxDefaultSize, _Border.style(tOptions, _wx.wxWANTS_CHARS));
     oControl:SetBackgroundStyle(_wx.wxBG_STYLE_PAINT);
     oControl:SetBackgroundColour(_wx.wxColour(24, 29, 36));
     oControl:SetName(tOptions.Text or sKind);
     local oComponent = _ControlObject.create({
         Control  = oControl,
         Kind     = sKind,
+        Skin     = oSkin,
         Text     = tOptions.Text or "",
         Hover    = false,
         Pressed  = false,
@@ -44,6 +49,11 @@ function ControlInput.create(oParent, tOptions, sKind, fConfigure)
         drawPart          = tOptions.Background and oSkin.draw or oSkin.drawOpaque,
         DynamicBackground = tOptions.Background ~= nil
     };
+    if (_Theme.isTheme(oSkin)) then
+        -- Hosted drawing lets System use the native checkbox renderer;
+        -- Obsidian continues resolving the same named image parts.
+        tInput.drawPart = function(oDC, ...) return oSkin.drawFor(oControl, oDC, ...); end;
+    end
 
     --[[!
     @fqxn wxLuma.UI.ControlInput.enabled
@@ -154,14 +164,16 @@ function ControlInput.create(oParent, tOptions, sKind, fConfigure)
 
     --[[!
     @fqxn wxLuma.UI.ControlInput.setEnabled
-    @desc Cancels active input, changes native enabled state and refreshes the component.
+    @desc Cancels active input, changes this control's own enabled setting and
+        refreshes it. A disabled ancestor does not overwrite the local setting.
     @param boolean bFlag Whether input is enabled.
     @ret table oComponent This public component object.
     !]]
     function oComponent.setEnabled(bFlag)
         assert(type(bFlag) == "boolean", "Enabled flag must be boolean.");
         local sOldState = oComponent.getState();
-        local bChanged  = oControl:IsEnabled() ~= bFlag;
+        -- Preserve local policy separately from inherited availability.
+        local bChanged  = oControl:IsThisEnabled() ~= bFlag;
         tInput.release();
         oComponent.Hover, tInput.HoverPart = false, nil;
 
@@ -212,7 +224,7 @@ function ControlInput.create(oParent, tOptions, sKind, fConfigure)
         end
 
         if (tInput.layout) then
-            tInput.layout(nWidth, nHeight);
+            tInput.layout(oControl:GetClientSizeWH());
         end
 
         bLayoutApplied = true;
@@ -337,27 +349,24 @@ function ControlInput.create(oParent, tOptions, sKind, fConfigure)
             return;
         end
         local sState = oComponent.getState();
-        local oBrush = _wx.wxBrush(_wx.wxColour(24, 29, 36));
+        local oBackground = _Theme.colour(oSkin, "Background", 24, 29, 36);
+        local oBrush = _wx.wxBrush(oBackground); oBackground:delete();
         if (tOptions.Background) then
             tOptions.Background(oDC, oComponent);
         elseif (tInput.background) then
             tInput.background(oDC, nWidth, nHeight, sState);
+        elseif ((sKind == "Checkbox" or sKind == "Radio") and _Theme.isTheme(oSkin)
+            and oSkin.getName() == "System") then
+            -- Labelled indicators share the containing surface, including white
+            -- property rows; the global button-face color is not their backdrop.
+            local oParentBrush = _wx.wxBrush(oParent:GetBackgroundColour());
+            oDC:SetBackground(oParentBrush); oDC:Clear(); oParentBrush:delete();
         else
             oDC:SetBackground(oBrush);
             oDC:Clear();
         end
         tInput.draw(oDC, nWidth, nHeight, sState, oBrush);
-        if (tInput.enabled() and oControl:HasFocus()) then
-            if (tInput.focus) then
-                tInput.focus(oDC, nWidth, nHeight);
-            else
-                local oPen = _wx.wxPen(_wx.wxColour(105, 125, 145), 1, _wx.wxPENSTYLE_DOT);
-                oDC:SetPen(oPen);
-                oDC:SetBrush(_wx.wxTRANSPARENT_BRUSH);
-                oDC:DrawRectangle(0, 0, nWidth, nHeight);
-                oPen:delete();
-            end
-        end
+        -- Keyboard focus never adds decorative outlines.
         oBrush:delete();
     end
 
@@ -455,6 +464,7 @@ function ControlInput.create(oParent, tOptions, sKind, fConfigure)
     oComponent.setEnabled(tOptions.Enabled ~= false);
     _Containment.attach(oComponent, oControl, tOptions);
     _Events.attach(oComponent, oComponent.TextControl and {oComponent.TextControl} or nil);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 return ControlInput;

@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx      = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events  = require("wxLuma.Core.ControlEvents");
@@ -17,6 +18,7 @@ local CollapsiblePanel = {};
     expandedChanged and standard pointer, keyboard and lifetime subscriptions.
 !]]
 function CollapsiblePanel.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local nHeader = tOptions.HeaderHeight or 36;
     local nContent = tOptions.ContentHeight or 140;
     assert(_finite(nHeader) and nHeader % 1 == 0 and nHeader >= 24, "HeaderHeight must be at least 24.");
@@ -30,6 +32,7 @@ function CollapsiblePanel.create(oParent, tOptions)
         _wx.wxDefaultSize, _wx.wxBORDER_NONE + _wx.wxTAB_TRAVERSAL);
     oComponent.Content = oContent;
     oContent:SetBackgroundColour(tArt.color("Surface Normal"));
+    if (_Theme.isTheme(tOptions.Skin)) then tOptions.Skin.setBackgroundRole(oContent, "Editor"); end
 
     --[[!
     @fqxn wxLuma.UI.CollapsiblePanel.isExpanded
@@ -86,6 +89,16 @@ function CollapsiblePanel.create(oParent, tOptions)
         oContent:SetSize(4, nHeader, math.max(1, nWidth - 8), math.max(1, nHeight - nHeader - 4));
     end;
     oComponent.onEnable = function(bEnabled) oContent:Enable(bEnabled); end;
+    --[[!
+    @fqxn wxLuma.UI.CollapsiblePanel.onThemeChanged
+    @desc Updates the native body surface separately from the header and retains
+        expansion and child ownership when the appearance provider changes.
+    !]]
+    oComponent.onThemeChanged = function()
+        oContent:SetBackgroundColour(tArt.color("Surface Normal"));
+        oComponent.onLayout(oComponent.Control:GetClientSizeWH());
+        oContent:Refresh(false);
+    end;
     oComponent.onDestroy = function() tArt.destroy(); end;
     oComponent.pointer = function(sEvent, nX, nY)
         if (sEvent == "up" and oComponent.Pressed and oComponent.Hover and nY < nHeader) then oComponent.toggle(); end
@@ -110,6 +123,7 @@ function CollapsiblePanel.create(oParent, tOptions)
     end;
     oContent:Show(bExpanded);
     oComponent.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

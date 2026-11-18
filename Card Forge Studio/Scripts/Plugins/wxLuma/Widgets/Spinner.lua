@@ -1,3 +1,5 @@
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx             = require("wx");
 local _ControlInput   = require("wxLuma.Core.ControlInput");
 local _ControlNumeric = require("wxLuma.Core.ControlNumeric");
@@ -14,14 +16,16 @@ local Spinner         = {};
 !]]
 
 function Spinner.create(oParent, tOptions)
-    return _ControlInput.create(oParent, tOptions, "Spinner", function(oComponent, tInput)
+    tOptions = _Theme.options(tOptions, oParent);
+    _ControlNumeric.validateOptions(tOptions, true);
+    return _ControlInput.create(oParent, _Border.hostOptions(tOptions), "Spinner", function(oComponent, tInput)
         local oSkin   = tOptions.Skin;
         local fFinite = _ControlNumeric.finite;
         _ControlNumeric.configure(oComponent, tInput, tOptions, true);
         local oText = _wx.wxTextCtrl(oComponent.Control, _wx.wxID_ANY, "", _wx.wxDefaultPosition,
             _wx.wxDefaultSize,
-            _wx.wxTE_PROCESS_ENTER + _wx.wxTE_RIGHT + _wx.wxBORDER_NONE);
-        oComponent.TextControl, tInput.TextControl = oText, oText;
+            _Border.style(tOptions, _wx.wxTE_PROCESS_ENTER + _wx.wxTE_RIGHT));
+        oComponent.TextControl, tInput.TextControl, oComponent.BorderControl = oText, oText, oText;
         oText:SetFont(oSkin.Font);
         oText:SetBackgroundColour(_wx.wxColour(24, 29, 36));
         oText:SetForegroundColour(_wx.wxColour(208, 218, 230));
@@ -48,44 +52,54 @@ function Spinner.create(oParent, tOptions)
 
         -- Hit-test the separately clickable spinner arrow regions.
         tInput.part = function(nX, nY)
-            local nWidth = oComponent.Control:GetClientSizeWH();
-            if (nX >= nWidth - 26 and nX < nWidth - 2 and nY >= 2 and nY < 38) then
-                return nY < 20 and 1 or 2;
+            local nWidth, nHeight = oComponent.Control:GetClientSizeWH();
+            if (nX >= nWidth - 26 and nX < nWidth - 2 and nY >= 2 and nY < nHeight - 2) then
+                return nY < math.floor(nHeight / 2) and 1 or 2;
             end
             return 0;
         end;
 
         -- Position the native spinner editor inside its frame.
-        tInput.layout = function(nWidth)
-            oText:SetSize(10, 8, math.max(20, nWidth - 44), 23);
+        tInput.layout = function(nWidth, nHeight)
+            -- Join the editor to the stepper and share its top and bottom edges.
+            oText:SetSize(10, 2, math.max(1, nWidth - 36), math.max(1, nHeight - 4));
         end;
 
         -- Apply user activation through the widget setter and notification path.
         tInput.activate = function(nPart)
             if (nPart and nPart > 0) then
                 oComponent.commitText();
-                oComponent.setValue(oComponent.Value + (nPart == 1 and oComponent.Step or -oComponent.Step),
-                    true);
+                oComponent.setValue(_ControlNumeric.advance(oComponent.Value, oComponent.Min, oComponent.Max,
+                    oComponent.Step, nPart == 1 and 1 or -1), true);
             end
         end;
 
         -- Draw artwork for the current value and input state.
         tInput.draw = function(oDC, nWidth, nHeight, sState, oBrush)
-
-            local oPen = _wx.wxPen(_wx.wxColour(68, 78, 89), 1, _wx.wxPENSTYLE_SOLID);
-            oDC:SetPen(oPen);
-            oDC:SetBrush(oBrush);
-            oDC:DrawRectangle(1, 1, nWidth - 2, nHeight - 2);
-            oPen:delete();
+            local bSystem = _Theme.isTheme(oComponent.Skin) and oComponent.Skin.getName() == "System";
+            if (not bSystem) then
+                local oPen = _wx.wxPen(_wx.wxColour(68, 78, 89), 1, _wx.wxPENSTYLE_SOLID);
+                oDC:SetPen(oPen);
+                oDC:SetBrush(oBrush);
+                oDC:DrawRectangle(1, 1, nWidth - 2, nHeight - 2);
+                oPen:delete();
+            end
             for nPart, sDirection in ipairs({
                 "Up",
                 "Down"
             }) do
-                local sPartState = not tInput.enabled() and "Disabled" or oComponent.Pressed
+                local sPartState = (not tInput.enabled() or nPart == 1 and oComponent.Value >= oComponent.Max
+                    or nPart == 2 and oComponent.Value <= oComponent.Min) and "Disabled" or oComponent.Pressed
                     and tInput.PressedPart == nPart and tInput.HoverPart == nPart and "Pressed"
                 or oComponent.Hover and tInput.HoverPart == nPart and "Hover" or "Normal";
-                tInput.drawPart(oDC, "Spinner " .. sDirection .." " .. sPartState, nWidth - 26,
-                    nPart == 1 and 2 or 20);
+                if (bSystem) then
+                    local nSplit = math.floor(nHeight / 2);
+                    oComponent.Skin.arrowButton(oComponent, oDC, sDirection, nWidth - 26,
+                        nPart == 1 and 2 or nSplit, 24,
+                        math.max(1, nPart == 1 and nSplit - 2 or nHeight - 2 - nSplit), sPartState);
+                else
+                    tInput.drawPart(oDC, "Spinner " .. sDirection .." " .. sPartState, nWidth - 26, nPart == 1 and 2 or 20);
+                end
             end
 
         end;

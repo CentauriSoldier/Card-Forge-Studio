@@ -5,7 +5,6 @@
 
 local wx		= require("wx");
 local Documents	= require("Manual.Documents");
-local JSON		= require("Manual.Lib.dkjson");
 local Services	= {};
 
 --[[!
@@ -23,8 +22,6 @@ function Services.create(tContext)
 		["Config/glossary-alternatives.json"] = true,
 		["Config/glossary-settings.json"] = true,
 		["Config/editor-settings.json"] = true,
-		["Config/export-settings.json"] = true,
-		["Styles/web-font-styles.css"] = true,
 		["Styles/font-styles.css"] = true,
 	};
 
@@ -64,7 +61,7 @@ function Services.create(tContext)
 
 	--[[!
 	@fqxn CFS.Manual.Services.Private.Functions.fGenerateFonts
-	@desc Uses the current Studio font parser to update generated CSS when game style inputs change. Copies a missing output placeholder from the application template, never touches web overrides and never creates a font collection.
+	@desc Uses the current Studio font parser to update generated CSS when game style inputs change. Copies a missing output placeholder from the application template, never creates a font collection.
 	@vis private
 	!]]
 	local function fGenerateFonts()
@@ -86,19 +83,18 @@ function Services.create(tContext)
 
 	--[[!
 	@fqxn CFS.Manual.Services.Instance.snapshot
-	@desc Reads current chapters, order, glossary configuration and web styles. Generated game CSS is optional for a newly created game. Copies values into a transport object rather than exposing service version storage.
+	@desc Reads current chapters, order, glossary configuration and generated game styles. Generated game CSS is optional for a newly created game. Copies values into a transport object rather than exposing service version storage.
 	@return table tSnapshot Bound context and logical files.
 	!]]
 	function tService.snapshot()
 		local tFiles	= {};
 		local tNames	= Documents.list(tContext.manualRoot);
-		local tPresets = assert(JSON.decode(Documents.read(_Scripts.."/../Docs/Templates/Manual/PDF Export/The Game Crafter/Profiles.json")));
 		if (CFS and CFS.FontStyle) then fGenerateFonts(); end
 		for _, sName in ipairs(tNames) do tFiles["Content/"..sName] = fRead("Content/"..sName); end
 		for sRelative in pairs(tFixed) do
 			if (wx.wxFileExists(fPath(sRelative))) then tFiles[sRelative] = fRead(sRelative); end
 		end
-		return {context = tContext, files = tFiles, pdfPresets = tPresets, fontCurrent = tService.fontSignature ~= nil, fontWarnings = tService.fontWarnings or {}};
+		return {appearanceCSS = require("Manual.Appearance").css(tContext.manualRoot, ".manual-appearance", tContext.manualURL:gsub("/$", "").."/Images/"), context = tContext, files = tFiles, fontCurrent = tService.fontSignature ~= nil, fontWarnings = tService.fontWarnings or {}};
 	end
 
 	--[[!
@@ -114,22 +110,9 @@ function Services.create(tContext)
 		local bOK;
 		local sError;
 		if (sAction == "draft-state") then tService.dirty = tRequest.dirty == true; return {ok = true}; end
-		if (sAction == "export") then
-			local tSnapshot = tService.snapshot();
-			local bExported;
-			local vResult;
-			assert(type(tRequest.versions) == "table", "Export source versions are required.");
-			for sPath, tFile in pairs(tSnapshot.files) do assert(tRequest.versions[sPath] == tFile.version, "Manual sources changed. Refresh the editor before exporting."); end
-			if (CFS and CFS.Log) then pcall(CFS.Log.Note, "Manual export started: "..tostring(tRequest.kind).." -> "..tContext.exportRoot.."/Manual"); end
-			bExported, vResult = pcall(require("Manual.Exporter").run, tContext, tRequest.kind, tRequest.html, assert(JSON.decode(tSnapshot.files["Config/export-settings.json"].text)));
-			if (not bExported) then
-				if (CFS and CFS.Log) then pcall(CFS.Log.Error, "Manual export failed: "..tostring(vResult)); end
-				error(vResult, 2);
-			end
-			if (CFS and CFS.Log) then pcall(CFS.Log.Note, vResult.message); end
-			return vResult;
+		if (sAction == "editor-options") then
+			return {ok = true, lineNumbers = INIFile.GetValue(FS.AppCFG, "ManualEditor", "LineNumbers") == "1"};
 		end
-
 		if (sAction == "snapshot") then return {ok = true, snapshot = tService.snapshot()}; end
 		if (sAction == "documents") then
 			local sRelative	= "Content/"..Documents.filename(tRequest.name);

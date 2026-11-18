@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx             = require("wx");
 local _ControlSurface = require("wxLuma.Core.ControlSurface");
 local _ControlEvents  = require("wxLuma.Core.ControlEvents");
@@ -14,6 +15,7 @@ local Image           = {};
 @ret table oComponent An independent public proxy with standard surface/events API.
 !]]
 function Image.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local sMode = tOptions.ScaleMode or "contain";
     assert(sMode == "contain" or sMode == "cover" or sMode == "stretch" or sMode == "native",
         "Invalid image ScaleMode.");
@@ -196,6 +198,16 @@ function Image.create(oParent, tOptions)
         oBrush:delete();
     end;
     oComponent.setValue(tOptions.Value);
+    --[[!
+    @fqxn wxLuma.UI.Image.onThemeChanged
+    @desc Refreshes the decorative background, retaining application image data.
+    !]]
+    oComponent.onThemeChanged = function()
+        oBrush:delete();
+        local oColor = _Theme.colour(oComponent.Skin, "Background", 24, 29, 36);
+        oBrush = _wx.wxBrush(oColor); oColor:delete();
+    end;
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

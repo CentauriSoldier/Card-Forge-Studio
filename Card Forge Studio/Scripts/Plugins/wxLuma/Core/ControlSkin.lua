@@ -1,14 +1,15 @@
 local _ControlObject = require("wxLuma.Core.ControlObject");
 local _wx            = require("wx");
+local _Layout        = require("wxLuma.Core.SkinLayout");
 local ControlSkin    = {};
 
 --[[!
 @fqxn wxLuma.UI.ControlSkin.load
-@param string|nil pRoot Artwork directory; defaults to configured Images/Controls/.
+@param string|nil pRoot Skin root containing object directories; defaults to configured SkinPath.
 @ret table oSkin Shared image cache with draw, text and destroy methods. Dispose after its controls.
 !]]
 function ControlSkin.load(pRoot)
-    pRoot = pRoot or require("wxLuma.config").ImagePath .."/Controls/";
+    pRoot = pRoot or require("wxLuma.wxLumaConfig").SkinPath;
     local tImages, tBitmaps, tScaled, tOpaque = {}, {}, {}, {};
     local tOpaqueOrder                        = {};
     local bDisposed                           = false;
@@ -31,7 +32,7 @@ function ControlSkin.load(pRoot)
     function oSkin.getBitmap(sName, nWidth, nHeight, bVertical)
         assert(not bDisposed, "Control skin is disposed.");
         if (not tImages[sName]) then
-            local oImage = _wx.wxImage(pRoot .."Control " .. sName ..".png", _wx.wxBITMAP_TYPE_PNG);
+            local oImage = _wx.wxImage(_Layout.path(pRoot, sName), _wx.wxBITMAP_TYPE_PNG);
             assert(oImage:IsOk(), "Missing control artwork: " .. sName);
             tImages[sName], tBitmaps[sName] = oImage, _wx.wxBitmap(oImage);
         end
@@ -107,7 +108,7 @@ function ControlSkin.load(pRoot)
                 tEntry.Bitmap:delete();
             end
             if (not tImages[sName]) then
-                local oImage = _wx.wxImage(pRoot .."Control " .. sName ..".png", _wx.wxBITMAP_TYPE_PNG);
+                local oImage = _wx.wxImage(_Layout.path(pRoot, sName), _wx.wxBITMAP_TYPE_PNG);
                 assert(oImage:IsOk(), "Missing control artwork: " .. sName);
                 tImages[sName], tBitmaps[sName] = oImage, _wx.wxBitmap(oImage);
             end

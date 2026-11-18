@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx          = require("wx");
 local _Editor      = require("wxLuma.Core.ControlEditor");
 local _List        = require("wxLuma.Widgets.List");
@@ -18,6 +19,7 @@ local ComboBox     = {};
     getSelection/setSelection, get/setAutoComplete and standard events.
 !]]
 function ComboBox.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local nRows = tOptions.Rows or 8;
     assert(_finite(nRows) and nRows >= 1 and nRows % 1 == 0, "Invalid combo Rows.");
     assert(tOptions.AutoComplete == nil or type(tOptions.AutoComplete) == "boolean", "Invalid AutoComplete.");
@@ -137,6 +139,11 @@ function ComboBox.create(oParent, tOptions)
         local nVisible = math.max(1, math.floor((oArea:GetHeight() - 8) / oList.RowHeight));
         local nHeight = math.min(nRows, #oList.Items, nVisible) * oList.RowHeight + 8;
         nWidth = math.min(nWidth, oArea:GetWidth());
+        -- Row capacity is measured in client pixels; native borders consume
+        -- additional outer height and must not hide the final requested row.
+        local _, nOuterHeight = oList.Control:GetSizeWH();
+        local _, nClientHeight = oList.Control:GetClientSizeWH();
+        nHeight = nHeight + math.max(0, nOuterHeight - nClientHeight);
         oPopup:SetClientSize(nWidth, nHeight);
         oList.layout(0, 0, nWidth, nHeight);
         oList.setValue(nPreview);
@@ -272,6 +279,7 @@ function ComboBox.create(oParent, tOptions)
         end);
     end
     oComponent.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

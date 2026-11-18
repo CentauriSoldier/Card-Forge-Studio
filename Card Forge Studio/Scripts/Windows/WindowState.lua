@@ -15,10 +15,9 @@
 </section>
 !]]
 
--- Shared native window geometry, stored outside the application and game folders.
+-- Shared native window geometry, stored in the main application configuration.
 local wx = require("wx");
 local WindowState = {};
-local _tConfigs  = {};
 local _tPolicies = {};
 local _tWindows = {};
 local _bRaising = false;
@@ -89,11 +88,13 @@ end
 !]]
 function WindowState.isOpen(sName, pFile)
     if (_tPolicies[sName] and not _tPolicies[sName].saveVisible) then return nil; end
-    pFile = pFile or assert(_AppDataLocal, "Application data path is unavailable.").."/WindowState.cfg";
-    local tConfig = _tConfigs[pFile];
-    local oConfig = tConfig and tConfig.config or wx.wxFileConfig("", "", pFile, "", wx.wxCONFIG_USE_LOCAL_FILE);
-    local bFound, sValue = oConfig:Read("/Windows/"..sName.."/Visible", "");
-    if (not tConfig) then oConfig:delete(); end
+    pFile = pFile or FS.AppCFG;
+    local oConfig = wx.wxFileConfig("", "", pFile, "", wx.wxCONFIG_USE_LOCAL_FILE);
+    oConfig:DisableAutoSave();
+    oConfig:SetExpandEnvVars(false);
+    local sPrefix = sName == "ManualEditor" and "/ManualEditor/" or "/Windows/"..sName.."/";
+    local bFound, sValue = oConfig:Read(sPrefix.."Visible", "");
+    oConfig:delete();
     if (not bFound) then return nil; end
     return sValue == "1";
 end
@@ -108,17 +109,10 @@ end
 !]]
 function WindowState.bind(dWindow, sName, pFile)
     local tOptions = assert(_tPolicies[sName], "Register window state options before binding a window.");
-    pFile = pFile or assert(_AppDataLocal, "Application data path is unavailable.").."/WindowState.cfg";
-    local tConfig = _tConfigs[pFile];
-    if (not tConfig) then
-        tConfig = {
-            config = wx.wxFileConfig("", "", pFile, "", wx.wxCONFIG_USE_LOCAL_FILE),
-            users  = 0,
-        };
-        _tConfigs[pFile] = tConfig;
-    end
-    tConfig.users = tConfig.users + 1;
-    local oConfig = tConfig.config;
+    pFile = pFile or FS.AppCFG;
+    local oConfig = wx.wxFileConfig("", "", pFile, "", wx.wxCONFIG_USE_LOCAL_FILE);
+    oConfig:DisableAutoSave();
+    oConfig:SetExpandEnvVars(false);
     local oTimer  = wx.wxTimer(dWindow, wx.wxNewId());
     local bClosed = false;
     local nWindowID = dWindow:GetId();
@@ -135,7 +129,7 @@ function WindowState.bind(dWindow, sName, pFile)
         if (oEvent:GetId() == nWindowID) then _tWindows[nWindowID] = nil; end
         oEvent:Skip();
     end);
-    local sPrefix = "/Windows/"..sName.."/";
+    local sPrefix = sName == "ManualEditor" and "/ManualEditor/" or "/Windows/"..sName.."/";
 
     --[[!
     @fqxn CFS.Windows.WindowState.Private.Functions.readNumber
@@ -155,6 +149,10 @@ function WindowState.bind(dWindow, sName, pFile)
     !]]
     local function save()
         if (bClosed or dWindow:IsIconized()) then return; end
+        -- Other settings writers may have saved since this window opened.
+        local oConfig = wx.wxFileConfig("", "", pFile, "", wx.wxCONFIG_USE_LOCAL_FILE);
+        oConfig:DisableAutoSave();
+        oConfig:SetExpandEnvVars(false);
         if (not dWindow:IsMaximized()) then
             local oPosition = dWindow:GetPosition();
             local oSize     = dWindow:GetSize();
@@ -169,7 +167,9 @@ function WindowState.bind(dWindow, sName, pFile)
         end
         if (tOptions.saveVisible) then oConfig:Write(sPrefix.."Visible", dWindow:IsShown() and "1" or "0"); end
         if (tOptions.saveSize) then oConfig:Write(sPrefix.."Maximized", dWindow:IsMaximized() and "1" or "0"); end
-        if (not oConfig:Flush()) then
+        local bSaved = oConfig:Flush();
+        oConfig:delete();
+        if (not bSaved) then
             require("Errors").report("Could not save window position and size to application data.");
         end
     end
@@ -189,6 +189,7 @@ function WindowState.bind(dWindow, sName, pFile)
         end
     end
     if (tOptions.saveSize and readNumber("Maximized") == 1) then dWindow:Maximize(true); end
+    oConfig:delete();
 
     --[[!
     @fqxn CFS.Windows.WindowState.Private.Functions.changed
@@ -205,7 +206,6 @@ function WindowState.bind(dWindow, sName, pFile)
 
     dWindow:Connect(wx.wxEVT_SHOW, function(oEvent)
         if (not bClosed and tOptions.saveVisible) then
-            oConfig:Write(sPrefix.."Visible", dWindow:IsShown() and "1" or "0");
             oTimer:StartOnce(300);
         end
         oEvent:Skip();
@@ -223,7 +223,7 @@ function WindowState.bind(dWindow, sName, pFile)
         save = save,
         --[[!
         @fqxn CFS.Windows.WindowState.Private.Functions.close
-        @desc Stops timers, saves final state, and releases the configuration when its last user closes.
+        @desc Stops timers and saves final state to the application configuration.
         @vis private
         !]]
         close = function()
@@ -234,11 +234,6 @@ function WindowState.bind(dWindow, sName, pFile)
             _bRaising = false;
             save();
             bClosed = true;
-            tConfig.users = tConfig.users - 1;
-            if (tConfig.users == 0) then
-                oConfig:delete();
-                _tConfigs[pFile] = nil;
-            end
         end,
     };
 end

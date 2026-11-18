@@ -1,3 +1,5 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _Selection = require("wxLuma.Core.ControlSelection");
 local _Containment = require("wxLuma.Core.ControlContainment");
 local _ControlObject = require("wxLuma.Core.ControlObject");
@@ -14,13 +16,15 @@ local ControlSurface = {};
 @param table tOptions The factory options, including optional Containment
     (ancestor native window/visual component) and ContainmentOverflow (hide/allow).
     Nil settings inherit ancestor policy, then top-level/default policy.
+    Border defaults to wxBORDER_DEFAULT; native border constants provide overrides.
 @param string sKind The component kind.
 @ret table oComponent The public component object.
 !]]
 function ControlSurface.create(oParent, tOptions, sKind)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "Control options require a shared Skin.");
     local oControl = _wx.wxControl(oParent, _wx.wxID_ANY, _wx.wxDefaultPosition, _wx.wxDefaultSize,
-        _wx.wxBORDER_NONE + _wx.wxWANTS_CHARS + _wx.wxTAB_TRAVERSAL);
+        _Border.style(tOptions, _wx.wxWANTS_CHARS + _wx.wxTAB_TRAVERSAL));
     oControl:SetBackgroundStyle(_wx.wxBG_STYLE_PAINT);
     oControl:SetBackgroundColour(_wx.wxColour(24, 29, 36));
     oControl:SetName(tOptions.Text or sKind);
@@ -89,14 +93,17 @@ function ControlSurface.create(oParent, tOptions, sKind)
 
     --[[!
     @fqxn wxLuma.UI.ControlSurface.setEnabled
-    @desc Cancels active input, changes native enabled state and refreshes the component.
+    @desc Cancels active input, changes this control's own enabled setting and
+        refreshes it. A disabled ancestor does not overwrite the local setting.
     @param boolean bEnabled Whether the component is enabled.
     @ret table oComponent This public component object.
     !]]
     function oComponent.setEnabled(bEnabled)
         assert(type(bEnabled) == "boolean", "Enabled flag must be boolean.");
         local sOldState = oComponent.getState();
-        local bChanged  = oControl:IsEnabled() ~= bEnabled;
+        -- Effective availability includes ancestors; compare the local flag so
+        -- a disable request is retained even while a parent is already disabled.
+        local bChanged  = oControl:IsThisEnabled() ~= bEnabled;
         oComponent.cancel();
         oComponent.Hover = false;
 
@@ -138,7 +145,7 @@ function ControlSurface.create(oParent, tOptions, sKind)
             oControl:SetSize(nX, nY, nWidth, nHeight);
         end
         if (oComponent.onLayout) then
-            oComponent.onLayout(nWidth, nHeight);
+            oComponent.onLayout(oControl:GetClientSizeWH());
         end;
 
         bLayoutApplied = true;
@@ -176,6 +183,7 @@ function ControlSurface.create(oParent, tOptions, sKind)
         local bOldHover, bOldPressed = oComponent.Hover, oComponent.Pressed;
         local nWidth, nHeight        = oControl:GetClientSizeWH();
         oComponent.Hover = sEvent ~= "leave" and nX >= 0 and nY >= 0 and nX < nWidth and nY < nHeight;
+        if (oComponent.Hover and oComponent.PointerHitTest) then oComponent.Hover = oComponent.PointerHitTest(nX, nY); end
         if (sEvent == "down" and oComponent.Hover) then
             oControl:SetFocus();
             oComponent.Pressed = true;
@@ -249,7 +257,8 @@ function ControlSurface.create(oParent, tOptions, sKind)
         end
     end);
     oControl:Connect(_wx.wxEVT_MOUSEWHEEL, function(jEvent)
-        if (oComponent.isEnabled() and oComponent.wheel) then
+        if (oComponent.isEnabled() and oComponent.wheel and
+            (not oComponent.PointerHitTest or oComponent.PointerHitTest(jEvent:GetX(), jEvent:GetY()))) then
             oComponent.wheel(jEvent:GetWheelRotation() / jEvent:GetWheelDelta());
         else
             jEvent:Skip();
@@ -284,7 +293,20 @@ function ControlSurface.create(oParent, tOptions, sKind)
         if (oComponent.Disposed) then
             return;
         end;
-        drawFrame(oDC, 0, 0, nWidth, nHeight, oComponent.isEnabled(), oControl:HasFocus());
+        if (_Theme.isTheme(oComponent.Skin) and oComponent.Skin.getName() == "System") then
+            -- The native non-client border surrounds this client area. Painting
+            -- a second frame here would replace or double the platform's choice.
+            local bList = sKind == "List" or sKind == "ListEx" or sKind == "TreeEx";
+            oComponent.Skin.fill(oDC, bList and "Editor" or "Background", 0, 0, nWidth, nHeight);
+        elseif (tOptions.Border == _wx.wxBORDER_NONE) then
+            -- Borderless meters must not regain a rectangular frame through
+            -- the legacy surface painter when an image skin is selected.
+            local oColor = _Theme.colour(oComponent.Skin, "Background", 24, 29, 36);
+            local oBrush = _wx.wxBrush(oColor); oColor:delete();
+            oDC:SetBackground(oBrush); oDC:Clear(); oBrush:delete();
+        else
+            drawFrame(oDC, 0, 0, nWidth, nHeight, oComponent.isEnabled(), oControl:HasFocus(), oComponent.Skin);
+        end
         if (oComponent.drawContent) then
             oComponent.drawContent(oDC, nWidth, nHeight);
         end
@@ -312,6 +334,7 @@ function ControlSurface.create(oParent, tOptions, sKind)
     oControl:Enable(tOptions.Enabled ~= false);
     _Containment.attach(oComponent, oControl, tOptions);
     _Events.attach(oComponent);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

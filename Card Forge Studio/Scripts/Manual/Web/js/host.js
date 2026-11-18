@@ -48,15 +48,15 @@
 	document.addEventListener('DOMContentLoaded', () => {
 		transportReady = true;
 		setTimeout(pump, 0);
+		pollReply();
 	}, {once: true});
 	/** Polls only this runtime page's native-owned response file without blocking Lua. */
-	function pollReply(item) {
-		if (active !== item) return;
+	function pollReply() {
 		const script = document.createElement('script');
-		script.src = snapshot.context.bridgeReplyURL + '?request=' + item.id + '&part=' + item.index + '&poll=' + Date.now();
+		script.src = snapshot.context.bridgeReplyURL + '?poll=' + Date.now();
 		script.onload = script.onerror = () => {
 			script.remove();
-			if (active === item) setTimeout(() => pollReply(item), 25);
+			setTimeout(pollReply, active ? 25 : 100);
 		};
 		document.head.append(script);
 	}
@@ -75,7 +75,6 @@
 		const chunk = item.chunks[item.index];
 		if (item.operation === 'export' && item.index === item.chunks.length - 1) document.dispatchEvent(new CustomEvent('manual-export-phase', {detail: {kind: item.kind}}));
 		document.title = 'cfsmanual://bridge/' + item.id + '/' + (item.index + 1) + '/' + item.chunks.length + '?attempt=' + item.retries + '&length=' + chunk.length + '&data=' + chunk;
-		if (!item.polling) { item.polling = true; pollReply(item); }
 	}
 	/** Receives a chunk acknowledgment and schedules the next title message. */
 	function ack(id, part) { if (!active || active.id !== id || part !== active.index + 1) return; clearTimeout(active.timeout); active.index++; active.retries = 0; setTimeout(send, 0); }
@@ -95,11 +94,6 @@
 	function reportDirty() { request({action: 'draft-state', dirty: !!dirtyReader() || settingsDrafts.size > 0}).catch(() => {}); }
 	/** Includes pending or failed settings saves in Studio's close protection. */
 	function setSettingsDirty(name, dirty) { if (dirty) settingsDrafts.add(name); else settingsDrafts.delete(name); reportDirty(); }
-	/** Exports the ported PHP reader structure, rather than editor preview boxes. */
-	function exportHTML(kind) {
-		if (dirtyReader() || settingsDrafts.size) throw new Error('Save your content, style, glossary and settings changes before exporting.');
-		return window.CFSManualExport.build({snapshot, order: orderState().names, render, escape, pdf: config('Config/export-settings.json').pdf}, kind);
-	}
 	/** Opens a chapter through the host so it rebuilds the original template. */
 	function open(file) {
 		if (settingsDrafts.size) {
@@ -111,34 +105,6 @@
 	}
 	/** Returns a parsed JSON configuration from its current snapshot. */
 	function config(path) { return JSON.parse(record(path).text); }
-	/** Finds marked web-only rules while retaining exact replacement offsets. */
-	function rules(css = record('Styles/web-font-styles.css').text) {
-		const result = {};
-		const pattern = /\/\*\s*style:\s*([A-Za-z_][A-Za-z0-9_-]*)\s*\*\/\s*\.font-([A-Za-z_][A-Za-z0-9_-]*)\s*\{([^{}]*)\}/g;
-		for (const match of css.matchAll(pattern)) {
-			const key = match[1].toLowerCase();
-			if (key !== match[2].toLowerCase()) continue;
-			if (result[key]) throw new Error('Duplicate web style: ' + match[1]);
-			result[key] = {name: match[1], body: match[3], start: match.index, end: match.index + match[0].length, bodyStart: match.index + match[0].indexOf('{') + 1};
-		}
-		return result;
-	}
-	/** Builds the existing Style Editor's expected form state from its CSS source. */
-	function styleState() {
-		const styles = {};
-		const families = new Set(['Control Freak']);
-		const css = record('Styles/web-font-styles.css').text;
-		for (const match of ((snapshot.files['Styles/font-styles.css']?.text || '') + css).matchAll(/font-family:\s*([^;}]+)/g)) families.add(match[1].split(',')[0].trim().replace(/^['"]|['"]$/g, ''));
-		for (const [key, rule] of Object.entries(rules()).sort(([a],[b]) => a.localeCompare(b))) {
-			const properties = {};
-			for (const match of rule.body.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([a-z-]+)\s*:\s*([^;]+);/g)) properties[match[1]] = match[2].trim();
-			const size = properties['font-size'] || 'inherit';
-			const fixed = size.match(/^(-?\d+(?:\.\d+)?)px$/);
-			const relative = size.match(/^calc\(1em\s*([+-])\s*(\d+(?:\.\d+)?)px\)$/);
-			styles[key] = {name: rule.name, family: (properties['font-family'] || 'Control Freak').split(',')[0].replace(/^['"]|['"]$/g, ''), bold: properties['font-weight'] === 'bold' || Number(properties['font-weight']) >= 600, italic: properties['font-style'] === 'italic', underline: (properties['text-decoration-line'] || '').includes('underline'), strike: (properties['text-decoration-line'] || '').includes('line-through'), color: /^#[0-9a-f]{6}$/i.test(properties.color || '') ? properties.color : '#e6e3da', size_mode: fixed ? 'fixed' : relative ? 'relative' : size === 'inherit' ? 'auto' : 'custom', size_value: fixed ? Number(fixed[1]) : relative ? Number(relative[2]) * (relative[1] === '-' ? -1 : 1) : 0, size_raw: size, css_body: rule.body.replace(/^\r?\n|\r?\n$/g, '')};
-		}
-		return {styles, families: [...families].filter(Boolean).sort((a,b) => a.localeCompare(b)), version: record('Styles/web-font-styles.css').version};
-	}
 	/** Resolves ordered filename stems, appending existing unlisted chapters. */
 	function orderState() {
 		const files = Object.keys(snapshot.files).filter(path => /^Content\/[^/]+\.md$/i.test(path)).map(path => path.slice(8));
@@ -150,7 +116,7 @@
 		return {names, version: record('Content/_ORDER_.txt').version};
 	}
 	/** Converts safely rendered heading text to its plain glossary matching string. */
-	function plain(text) { const node = document.createElement('div'); node.innerHTML = md.renderInline(text.replace(/<\/?[A-Za-z_][A-Za-z0-9_-]*>/g,'')); return node.textContent; }
+	function plain(text) { const node = document.createElement('div'); node.innerHTML = md.renderInline(text.replace(/<\/?:?[A-Za-z_][A-Za-z0-9_-]*>/g,'')); return node.textContent; }
 	/** Parses the existing stable glossary markers into individually editable blocks. */
 	function glossaryParts(text) {
 		const pattern = /<!-- section: ([a-z0-9-]+)(?:; quicksheet: [a-z0-9-]+)?; source: [0-9]+ -->\r?\n(#{2,6}) ([^\r\n]+)(?:\r?\n|$)/g;
@@ -193,13 +159,14 @@
 	function composeGlossary(parts) { const blocks = Object.values(parts.entries).sort((a,b) => a.title.localeCompare(b.title,undefined,{sensitivity:'base',numeric:true})); return (parts.prefix.replace(/\r\n/g,'\n').replace(/\n+$/,'')+'\n\n'+blocks.map(entry => entry.header.replace(/\r\n/g,'\n').trimEnd()+'\n\n'+entry.markdown.replace(/\r\n/g,'\n').replace(/^\n+|\n+$/g,'')+'\n\n').join('')).replace(/\n/g,parts.newline); }
 	/** Renders safe Markdown plus the existing style/glossary wrappers, including rich definitions. */
 	function render(source, linkGlossary = true) {
-		const styles = new Set([...styleNames().map(name => name.toLowerCase()), 'g']);
+		const namedStyles = new Set(styleNames().map(name => name.toLowerCase()));
+		const styles = new Set([...namedStyles, 'g', 'sup']);
 		const marker = 'CFSSTYLE'+Math.random().toString(36).slice(2)+'TOKEN';
 		const tags = [];
 		const headingIds = new Map();
 		for (const match of source.matchAll(/<!-- section: ([a-z0-9-]+)(?:; quicksheet: [a-z0-9-]+)?; source: [0-9]+ -->\r?\n#+ /g)) headingIds.set(source.slice(0,match.index).split('\n').length,match[1]);
 		let text = source.replace(/<!-- section:[\s\S]*?-->/g, match => match.replace(/[^\n]/g,''));
-		text = text.replace(/(?<!\\)<(\/?)([A-Za-z_][A-Za-z0-9_-]*)>/g, (whole,slash,name) => { if (!styles.has(name.toLowerCase())) return whole; const index=tags.push(escape(whole))-1; return marker+index+'END'; });
+		text = text.replace(/(?<!\\)<(\/?)(:?)([A-Za-z_][A-Za-z0-9_-]*)>/g, (whole,slash,prefix,name) => { if (!(prefix ? namedStyles : styles).has(name.toLowerCase())) return whole; const index=tags.push(escape(whole))-1; return marker+index+'END'; });
 		let html = md.render(text, {headingIds});
 		tags.forEach((tag,index) => { html=html.split(marker+index+'END').join(tag); });
 		const protectedCode=[];
@@ -209,10 +176,10 @@
 		if (linkGlossary) { try { glossary=glossaryState(); index=validateGlossary(glossary.entries,glossary.alternatives); } catch (_) { /* Missing glossary must not prevent ordinary Markdown preview. */ } }
 		for (let pass=0;pass<20;pass++) {
 			let replaced=false;
-			html=html.replace(/&lt;([A-Za-z_][A-Za-z0-9_-]*)&gt;((?:(?!&lt;\/?[A-Za-z_][A-Za-z0-9_-]*&gt;)[\s\S])*?)&lt;\/\1&gt;/gi,(whole,name,inside) => {
-				const key=name.toLowerCase(); if (!styles.has(key)) return whole; replaced=true;
-				const styled=key==='g'?inside:'<span class="font-'+key+'" data-font-style="'+escape(name)+'" data-inline>'+inside+'</span>';
-				if (!index || !['g','keyword'].includes(key) || inside.includes('data-glossary-title')) return styled;
+			html=html.replace(/&lt;(:?)([A-Za-z_][A-Za-z0-9_-]*)&gt;((?:(?!&lt;\/?:?[A-Za-z_][A-Za-z0-9_-]*&gt;)[\s\S])*?)&lt;\/\1\2&gt;/gi,(whole,prefix,name,inside) => {
+				const key=name.toLowerCase(); if (!(prefix ? namedStyles : styles).has(key)) return whole; replaced=true;
+				const styled=!prefix&&key==='sup'?'<sup>'+inside+'</sup>':!prefix&&key==='g'?inside:'<span class="font-'+key+'" data-font-style="'+escape(name)+'" data-inline>'+inside+'</span>';
+				if (!index || (prefix && key === 'g') || !['g','keyword','manualkeyword'].includes(key) || inside.includes('data-glossary-title')) return styled;
 				const node=document.createElement('div');node.innerHTML=inside;const id=index.get(node.textContent.toLowerCase());if(!id)return styled;
 				const entry=glossary.entries[id];const definition=render(entry.markdown,false);
 				return '<a class="glossary-link" href="#'+escape(id)+'" data-glossary-title="'+escape(entry.title)+'" data-glossary-definition="'+escape(plain(entry.markdown))+'" data-glossary-html="'+escape(definition)+'" data-glossary-delay="'+glossary.hover_delay_ms+'">'+styled+'</a>';
@@ -231,20 +198,14 @@
 			}
 		});
 		container.querySelectorAll('img').forEach(image => { const raw=image.getAttribute('src')||'';if(/^images\//i.test(raw)){const base=snapshot.context.manualURL.replace(/\/$/,'')+'/Images/';const resolved=new URL(raw.slice(7),base);if(resolved.href.startsWith(base))image.src=resolved.href;else image.removeAttribute('src');} });
+		if (linkGlossary && window.CFSManualAppearance) window.CFSManualAppearance.sections(container);
 		return container.innerHTML;
 	}
-	/** Discovers the same style-tag names from generated game CSS and marked web overrides. */
-	function styleNames() { const names=new Map();for(const rule of Object.values(rules(snapshot.files['Styles/font-styles.css']?.text||'')))names.set(rule.name.toLowerCase(),rule.name);for(const rule of Object.values(rules()))names.set(rule.name.toLowerCase(),rule.name);return [...names.values()].sort((a,b)=>a.localeCompare(b)); }
-	/** Updates only managed declarations, retaining custom effects in the selected rule. */
-	function formCSS(body, values) {
-		const managed=['font-family','font-weight','font-style','text-decoration-line','color','font-size'];
-		let result=body;
-		for(const property of managed)result=result.replace(new RegExp('(^|\\n)[\\t ]*'+property+'\\s*:[^;]*;[\\t ]*','g'),'$1');
-		if(!/^#[0-9a-f]{6}$/i.test(values.color)||!Number.isFinite(values.size_value))throw new Error('Enter a valid color and font size.');
-		const family=String(values.family).replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/[\r\n]/g,'');
-		const decoration=[values.underline?'underline':'',values.strike?'line-through':''].filter(Boolean).join(' ')||'none';
-		let size=values.size_mode==='fixed'?values.size_value+'px':values.size_mode==='relative'?'calc(1em '+(values.size_value<0?'-':'+')+' '+Math.abs(values.size_value)+'px)':values.size_mode==='custom'?(body.match(/font-size:\s*([^;]+);/)?.[1]||'inherit'):'inherit';
-		return result.trimEnd()+'\n\tfont-family: "'+family+'", sans-serif;\n\tfont-weight: '+(values.bold?'700':'400')+';\n\tfont-style: '+(values.italic?'italic':'normal')+';\n\ttext-decoration-line: '+decoration+';\n\tcolor: '+values.color+';\n\tfont-size: '+size+';\n';
+	/** Lists names from CFS-generated style declarations only. */
+	function styleNames() {
+		const names = new Map();
+		for (const match of (snapshot.files['Styles/font-styles.css']?.text || '').matchAll(/\/\*\s*style:\s*([A-Za-z_][A-Za-z0-9_-]*)\s*\*\//g)) names.set(match[1].toLowerCase(), match[1]);
+		return [...names.values()].sort((a, b) => a.localeCompare(b));
 	}
 	/** Implements the original endpoint actions using game snapshots and Lua filesystem transactions. */
 	async function action(name, values={}) {
@@ -258,28 +219,6 @@
 			const names=JSON.parse(values.names);const current=orderState().names;
 			if(names.length!==current.length||new Set(names).size!==names.length||names.some(item=>!current.includes(item)))throw new Error('The document list changed; reload first.');
 			const newline=record('Content/_ORDER_.txt').text.includes('\r\n')?'\r\n':'\n';await write({'Content/_ORDER_.txt':names.join(newline)+newline});result={ok:true,message:'Document order saved.'};
-		} else if(name.startsWith('style-')) {
-			const path='Styles/web-font-styles.css';const current=record(path);if(current.version!==values.version)throw new Error('Web styles changed; reload before saving.');
-			const all=rules(current.text);const key=String(values.name).toLowerCase();const old=all[key];let css=current.text;const files={};
-			if(name==='style-css-save') {
-				if(!old||/[{}]/.test(values.css)||/\/\*|\*\//.test(values.css.replace(/\/\*[\s\S]*?\*\//g,'')))throw new Error('Enter declarations only and close CSS comments.');
-				const newline=css.includes('\r\n')?'\r\n':'\n';css=css.slice(0,old.bodyStart)+newline+values.css.replace(/\r\n/g,'\n').replace(/^\n+|\n+$/g,'').replace(/\n/g,newline)+newline+css.slice(old.bodyStart+old.body.length);
-			} else {
-				const fields=JSON.parse(values.values);const newName=fields.name;const newKey=newName.toLowerCase();
-				if(!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(newName))throw new Error('Use a valid style name.');
-				if(name==='style-create'&&all[newKey]||old&&newKey!==key&&all[newKey])throw new Error('That web style already exists.');
-				if(name!=='style-create'&&!old)throw new Error('Choose an existing web style.');
-				if(name==='style-delete')css=css.slice(0,old.start)+css.slice(old.end);
-				else { const block='/* style: '+newName+' */\n.font-'+newKey+' {\n'+formCSS(old?.body||'',fields)+'}\n';css=old?css.slice(0,old.start)+block+css.slice(old.end):css.trimEnd()+'\n\n'+block; }
-				if (old && (name === 'style-delete' || newKey !== key || newName !== old.name)) {
-					const settingsPath = 'Config/editor-settings.json';
-					const settings = config(settingsPath);
-					settings.favorites = [...new Set((settings.favorites || []).flatMap(favorite => favorite.toLowerCase() !== key ? [favorite] : name === 'style-delete' ? [] : [newName]))];
-					files[settingsPath] = JSON.stringify(settings, null, '\t') + '\n';
-				}
-				if(old&&(name==='style-delete'&&fields.remove_tags||name!=='style-delete'&&newKey!==key))for(const [file,value]of Object.entries(snapshot.files))if(/^Content\/.*\.md$/i.test(file)){const pattern=new RegExp('(<\\/?)'+old.name+'(\\s*>)','gi');const updated=value.text.replace(pattern,name==='style-delete'?'':'$1'+newName+'$2');if(updated!==value.text)files[file]=updated;}
-			}
-			files[path]=css;await write(files);document.dispatchEvent(new Event('manual-styles-changed'));result={ok:true,message:'Web style saved.',style_state:styleState()};
 		} else if(name.startsWith('glossary-')) {
 			let state=glossaryState();
 			if(state.missing && name==='glossary-content-save' && !values.entry){await request({action:'documents',operation:'create',name:'glossary.md'});state=glossaryState();values={...values,version:state.document.version};}
@@ -302,19 +241,18 @@
 	}
 	/** Populates the original template's dynamic fields before its original admin script executes. */
 	function initialize() {
+		document.getElementById('manual-appearance-styles').textContent = snapshot.appearanceCSS || '';
+		document.getElementById('markdown-preview').classList.add('manual-appearance');
 		const app=document.getElementById('admin-app');const order=orderState();const files=Object.keys(snapshot.files).filter(path=>/^Content\/[^/]+\.md$/i.test(path));
 		const selected=files.includes('Content/'+snapshot.selected)?snapshot.selected:files[0]?.slice(8);
 		app.dataset.file=selected||'';app.dataset.version=selected?record('Content/'+selected).version:'';
 		document.getElementById('markdown-editor').value=selected?record('Content/'+selected).text:'';
 		for(const id of ['save-content','rename-content','delete-content'])document.getElementById(id).disabled=!selected;
 		document.getElementById('game-font-styles').textContent=(snapshot.files['Styles/font-styles.css']?.text||'').replace(/@font-face\s*\{[^{}]*\}/g,'');
-		document.getElementById('game-web-styles').textContent=record('Styles/web-font-styles.css').text;
-		document.getElementById('web-style-sample').textContent=snapshot.context.gameName+' — The quick brown fox 0123456789';
 		const select=document.getElementById('content-file');
 		for(const [index,stem]of order.names.entries()){const path=files.find(path=>path.slice(8,-3)===stem);if(!path)continue;const option=document.createElement('option');option.value=path.slice(8);option.textContent=(index+1)+'. '+stem;option.selected=option.value===selected;select.append(option);}
 		const tags=document.querySelector('.tag-grid');const styleSelect=document.getElementById('glossary-document-style');
 		for(const name of styleNames()){tags.insertAdjacentHTML('beforeend','<button type="button" class="btn btn-sm btn-outline-secondary" data-wrap-style="'+escape(name)+'"><span class="font-'+name.toLowerCase()+'" data-inline>'+escape(name)+'</span></button>');const option=document.createElement('option');option.value=name;option.textContent=name;styleSelect.append(option);}
-		document.getElementById('web-style-data').textContent=JSON.stringify(styleState());
 		document.getElementById('document-order-data').textContent=JSON.stringify(order);
 		document.getElementById('glossary-data').textContent=JSON.stringify(glossaryState());
 		const list=document.getElementById('document-order-list');for(const [index,name]of order.names.entries())list.insertAdjacentHTML('beforeend','<li draggable="true" data-document="'+escape(name)+'"><span class="document-position">'+(index+1)+'</span><span class="document-name">'+escape(name)+'</span><button type="button" class="btn btn-sm btn-outline-light" data-order-up aria-label="Move '+escape(name)+' up">↑</button><button type="button" class="btn btn-sm btn-outline-light" data-order-down aria-label="Move '+escape(name)+' down">↓</button></li>');
@@ -331,7 +269,7 @@
 		try{const result=await request({action:'documents',operation,name,newName,version:file?record('Content/'+file).version:undefined});open(result.selected||Object.keys(snapshot.files).find(path=>/^Content\/.*\.md$/i.test(path))?.slice(8)||'intro.md');}
 		catch(error){document.getElementById('admin-notice').textContent=error.message;document.getElementById('admin-notice').className='alert alert-danger';}
 	}
-	window.CFSManual={request,ack,receive,action,render,open,write,config,exportHTML,styles:styleNames,snapshot:()=>snapshot,setSettingsDirty,hasSettingsDrafts:()=>settingsDrafts.size>0,bindDirty(reader){dirtyReader=reader;},reportDirty};
+	window.CFSManual={request,ack,receive,action,render,open,write,config,styles:styleNames,snapshot:()=>snapshot,setSettingsDirty,hasSettingsDrafts:()=>settingsDrafts.size>0,hasDrafts:()=>!!dirtyReader()||settingsDrafts.size>0,bindDirty(reader){dirtyReader=reader;},reportDirty};
 	initialize();
 	/** Displays the current game manual using the same renderer as editor and glossary previews. */
 	function showReader(target) {

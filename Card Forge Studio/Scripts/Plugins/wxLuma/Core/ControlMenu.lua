@@ -1,3 +1,5 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _wx          = require("wx");
 local _Object      = require("wxLuma.Core.ControlObject");
 local _Events      = require("wxLuma.Core.ControlEvents");
@@ -63,6 +65,7 @@ end
 @ret table oMenu Independent public actual/decoy/metatable object.
 !]]
 function ControlMenu.create(oParent, tOptions, sKind)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(sKind == "ContextMenu" or sKind == "RadialMenu", "Invalid menu kind.");
     assert(type(tOptions) == "table" and tOptions.Skin, "Menus require Skin.");
     assert(tOptions.OnSelect == nil or type(tOptions.OnSelect) == "function", "OnSelect must be a function.");
@@ -158,7 +161,7 @@ function ControlMenu.create(oParent, tOptions, sKind)
 
     local oPopup = _wx.wxFrame(oParent, _wx.wxID_ANY, "", _wx.wxDefaultPosition, _wx.wxDefaultSize, nStyle);
     local oCanvas = _wx.wxPanel(oPopup, _wx.wxID_ANY, _wx.wxDefaultPosition, _wx.wxDefaultSize,
-        _wx.wxBORDER_NONE + _wx.wxWANTS_CHARS);
+        _Border.style(tOptions, _wx.wxWANTS_CHARS));
     oCanvas:SetBackgroundStyle(_wx.wxBG_STYLE_PAINT);
     oCanvas:SetBackgroundColour(_wx.wxColour(24, 29, 36));
     local oMenu = _Object.create({Control = oCanvas, Popup = oPopup, Skin = tOptions.Skin,
@@ -962,7 +965,8 @@ function ControlMenu.create(oParent, tOptions, sKind)
         end
 
         local oClip = _wx.wxDCClipper(oDC, _wx.wxRect(0, 0, math.max(1, nWidth), math.max(1, nHeight)));
-        local oBrush = _wx.wxBrush(_wx.wxColour(24, 29, 36));
+        local oBackground = _Theme.colour(oMenu.Skin, "Background", 24, 29, 36);
+        local oBrush = _wx.wxBrush(oBackground); oBackground:delete();
         oDC:SetBackground(oBrush);
         oDC:Clear();
         oBrush:delete();
@@ -1001,7 +1005,7 @@ function ControlMenu.create(oParent, tOptions, sKind)
     tPolicy = _Containment.attach(oMenu, oParent, tOptions);
     tRenderer = _Renderer.create(oMenu.Skin, sArtwork, bRadial, function(pPath)
         tEvents.emit("imageError", {Path = pPath});
-    end);
+    end, oCanvas);
 
     -- Policy accessors are declared below; all mutate before recomputing a page.
 
@@ -1251,6 +1255,7 @@ function ControlMenu.create(oParent, tOptions, sKind)
         "itemHovered", "itemLeft", "itemFocused", "layoutFailed", "imageError", "directionChanged",
         "startAngleChanged", "spacingChanged", "radiusChanged", "shapeChanged"});
     oCanvas:Enable(oMenu.Enabled);
+    _Theme.finish(oMenu, tOptions);
     return oMenu;
 end
 

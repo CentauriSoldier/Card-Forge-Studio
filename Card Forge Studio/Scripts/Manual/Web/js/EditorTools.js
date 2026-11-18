@@ -12,6 +12,78 @@
 	let revision = 0;
 	let drag = null;
 
+	const editor = document.getElementById('markdown-editor');
+	const stack = editor.closest('.markdown-editor-stack');
+	const gutter = document.createElement('div');
+	const numbers = document.createElement('div');
+	const mirror = document.createElement('div');
+	gutter.className = 'manual-line-gutter';
+	mirror.className = 'manual-line-mirror';
+	gutter.setAttribute('aria-hidden', 'true');
+	mirror.setAttribute('aria-hidden', 'true');
+	gutter.append(numbers);
+	stack.append(gutter, mirror);
+	gutter.hidden = mirror.hidden = true;
+	let lineFrame = 0;
+	let readingOptions = false;
+	let optionsRevision = 0;
+
+	/** Matches logical line numbers to the textarea's wrapped line heights. */
+	function drawLineNumbers() {
+		lineFrame = 0;
+		if (gutter.hidden || !editor.clientWidth) return;
+		mirror.style.width = editor.clientWidth + 'px';
+		const rows = document.createDocumentFragment();
+		for (const text of editor.value.split('\n')) {
+			const row = document.createElement('div');
+			row.textContent = text || '\u200b';
+			rows.append(row);
+		}
+		mirror.replaceChildren(rows);
+		const labels = document.createDocumentFragment();
+		Array.from(mirror.children).forEach((row, index) => {
+			const label = document.createElement('div');
+			label.textContent = index + 1;
+			label.style.height = row.getBoundingClientRect().height + 'px';
+			labels.append(label);
+		});
+		numbers.replaceChildren(labels);
+		numbers.style.transform = 'translateY(' + -editor.scrollTop + 'px)';
+	}
+	function queueLineNumbers() {
+		if (!lineFrame) lineFrame = requestAnimationFrame(drawLineNumbers);
+	}
+	function applyEditorOptions(settings) {
+		const top = editor.scrollTop;
+		const left = editor.scrollLeft;
+		gutter.hidden = mirror.hidden = !settings.lineNumbers;
+		stack.classList.toggle('has-line-numbers', settings.lineNumbers);
+		editor.scrollTop = top;
+		editor.scrollLeft = left;
+		queueLineNumbers();
+	}
+	document.addEventListener('manual-editor-options', event => {
+		if (event.detail.revision <= optionsRevision) return;
+		optionsRevision = event.detail.revision;
+		applyEditorOptions(event.detail);
+	});
+	async function readEditorOptions() {
+		if (readingOptions) return;
+		readingOptions = true;
+		try {
+			const result = await api.request({action: 'editor-options'});
+			if (!optionsRevision) applyEditorOptions(result);
+		} catch (error) {
+			document.getElementById('admin-notice').textContent = error.message;
+		} finally { readingOptions = false; }
+	}
+	editor.addEventListener('input', queueLineNumbers);
+	editor.addEventListener('scroll', () => { numbers.style.transform = 'translateY(' + -editor.scrollTop + 'px)'; });
+	new ResizeObserver(queueLineNumbers).observe(editor);
+	new MutationObserver(queueLineNumbers).observe(document.getElementById('markdown-selections'), {childList: true});
+	readEditorOptions();
+
+
 	/** Rebuilds references using the exact styled buttons currently in the palette. */
 	function display() {
 		favorites.replaceChildren();
@@ -86,6 +158,7 @@
 	/** Inserts one editor change through the original input/preview/dirty handlers. */
 	function insert(text) {
 		const editor = document.getElementById('markdown-editor');
+		window.CFSManualEditing?.before();
 		editor.setRangeText(text, editor.selectionStart, editor.selectionEnd, 'end');
 		editor.focus({preventScroll: true});
 		editor.dispatchEvent(new Event('input', {bubbles: true}));

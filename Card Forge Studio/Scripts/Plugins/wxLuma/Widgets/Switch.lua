@@ -1,3 +1,5 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _wx     = require("wx");
 local _Input  = require("wxLuma.Core.ControlInput");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -11,8 +13,12 @@ local Switch = {};
     families follow Orientation and Reversed automatically, including at runtime.
 @param table tOptions Skin; Value false; Orientation horizontal/vertical;
     Reversed false; Text (empty); Artwork Switch; OnChange(value, component).
+    Border defaults to wxBORDER_NONE for the outer host; explicit native border
+    constants override it without changing the lever or keyboard focus cue.
 !]]
 function Switch.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
     assert(tOptions and tOptions.Skin, "Switch requires Skin.");
     local sOrientation = tOptions.Orientation or (tOptions.Vertical and "vertical" or "horizontal");
     assert(sOrientation == "horizontal" or sOrientation == "vertical", "Invalid switch orientation.");
@@ -27,11 +33,16 @@ function Switch.create(oParent, tOptions)
         tInput.Toggle, tInput.Enter = true, true;
         -- Widget-owned materials replace shared fallback colors and focus.
         tInput.background = function(oDC, nWidth, nHeight, sState)
+            if (_Theme.isTheme(tOptions.Skin) and tOptions.Skin.getName() == "System") then
+                -- A native control has rectangular bounds, but those bounds
+                -- should disappear into its actual parent's surface.
+                local oBrush = _wx.wxBrush(oParent:GetBackgroundColour());
+                oDC:SetBackground(oBrush); oDC:Clear(); oBrush:delete();
+                return;
+            end
             tArt.part(oDC, "Surface "..sState, 0, 0, nWidth, nHeight);
         end;
-        tInput.focus = function(oDC, nWidth, nHeight)
-            tArt.part(oDC, "Focus", 0, 0, nWidth, nHeight);
-        end;
+        tInput.focus = false;
         tInput.destroy = tArt.destroy;
 
         --[[!
@@ -144,6 +155,7 @@ function Switch.create(oParent, tOptions)
         oSwitch.Vertical = sOrientation == "vertical";
     end);
     tEvents = _Events.attach(oComponent, nil, {"orientationChanged", "reversedChanged"});
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

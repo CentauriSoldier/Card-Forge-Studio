@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx          = require("wx");
 local _Surface     = require("wxLuma.Core.ControlSurface");
 local _Numeric     = require("wxLuma.Core.ControlNumeric");
@@ -7,6 +8,7 @@ local _Selection   = require("wxLuma.Core.ControlSelection");
 local _Events      = require("wxLuma.Core.ControlEvents");
 local _Checks      = require("wxLuma.Core.ControlChecks");
 local _Artwork     = require("wxLuma.Core.ControlArtwork");
+local _Options     = require("wxLuma.Core.ControlOptions");
 local List         = {};
 
 --[[!
@@ -23,13 +25,19 @@ local List         = {};
 @ret table oList The list object. Value is a one-based index, or zero for none.
 !]]
 function List.create(oParent, tOptions, sKind)
+    tOptions = _Theme.options(tOptions, oParent);
     -- ListEx shares this engine and receives its own single proxy identity.
     assert(sKind == nil or sKind == "ListEx", "Invalid shared list identity.");
+    local tInitial = tOptions.Items;
+    if (tInitial == nil) then tInitial = {}; end
+    -- Validate sequence shape before rendering resources or native children
+    -- are created; ipairs alone would silently truncate a sparse input.
+    _Options.array(tInitial);
     assert(tOptions.Checkboxes == nil or type(tOptions.Checkboxes) == "boolean", "Checkboxes must be boolean.");
     if (tOptions.Checked ~= nil) then
         _Selection.validate(tOptions.Checked, function(nIndex)
             return _Numeric.finite(nIndex) and nIndex % 1 == 0 and nIndex >= 1
-                and nIndex <= #(tOptions.Items or {});
+                and nIndex <= #tInitial;
         end, true);
     end
     local tArt = tOptions.Artwork and _Artwork.create(tOptions.Skin, tOptions.Artwork);
@@ -407,7 +415,7 @@ function List.create(oParent, tOptions, sKind)
     @ret table oList This list object.
     !]]
     function oList.setItems(tItems, bNotify)
-        assert(type(tItems) == "table", "List Items must be an array.");
+        _Options.array(tItems);
         local tCopy = {};
 
         for nIndex, vItem in ipairs(tItems) do
@@ -874,19 +882,26 @@ function List.create(oParent, tOptions, sKind)
 
         for nIndex = nFirst, nLast do
             local nY = 4 + (nIndex - oList.First) * oList.RowHeight;
+            local bSystem = _Theme.isTheme(oList.Skin) and oList.Skin.getName() == "System";
+            local bSelected = bSystem and oList.isEnabled() and tSelected[nIndex] == true;
 
-            if (tArt) then
+            if (bSystem) then
+                -- Plain lists and artwork-backed lists share the same system
+                -- palette. The legacy gradient is never a System fallback.
+                oList.Skin.fill(oDC, bSelected and "Selection" or nIndex == oList.HoverRow and "Hover" or "Editor",
+                    4, nY, math.max(1, nWidth - 30), oList.RowHeight);
+            elseif (tArt) then
                 local sRow = tSelected[nIndex] and (oList.isEnabled() and "Row Selected" or "Row Selected Disabled")
                     or not oList.isEnabled() and "Row Disabled" or nIndex == oList.HoverRow and "Row Hover" or "Row Normal";
                 tArt.part(oDC, sRow, 4, nY, math.max(1, nWidth - 30), oList.RowHeight);
             end
-            if (not tArt and tSelected[nIndex]) then
+            if (not bSystem and not tArt and tSelected[nIndex]) then
                 oDC:GradientFillLinear(_wx.wxRect(4, nY, nWidth - 30, oList.RowHeight),
                     oList.isEnabled() and _wx.wxColour(65, 82, 99) or _wx.wxColour(41, 46, 53),
                     _wx.wxColour(28, 36, 45), _wx.wxSOUTH);
             end
 
-            if (not tArt and nIndex == oList.HoverRow) then
+            if (not bSystem and not tArt and nIndex == oList.HoverRow) then
                 if (not tSelected[nIndex]) then
                     oDC:GradientFillLinear(_wx.wxRect(4, nY, nWidth - 30, oList.RowHeight),
                         _wx.wxColour(43, 55, 67), _wx.wxColour(29, 38, 48), _wx.wxSOUTH);
@@ -899,20 +914,11 @@ function List.create(oParent, tOptions, sKind)
                 oPen:delete();
             end
 
-            if ((bMulti or oList.isCheckboxesEnabled()) and nIndex == nFocus and oList.Control:HasFocus()) then
-                if (tArt) then
-                    tArt.part(oDC, "Focus", 5, nY + oList.RowHeight - 3, math.max(1, nWidth - 32), 2);
-                else
-                    local oPen = _wx.wxPen(_wx.wxColour(160, 180, 200), 1, _wx.wxPENSTYLE_DOT);
-                    oDC:SetPen(oPen);
-                    oDC:SetBrush(_wx.wxTRANSPARENT_BRUSH);
-                    oDC:DrawRectangle(5, nY + 1, math.max(1, nWidth - 32), oList.RowHeight - 2);
-                    oPen:delete();
-                end
-            end
+            -- Selection communicates the active row without a focus outline.
 
             if (nIndex == oList.CommittedValue) then
-                local oPen = _wx.wxPen(_wx.wxColour(145, 175, 198), 2, _wx.wxPENSTYLE_SOLID);
+                local oColor = _Theme.colour(oList.Skin, "Fill", 145, 175, 198);
+                local oPen = _wx.wxPen(oColor, 2, _wx.wxPENSTYLE_SOLID); oColor:delete();
                 oDC:SetPen(oPen);
                 oDC:DrawLine(6, nY + 5, 6, nY + oList.RowHeight - 5);
                 oPen:delete();
@@ -931,10 +937,10 @@ function List.create(oParent, tOptions, sKind)
             if (tRenderer) then
                 tRenderer.draw(oDC, oList.Items[nIndex], nIndex, 4 + nInset, nY,
                     math.max(1, nWidth - 30 - nInset), oList.RowHeight, oList.isEnabled(),
-                    oList.getRowInsets and oList.getRowInsets(nIndex) or nil);
+                    oList.getRowInsets and oList.getRowInsets(nIndex) or nil, bSelected);
             else
                 oRowSkin.text(oDC, oList.Items[nIndex], 10 + nInset,
-                    nY + (oList.RowHeight - 18) / 2, oList.isEnabled());
+                    nY + (oList.RowHeight - 18) / 2, oList.isEnabled(), bSelected);
             end
         end
 
@@ -982,13 +988,14 @@ function List.create(oParent, tOptions, sKind)
         end;
         oList.Scrollbar.draw = function(oDC, nWidth, nHeight)
             if (not oList.Disposed) then
+                if (oList.Scrollbar.drawNativeContent(oDC, nWidth, nHeight)) then return; end
                 local sState = not oList.isEnabled() and "Disabled" or oList.Scrollbar.Pressed and "Pressed"
                     or oList.Scrollbar.Hover and "Hover" or "Normal";
                 local nAt, nThumb = oList.Scrollbar.getThumb();
                 tArt.part(oDC, "Scroll Track", 0, 0, nWidth, nHeight);
                 tArt.part(oDC, "Scroll Thumb "..sState, 2, nAt, math.max(1, nWidth - 4), nThumb);
-                tArt.text(oDC, "^", 5, 0, oList.isEnabled());
-                tArt.text(oDC, "v", 5, nHeight - 18, oList.isEnabled());
+                tArt.part(oDC, "Scroll Up "..sState, 0, 0, nWidth, 18);
+                tArt.part(oDC, "Scroll Down "..sState, 0, nHeight - 18, nWidth, 18);
             end
         end;
     end
@@ -1028,10 +1035,11 @@ function List.create(oParent, tOptions, sKind)
                 Item = oList.getItem(nIndex)};
         end,
     });
-    oList.setItems(tOptions.Items);
+    oList.setItems(tInitial);
     oList.setValue(tOptions.Value or 0);
     oList.setCheckedItems(tOptions.Checked or {});
     oList.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oList, tOptions);
     return oList;
 end
 

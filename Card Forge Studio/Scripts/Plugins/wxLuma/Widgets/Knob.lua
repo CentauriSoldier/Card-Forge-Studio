@@ -1,3 +1,5 @@
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -13,15 +15,19 @@ local _tModes = {none = true, revolve = true, alternate = true};
     and reverses logical movement. Exact endpoints do not reverse until crossed.
     increase/decrease follow that direction; adjust is an absolute signed delta.
     Drag up/down, use wheel/arrows/Page/Home/End; Escape cancels a pointer drag.
-    No LuaEx dependency or timer is used.
+    One owned timer groups wheel input into a gesture; no LuaEx dependency is used.
     Needle state images are transparent squares pointing right from their center;
     artwork defines their complete appearance and rotates with the dial value.
 @param wxWindow oParent Native owner.
 @param table tOptions Skin, optional Min (0), Max (100), Value (Min), Rate (1),
-    Continuity (none/revolve/alternate), Artwork (Knob), Enabled, OnChange.
+    Continuity (none/revolve/alternate), Artwork (Knob), Enabled, OnChange,
+    OnChangeComplete(value, component). Completion follows a changed drag release,
+    last adjustment-key release or 200 ms wheel idle. Cancellation never completes.
 @ret table oComponent Numeric value/range/rate/continuity/direction APIs and shared events.
 !]]
 function Knob.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
     local nMin, nMax = tOptions.Min or 0, tOptions.Max or 100;
     local nRate, sMode = tOptions.Rate or 1, tOptions.Continuity or "none";
 
@@ -36,14 +42,71 @@ function Knob.create(oParent, tOptions)
     fBounds(nMin, nMax);
     assert(_finite(nRate) and _tModes[sMode], "Invalid knob rate/continuity.");
     assert(tOptions.Value == nil or _finite(tOptions.Value), "Invalid knob value.");
+    assert(tOptions.OnChangeComplete == nil or type(tOptions.OnChangeComplete) == "function", "OnChangeComplete must be a function.");
     nRate = math.min(math.abs(nRate), nMax - nMin);
     local nValue, nMotion = nMin, 1;
     local nDragY, tDragStart;
     local oComponent = _Surface.create(oParent, tOptions, "Knob");
     local tArt = _Artwork.create(tOptions.Skin, tOptions.Artwork or "Knob");
-    local tEvents = _Events.attach(oComponent, nil, {"rangeChanged", "rateChanged", "continuityChanged", "motionDirectionChanged"});
+    local tEvents = _Events.attach(oComponent, nil, {"rangeChanged", "rateChanged", "continuityChanged", "motionDirectionChanged", "changeComplete"});
+    oComponent.OnChangeComplete = tOptions.OnChangeComplete;
+    local oWheelTimer = _wx.wxTimer(oComponent.Control);
+    local tInteraction;
+    local bUserChange = false;
     local tNeedles = {};
     local tRender;
+
+    --[[!
+    @fqxn wxLuma.UI.Knob.complete
+    @desc Ends one changed user gesture before callbacks. Completion carries the
+        final value, starting OldValue and Input (pointer, keyboard or wheel).
+        A changed gesture can finish at its starting value after moving away/back.
+    !]]
+    local function fComplete()
+        local tFinished = tInteraction;
+        if (not tFinished) then return; end
+        tInteraction = nil; oWheelTimer:Stop();
+        if (tFinished.Input == "pointer") then
+            nDragY, tDragStart = nil, nil;
+            oComponent.Pressed = false;
+            if (oComponent.Control:HasCapture()) then oComponent.Control:ReleaseMouse(); end
+        end
+        if (tFinished.Changed and oComponent.isEnabled()) then
+            local nFinal = nValue;
+            tEvents.emit("changeComplete", {Value = nFinal, OldValue = tFinished.Value, Input = tFinished.Input});
+            if (not oComponent.Disposed and oComponent.OnChangeComplete) then oComponent.OnChangeComplete(nFinal, oComponent); end
+        end
+    end
+
+    --[[!
+    @fqxn wxLuma.UI.Knob.beginInteraction
+    @desc Starts a user gesture. Switching input devices cancels the old gesture;
+        repeated keys and wheel events share their existing gesture state.
+    !]]
+    local function fBegin(sInput)
+        if (not oComponent.isEnabled()) then return false; end
+        if (tInteraction and tInteraction.Input ~= sInput) then
+            if (sInput == "pointer") then
+                -- Shared pointer handling has already acquired this new drag.
+                -- Clear the old gesture without releasing the new capture.
+                oWheelTimer:Stop(); tInteraction = nil; nDragY, tDragStart = nil, nil;
+            else oComponent.cancel(); end
+        end
+        if (not tInteraction) then tInteraction = {Input = sInput, Value = nValue, Keys = {}, Changed = false}; end
+        return true;
+    end
+
+    --[[!
+    @fqxn wxLuma.UI.Knob.userChange
+    @desc Marks normalization as user input while preserving the flag across nested
+        callbacks and errors. Programmatic changes outside this scope cancel pending completion.
+    !]]
+    local function fUserChange(fAction)
+        local bPrevious = bUserChange; bUserChange = true;
+        local bOK, sError = pcall(fAction);
+        bUserChange = bPrevious;
+        if (not bOK) then error(sError, 0); end
+    end
 
     --[[!
     @fqxn wxLuma.UI.Knob.normalize
@@ -53,6 +116,7 @@ function Knob.create(oParent, tOptions)
     local function fNormalize(nNext, bNotify)
         assert(_finite(nNext), "Knob value must be finite.");
         if (oComponent.Disposed) then return oComponent; end
+        if (not bUserChange and tInteraction) then oComponent.cancel(); end
         local nOld, nOldMotion, nSpan = nValue, nMotion, nMax - nMin;
         if (nNext < nMin or nNext > nMax) then
             if (sMode == "revolve") then
@@ -66,6 +130,7 @@ function Knob.create(oParent, tOptions)
             else nNext = math.max(nMin, math.min(nMax, nNext)); end
         end
         nValue = nNext;
+        if (bUserChange and tInteraction and nOld ~= nValue) then tInteraction.Changed = true; end
         if (nOld ~= nValue or nOldMotion ~= nMotion) then oComponent.refresh(); end
         if (bNotify) then
             if (nOld ~= nValue) then
@@ -198,14 +263,37 @@ function Knob.create(oParent, tOptions)
     !]]
     function oComponent.isAtEnd() return nValue == nMax; end
 
+    --[[!
+    @fqxn wxLuma.UI.Knob.hitTest
+    @desc Tests the circular dial using the same geometry as painting. The value
+        caption and rectangular corners do not accept pointer interaction.
+    !]]
+    function oComponent.hitTest(nX, nY)
+        if (not oComponent.isEnabled() or not _finite(nX) or not _finite(nY)) then return false; end
+        local nWidth, nHeight = oComponent.Control:GetClientSizeWH();
+        local nDiameter = math.max(1, math.min(nWidth, nHeight - 26));
+        local nCX, nCY = nWidth / 2, 2 + nDiameter / 2;
+        return (nX - nCX)^2 + (nY - nCY)^2 <= (nDiameter / 2)^2;
+    end
+    oComponent.PointerHitTest = oComponent.hitTest;
     oComponent.pointer = function(sEvent, nX, nY)
-        if (sEvent == "down") then nDragY = nY; tDragStart = {Value = nValue, Motion = nMotion};
+        if (sEvent == "down" and oComponent.Hover and fBegin("pointer")) then
+            nDragY = nY; tDragStart = {Value = nValue, Motion = nMotion};
         elseif (sEvent == "move" and oComponent.Pressed and nDragY) then
-            fNormalize(nValue + (nDragY - nY) * (nMax - nMin) / 140 * nMotion, true); nDragY = nY;
+            local nPreviousY = nDragY; nDragY = nY;
+            fUserChange(function() fNormalize(nValue + (nPreviousY - nY) * (nMax - nMin) / 140 * nMotion, true); end);
+        elseif (sEvent == "up" and tInteraction and tInteraction.Input == "pointer") then fComplete();
         end
     end;
-    oComponent.onCancel = function() nDragY, tDragStart = nil, nil; end;
-    oComponent.wheel = function(nSteps) oComponent.increase(nSteps, true); end;
+    oComponent.onCancel = function()
+        nDragY, tDragStart, tInteraction = nil, nil, nil;
+        if (not oComponent.Disposed) then oWheelTimer:Stop(); end
+    end;
+    oComponent.wheel = function(nSteps)
+        if (not fBegin("wheel")) then return; end
+        fUserChange(function() oComponent.increase(nSteps, true); end);
+        if (not oComponent.Disposed and tInteraction and tInteraction.Input == "wheel") then oWheelTimer:Start(200, true); end
+    end;
     oComponent.key = function(nKey)
         if (nKey == _wx.WXK_UP or nKey == _wx.WXK_RIGHT) then oComponent.increase(1, true);
         elseif (nKey == _wx.WXK_DOWN or nKey == _wx.WXK_LEFT) then oComponent.decrease(1, true);
@@ -214,10 +302,47 @@ function Knob.create(oParent, tOptions)
         elseif (nKey == _wx.WXK_HOME) then oComponent.setValue(nMin, true);
         elseif (nKey == _wx.WXK_END) then oComponent.setValue(nMax, true);
         elseif (nKey == _wx.WXK_ESCAPE and tDragStart) then
-            oComponent.setValue(tDragStart.Value, true); oComponent.setMotionDirection(tDragStart.Motion, true); oComponent.cancel();
+            local tStart = tDragStart; oComponent.cancel();
+            oComponent.setValue(tStart.Value, true); oComponent.setMotionDirection(tStart.Motion, true);
         else return false; end
         return true;
     end;
+    local fHandleKey = oComponent.handleKey;
+    local tAdjustmentKeys = {[_wx.WXK_UP] = true, [_wx.WXK_RIGHT] = true, [_wx.WXK_DOWN] = true,
+        [_wx.WXK_LEFT] = true, [_wx.WXK_PAGEUP] = true, [_wx.WXK_PAGEDOWN] = true,
+        [_wx.WXK_HOME] = true, [_wx.WXK_END] = true};
+
+    --[[!
+    @fqxn wxLuma.UI.Knob.handleKey
+    @desc Groups adjustment-key auto-repeat until all held adjustment keys release.
+        Escape retains existing drag rollback and cancels pending wheel/key completion.
+    !]]
+    function oComponent.handleKey(sEvent, nKey, tModifiers)
+        if (not oComponent.isEnabled()) then return false; end
+        if (sEvent == "down" and nKey == _wx.WXK_ESCAPE) then
+            local bActive = tInteraction ~= nil;
+            local bHandled = fHandleKey(sEvent, nKey, tModifiers);
+            oComponent.cancel(); return bHandled or bActive;
+        end
+        if (not tAdjustmentKeys[nKey]) then return fHandleKey(sEvent, nKey, tModifiers); end
+        if (sEvent == "up") then
+            if (not tInteraction or tInteraction.Input ~= "keyboard" or not tInteraction.Keys[nKey]) then return false; end
+            tInteraction.Keys[nKey] = nil;
+            if (next(tInteraction.Keys) == nil) then fComplete(); end
+            return true;
+        elseif (sEvent == "down" and fBegin("keyboard")) then
+            tInteraction.Keys[nKey] = true;
+            fUserChange(function() fHandleKey(sEvent, nKey, tModifiers); end);
+            return true;
+        end
+        return false;
+    end
+    oComponent.Control:Connect(_wx.wxEVT_KEY_UP, function(jEvent)
+        if (not oComponent.handleKey("up", jEvent:GetKeyCode())) then jEvent:Skip(); end
+    end);
+    oComponent.Control:Connect(oWheelTimer:GetId(), _wx.wxEVT_TIMER, function()
+        if (not oComponent.Disposed and tInteraction and tInteraction.Input == "wheel") then fComplete(); end
+    end);
     oComponent.draw = function(oDC, nWidth, nHeight)
         if (oComponent.Disposed) then return; end
         local sState = oComponent.getState();
@@ -227,12 +352,15 @@ function Knob.create(oParent, tOptions)
             or tRender.State ~= sState or tRender.Fraction ~= (nValue - nMin) / (nMax - nMin)) then
             -- Render the face and needle at triple resolution, then filter down.
             -- The finished bitmap is reused until geometry, angle or state changes.
-            -- Text and focus remain at native resolution for crisp typography.
+            -- Text remains at native resolution for crisp typography.
             if (tRender) then tRender.Bitmap:delete(); end
             local nScale = 3;
             local oBitmap = _wx.wxBitmap(nWidth * nScale, nHeight * nScale);
             local oMemory = _wx.wxMemoryDC(); oMemory:SelectObject(oBitmap);
-            tArt.part(oMemory, "Surface "..sState, 0, 0, nWidth * nScale, nHeight * nScale);
+            -- Hover and dragging may affect the dial artwork, never its
+            -- rectangular background. Focus adds no surrounding decoration.
+            tArt.part(oMemory, oComponent.isEnabled() and "Surface Normal" or "Surface Disabled",
+                0, 0, nWidth * nScale, nHeight * nScale);
             tArt.part(oMemory, "Face "..sState, nX * nScale, nY * nScale, nDiameter * nScale, nDiameter * nScale);
             local tNeedle = tNeedles[sState];
             if (not tNeedle) then
@@ -268,18 +396,25 @@ function Knob.create(oParent, tOptions)
         oDC:SetFont(oComponent.Skin.Font);
         local nTextWidth = oDC:GetTextExtent(sText);
         tArt.text(oDC, sText, (nWidth - nTextWidth) / 2, math.max(0, nHeight - 22), oComponent.isEnabled());
-        if (oComponent.Control:HasFocus()) then tArt.part(oDC, "Focus", 0, 0, nWidth, nHeight); end
     end;
-    oComponent.onDestroy = function()
+    --[[!
+    @fqxn wxLuma.UI.Knob.onThemeChanged
+    @desc Discards skin-derived needle and dial rasters while retaining value.
+    !]]
+    oComponent.onThemeChanged = function()
         if (tRender) then tRender.Bitmap:delete(); tRender = nil; end
         for _, tNeedle in pairs(tNeedles) do
             if (tNeedle.Scaled) then tNeedle.Scaled:delete(); end
             tNeedle.Image:delete();
         end
         tNeedles = {};
-        tArt.destroy();
+    end;
+    oComponent.onDestroy = function()
+        oWheelTimer:Stop(); oWheelTimer:delete();
+        oComponent.onThemeChanged(); tArt.destroy();
     end;
     fNormalize(tOptions.Value == nil and nMin or tOptions.Value);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

@@ -5,10 +5,14 @@ Adapter.lua hosts the original admin HTML/CSS/JavaScript in Studio's Edge WebVie
 ## Organization
 
 - Adapter.lua: native window, explicit Edge backend, temporary .html document, game binding, close protection and shared WindowState persistence.
-- Bridge.lua: bounded chunked JSON requests through document-title events, with RunScript responses.
+- Bridge.lua: bounded authoring requests through document-title events, with asynchronously published reply files. Export does not use this transport.
 - Services.lua: active-game snapshots and whitelisted filesystem transactions.
 - Documents.lua: staged saves, conflict checks, content-file create/rename/delete and order maintenance.
 - FontCSS.lua: existing Studio FontStyle.Parse and INI reader APIs translated to web font classes; no font loading, scanning or management.
+- Export.lua: native export coordinator; reads saved manual sources directly from disk, validates settings and prepares Web/PDF jobs.
+- Document.lua and Markdown.lua: Lua document assembly and manual Markdown rendering, including styles, glossary definitions, section order, navigation and quicksheets.
+- Exporter.lua: staged assets/output replacement and the isolated PDF browser worker. PDF preview inputs remain private to the native window.
+- ../Windows/ManualExport.lua: shared native Web/PDF export window, supplier settings, native actions/progress and bounded browser preview.
 - Lib/dkjson.lua: vendored JSON codec, with its upstream license in the source.
 - Web/Editor.html: original admin markup converted from PHP data placeholders to game snapshots.
 - Web/css and Web/js: original visual styles and admin behavior, with Studio transport and file-origin adaptations.
@@ -27,28 +31,140 @@ Edge document-title callbacks enqueue bridge requests without navigating the pag
 
 ## Connected authoring features
 
-Content editing, multi-selection tag application, previews, content-file management, drag-and-drop/arrows for document order, web-only style form and CSS saves, per-entry glossary editing, alternatives, global delay and rich hover definitions are connected. File renames/deletes maintain order. Deletion requires a warning. Lua rejects stale saves and paths outside the supported manual files.
+Content editing, multi-selection tag application, previews, content-file management, drag-and-drop/arrows for document order, per-entry glossary editing, alternatives, global delay and rich hover definitions are connected. File renames/deletes maintain order. Deletion requires a warning. Lua rejects stale saves and paths outside the supported manual files.
 
-Game font CSS is generated automatically through Studio's existing parser; web-only overrides remain separate. The Export tab replaces prototype script/version controls with PDF and Web sections. Both buttons call the game-bound Exporter.lua service. It stages a complete replacement, installs only the requested Web or PDF folder, then removes the old folder. Failures before installation preserve the previous output.
+Named text styles come exclusively from the game's Styles.ini through Studio's existing parser. Edit them with the native game Style Editor. There is no separate manual style-definition editor or CSS override file. The editor's Export tab only opens the native Manual Export window. Game > Manual Export opens or raises the same game-bound window, directly below Manual Editor. Export Old is an informational tab; its old controls no longer run. Native Web/PDF actions stage a complete replacement and install only the requested output folder. Failures before installation preserve the previous output.
 
-Web/js/EditorTools.js supplies the compact selection-help popover, Markdown toolbar, favorite style references and anchor tools. Favorites autosave to Config/editor-settings.json. Favorite buttons clone the current palette rendering. Web-style renames and deletes update favorite references in the same filesystem batch. Explicit anchors use the restricted <a id="unique-name"></a> syntax; the destination picker inserts ordinary [text](chapter.md#unique-name) links. Code examples remain literal and arbitrary HTML stays disabled. Existing section markers remain valid targets. Renaming/deleting a content file can still break hand-authored links, as the existing delete warning explains.
+Web/js/EditorTools.js supplies the compact selection-help popover, Markdown toolbar, favorite style references and anchor tools. Favorites autosave to Config/editor-settings.json. Favorite buttons clone the current palette rendering. Explicit anchors use the restricted <a id="unique-name"></a> syntax; the destination picker inserts ordinary [text](chapter.md#unique-name) links. Code examples remain literal and arbitrary HTML stays disabled. Existing section markers remain valid targets. Renaming/deleting a content file can still break hand-authored links, as the existing delete warning explains.
 
-Internal bridge messages do not navigate, reload or unload the editor. Requests wait for DOMContentLoaded, use 2048-character encoded chunks (below Chromium's 4096-character native title limit), validate each received chunk length, use sequential acknowledgments, and report a timeout rather than waiting silently forever. Export results/errors appear in the top message bar, and native export attempts are recorded through the existing application logger.
+Authoring bridge messages do not navigate, reload or unload the editor. Authoring requests retain their existing bounded chunk protocol and draft protection. The export shortcut is a small native navigation action, carrying no document HTML or export settings. Native export results/errors appear in the export window and existing application log.
 
-Web/js/Export.js loads the supplier catalog from Docs/Templates/Manual/PDF Export/The Game Crafter/Profiles.json through Lua snapshots. It autosaves each game's preset and numeric fields to Config/export-settings.json, validates the content area and retains failed or invalid drafts under close protection. The catalog contains eleven products with separate 20/40-page booklet variants (seventeen presets). Reference artwork and provenance live beside the catalog. No template or font data is copied into a second game collection.
+The native PDF tab reads the supplier catalog from Docs/Templates/Manual/PDF Export/The Game Crafter/Profiles.json. It autosaves each game's preset and numeric fields to Config/export-settings.json through the existing conflict-aware save service. Invalid/conflicting drafts remain protected on close. The catalog contains eleven products with separate 20/40-page booklet variants (seventeen presets). Reference artwork and provenance stay beside the catalog. The native Options button invokes Studio's existing Options action with its current context.
 
 ## Verification and review
 
-Nonvisual checks cover template/script initialization using Skystrike's actual read-only snapshot, authoring actions in an isolated DOM/filesystem mock, staged Lua saves, version/path rejection, chunked Unicode transport and source compilation. No live browser clicks or visual comparison have been verified by the agent; the user performs visual verification.
+Current nonvisual checks cover the real saved manual, Lua rendering, standalone Web navigation/glossary behavior, hidden native controls and preview, editor-to-native shortcut, settings validation/conflicts, cancellation and PDF structure. These isolated checks do not establish visual acceptance or behavior inside the user's running Studio session. The user performs visual verification.
 
 Restart Studio after installing these modules: an existing process can retain the old Manual.Adapter module and window in Lua's module cache.
 
 ## Export generation
 
-Exporter.lua copies shared CSS/artwork, game Manual/Images (as content-images), generated game CSS and web-only CSS. ExportDocument.js reuses the safe Markdown/style/glossary renderer but ports the original PHP LoadManual, BuildNavigation and page.php reader assemblies instead of reusing preview boxes. Reader.js selects one chapter at a time, defaults to Intro, and supports expandable contents, previous/next links and quicksheet views. Reader.css maps the prototype font-file aliases to actual OS families (Suggested 3D and Calibri). Assets use relative URLs. Web opens directly from index.html without PHP or Studio. It uses fonts installed on the reader's OS; it does not bundle fonts or manage installation.
+Export.lua reads saved Content, order, styles and glossary configuration directly from disk. Document.lua and Markdown.lua build complete Web/print HTML in Lua. The editor's existing markdown-it renderer remains unchanged for authoring; the Lua renderer supports the manual's headings, paragraphs, nested lists, tables, inline formatting, code, links, images, known styles and restricted explicit anchors. It is not claimed to implement every CommonMark edge case. ExportDocument.js is retained as an unloaded historical reference.
 
-PDF staging HTML, CSS, scripts and images are deleted after the PDF is verified; the published PDF directory contains only Manual.pdf. Print.css overrides the prototype white browser-print fallback with the original renderer's dark paper, heading colors, body metrics, table styling, cover/contents structure and repeating decoration. The browser engine still has different pagination from the original ReportLab renderer, and the linked contents currently has no generated destination-page numbers. Exact visual parity is not claimed.
+Exporter.lua copies shared CSS/artwork, game Manual/Images (as content-images), in-memory generated game CSS and the game-owned appearance stylesheet. Reader.js selects one chapter at a time, defaults to Intro, and supports expandable contents, previous/next links and quicksheets. Assets use relative URLs. Web output opens directly from index.html without PHP or Studio and uses fonts installed on the reader's OS.
 
-PDF generation requires installed Chrome, Chromium or Edge; an executable in another location can be selected with CFS_MANUAL_PDF_BROWSER. Windows, common Linux and macOS locations are recognized. The browser runs headless with its own temporary profile and no PHP. The guarded native dispatcher waits for completion; the editor is unavailable during this print step. PDF page dimensions include the configured bleed; mirrored inside/outside margins are applied from trim edges. PDF preserves ordinary links; hover behavior remains Web-only. This is not a supplier cover/spine generator or raster-page exporter. DPI is retained for future raster output. No PDF TrimBox or BleedBox postprocessing is currently performed.
+The PDF tab has native supplier/dimension controls and Refresh Preview, Export PDF and View Export actions outside its embedded browser. Refresh Preview prepares local print inputs in Lua; Print.js/Paged.js paginates those files in preview mode without opening a print-control connection. Settings edits mark the preview stale. Preview inputs are owned by that window and released on close.
 
-Isolated Windows checks generated real Web output and a two-page PDF, verified page dimensions, text and internal link annotations, and verified same-type replacement without altering unrelated exports. Cross-platform browser execution and final visual/print layout remain user verification tasks.
+Export PDF prepares a fresh saved-file snapshot and runs the existing isolated Chromium-family worker. Paged.js completes layout before JavaScript requests PDF creation and delivers the file into the owned staging folder. The published PDF directory contains only Manual.pdf; verified print inputs/browser data are removed. Contents destination-page numbers and document outlines are generated by the print pipeline. Layout still differs from the original ReportLab renderer; exact visual parity is not claimed.
+
+PDF generation requires installed Chrome, Chromium or Edge; an executable in another location can be selected with CFS_MANUAL_PDF_BROWSER. Windows, common Linux and macOS locations are recognized. The browser runs headless with its own temporary profile and no PHP. Native export actions are guarded against overlapping jobs and keep processing native events while waiting. Closing/shutdown can cancel the owned job; prior published output is preserved on cancellation. PDF dimensions include configured bleed and mirrored margins. Ordinary links remain in PDF; hover behavior remains Web-only. Supplier cover/spine generation, raster-page export and PDF TrimBox/BleedBox postprocessing are not implemented. DPI is retained for future raster output.
+
+The resumed Windows checks generated the current full 212-page PDF, verified saved page dimensions, contents page numbers, outline entries and link annotations, and exercised Web output replacement and PDF cancellation in isolated fixtures. Linux/macOS execution and final live visual/print layout remain unverified.
+
+## Historical handoff — 2026-11-16 — interrupted implementation
+
+This records the earlier interruption. The user subsequently authorized resuming in the same chat; the current result is recorded in the resumed handoff below. Historical test results and limitations here describe the interrupted state only.
+
+### Agreed design and permissions
+
+- Keep the existing website/editor authoring experience.
+- One shared native Manual Export window, reachable from the editor Export tab and from Game > Manual Export immediately below Manual Editor.
+- Native Web and PDF tabs, with settings and actions outside a bounded PDF browser preview. Include Export, View Export and the existing application Options action.
+- Lua reads saved manual files directly and builds complete Web/print inputs on disk. No rendered manual or export settings are transferred through the editor's chunked bridge.
+- Latest approved PDF approach: embedded browser preview plus the existing isolated Chromium-family print worker using JavaScript/Paged.js on prepared local files. Earlier discussion of replacing the PDF writer with a native library was superseded by this approved approach.
+- The user approved creating Windows/ManualExport.lua, Manual/Export.lua, Manual/Document.lua and Manual/Markdown.lua; editing Windows/Main.lua, Manual/Adapter.lua, Manual/Exporter.lua, Manual/Services.lua, Manual/README.md, Manual/Web/Editor.html, Manual/Web/js/Export.js, Manual/Web/js/host.js and Manual/Web/js/Print.js. Paths are relative to Card Forge Studio/Scripts.
+- Standing rules require file-specific permission, preservation of existing work, no scope expansion and no agents. The user performs visual review.
+
+### Current working changes — not a completed feature
+
+Created:
+- Windows/ManualExport.lua: native Web/PDF notebook, PDF settings/presets, bounded browser preview, native export/preview/view/options actions, autosave/conflict handling, close/cancellation handling and WindowState integration.
+- Manual/Export.lua: reads sources and settings from disk, validates/saves settings, calls document builder and staging/print service.
+- Manual/Document.lua: Lua port of Web/print document assembly, canonical sections, contents, quicksheets, styles and glossary data.
+- Manual/Markdown.lua: new Lua Markdown renderer. It needs substantial parity/edge-case verification against the editor's markdown-it renderer; no complete Markdown compatibility claim is justified.
+
+Modified:
+- Windows/Main.lua: shared Manual Export window action/menu entry, editor callback and close handling on game transitions/shutdown.
+- Manual/Adapter.lua: editor shortcut queues cfsmanual://export to the native action; exposes existing reported draft state.
+- Manual/Services.lua: removed export dispatch and export settings/preset payloads from editor services.
+- Manual/Web/Editor.html: Export tab now has Open Manual Export; Export Old remains as an informational tab; no active ExportDocument.js script reference.
+- Manual/Web/js/Export.js: reduced to the native-window shortcut with local draft protection.
+- Manual/Web/js/host.js: removed export HTML assembly entry point; exposed local draft query.
+- Manual/Web/js/Print.js: added preview URL mode that paginates without opening the worker protocol and reports ready/error through document title; normal worker path remains.
+- Manual/Exporter.lua: added retained PDF preview staging/cleanup and support for CSS from the Lua snapshot; existing staged replacement and isolated browser worker retained.
+
+The previously approved Open Options button test was confirmed working by the user before this larger migration. That confirmation does NOT verify these subsequent changes.
+
+### Verification actually performed
+
+- Lua source compilation passed for the new Markdown, Document, Export and ManualExport modules and modified Exporter, Services, Adapter and Main modules at the time of the check.
+- JavaScript syntax checks passed for modified Export.js, host.js and Print.js.
+- An isolated test read the real Skystrike manual sources without writing to them: 32 documents, 409 canonical sections.
+- A few inline smoke assertions passed before staging: bold formatting, known nested styles, code isolation, explicit anchor continuation and rejection of executable links/image traversal.
+- Lua generated a Web HTML document and a JSON snapshot in the temporary test folder below.
+- Full Web staging FAILED at Manual/Exporter.lua's wx.wxFileName.Mkdir export-root assertion. Consequently no successful new end-to-end Web export, PDF preview, PDF generation, native window interaction or visual verification was established.
+- A later isolated probe showed wx.wxMkdir could create that same temporary Manual folder and io.open could write a probe file. This suggests an API/argument/path distinction worth investigating, but no cause or fix was proved.
+
+### Exact stop point / outstanding work
+
+- Last diagnostic attempted to compare wx.wxFileName.Mkdir with default arguments, explicit 511 permissions and wxPATH_MKDIR_FULL, including an already-existing directory. The tool call did not return a completed result before the user stopped work. Its functions execution cell (48) was terminated. Do not claim the underlying native process is confirmed exited; it was not independently checked.
+- Temporary test root: C:/Users/CS/AppData/Local/Temp/cfs-native-manual-1c3ef55576774fce8f3e2137ee15372b. Contains check.lua, lua-web.html, snapshot.json and later diagnostic material. These are scratch evidence, not published game outputs.
+- Tests must run with Studio Bin as the working directory for reliable wx DLL dependency resolution. One root-directory probe failed to load wx and did not diagnose the staging issue.
+- Resolve the staging API failure within the already approved file scope only after authorization to resume.
+- Review all changes carefully, especially Markdown rendering fidelity, styles/glossary lookup, PDF preview/worker behavior, settings conflicts, cancellation, window lifecycle and preservation of unrelated Web/PDF outputs.
+- Run isolated end-to-end tests before calling the feature complete. Current changes are unfinished and should not be presented as ready for user testing.
+- No game source files or live game exports were intentionally written by the completed test commands. No commits or pushes were made by this task.
+
+## Resumed handoff — 2026-11-16 — implementation installed; isolated Windows checks passed
+
+The user authorized resuming the interrupted work in this chat. The earlier interrupted-state limitations above are historical. This task is now stopping after implementation and the checks below; no additional work, commits, deployment or unrelated changes were requested.
+
+### Result
+
+- Game > Manual Export is directly below Manual Editor. It and the editor's Open Manual Export shortcut use the same game-bound window reference.
+- The native window has Web and PDF tabs. PDF settings are beside a bounded embedded browser; Refresh Preview, Export PDF and View Export are native controls outside it. Web has native Export Web/View Export actions. Options invokes the existing application Options action.
+- Lua reads saved sources, order, styles, images and glossary configuration directly from disk and assembles the documents. The editor retains its existing authoring renderer and draft handling. No manual HTML or export settings are sent through its chunked bridge.
+- The PDF preview paginates local prepared files. PDF export uses fresh Lua-prepared inputs and the existing isolated Chromium/Paged.js worker. This is the user's latest approved design; no new native PDF library or binding was introduced.
+- Native settings autosave uses existing conflict-aware saves. Invalid/conflicting drafts are protected. Unsaved authoring drafts block generation. Closing a running export can cancel the owned job, preserving the prior published output.
+- Published Web/PDF outputs remain separate. PDF publication contains only Manual.pdf. Preview inputs are private and cleaned up on window close.
+
+### Fixes completed during resume
+
+- Replaced recursive creation through all filesystem ancestors with direct creation under the existing export/staging directories. In the sandbox, wx reported AppData absent while child folders were accessible; that caused the original recursive staging failure.
+- Accepted wx's actual Windows temporary staging basename (.PD...) in preview cleanup. Preview cleanup was exercised successfully.
+- Corrected glossary-entry discovery to follow the marked Glossary chapter instead of assuming a glossary- ID prefix. Glossary popups now pass the Web check.
+- Protected against a settings edit making an in-progress preview appear current, and reset shutdown intent when a close request is declined.
+- Kept code-span/fence tabs literal in the Lua Markdown renderer.
+- Updated the active README architecture. The unloaded ExportDocument.js remains as a historical reference; it is not part of the new export path.
+
+### Verification evidence
+
+- All eight new/changed Lua modules compiled; all three changed JavaScript files passed syntax checks. Scoped git diff --check passed.
+- The saved Skystrike manual yielded 32 documents and 409 canonical sections. Across all 32 documents, Lua and the editor's markdown-it output matched normalized text and the checked paragraph/list/table/heading/code/emphasis element counts. This is current-manual coverage, not complete CommonMark conformance.
+- Standalone Web checks passed: default Intro, chapter navigation, quicksheet chooser/selection, return to rulebook, all generated image sources loading, glossary hover definitions, unique generated IDs and no page errors.
+- Hidden native fixture passed: Web/PDF notebook, native Web action, existing Options callback, valid settings saves, invalid settings rejection, stale/conflicting saves, authoring-draft guard, three-page embedded PDF preview and clean close.
+- The actual editor template/host initialized in a hidden Adapter fixture; Open Manual Export reached its native callback without an export bridge request.
+- Native cancellation check passed: the owned window closed after cancelling its worker, and a temporary pre-existing PDF retained its exact bytes.
+- Final full-manual PDF generation passed after the glossary correction: 212 pages, 414 x 630 points (matching saved trim plus bleed), title Skystrike Protocol, 80 outline entries and 962 annotations. Contents destination numbers and final credits were present. The published PDF fixture contained only Manual.pdf.
+- The final literal-tab change was separately checked; the current manual snapshot contained zero tabs, so that change does not alter the full-manual output checked above.
+- Browser/native tests used isolated fixture data outside the execution sandbox after sandboxed Edge failed with access denied/GPU-process startup errors. No live game files or published game exports were written by those fixtures.
+
+### Remaining verification / operating notes
+
+- Restart Studio to load the changed Lua modules and editor assets; an existing process can retain cached modules.
+- The real running Studio session and final visual layout were not tested or accepted. Main menu/single-window ownership wiring was source-reviewed; actual hidden editor shortcut and native window paths were exercised separately.
+- Linux/macOS runtime execution was not tested. The preview uses the platform WebView backend and PDF generation still requires installed Chrome/Chromium/Edge (or CFS_MANUAL_PDF_BROWSER).
+- The Lua Markdown renderer has current-manual and targeted formatting coverage; complete markdown-it/CommonMark equivalence is not claimed. Supplier cover/spine generation, raster output, TrimBox/BleedBox postprocessing and supplier production approval are not added by this task.
+- Completed fixture processes were checked: no owned Lua/Edge test process remained before cleanup. Temporary fixture files/outputs were removed after recording these results. Unrelated checkout changes were preserved; no staging, commits or pushes were performed.
+
+## Manual appearance and native styles
+
+Options > Manual Editor edits Manual/Config/Appearance.lua. Blank appearance properties inherit Manual/Styles/Appearance Base.css; artwork stays under Manual/Images/Appearance. Appearance changes update the open preview on Apply. See Docs/Manual Appearance.md for fields and default assets.
+
+SP's six former manual-only tags are now ManualHardLimit, ManualKeyword, ManualNumber, ManualPhase, ManualTitle and ManualValueLimit in its Styles.ini. Content tags were migrated; ManualKeyword retains glossary linking. Native CFS definitions control font effects. Banner/quicksheet layout remains in the game appearance files. The native Style Editor and FontStyle framework were not modified for this migration.
+
+These appearance and style-migration changes received source/reference review only. No application or runtime tests were run; the user performs testing. Restart Studio to discard cached modules and regenerate the manual's game-font CSS. Existing published exports are replaced only on the next export.
+
+Explicit named-style syntax is `<:Name>text</:Name>`. It selects a CFS style even when the name matches a built-in tag: `<sup>` is superscript; `<:sup>` is the named style. Content and glossary style buttons use ordinary <Name> tags by default, adding the colon only for reserved names (sup and G). Built-in tags take precedence for those unprefixed names. Unknown explicit names still fail preflight; code examples remain literal.
+
+Web/js/Editing.js supplies content Undo/Redo (up to 200 states), clipboard buttons, Select all and literal Find/Replace. Typing and toolbar mutations share history; external source refresh resets it. Dirty status compares text with the last saved content. No runtime tests were run for these additions.

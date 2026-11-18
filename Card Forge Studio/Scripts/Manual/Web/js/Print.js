@@ -13,6 +13,8 @@ window.requestIdleCallback = callback => window.setTimeout(() => callback({didTi
 /** Cancels pending pagination work. */
 window.cancelIdleCallback = handle => window.clearTimeout(handle);
 window.PagedConfig = {auto: false};
+console.info('CFS_PDF_STAGE: connecting print controller');
+const printPreview = new URLSearchParams(location.search).get('preview') === '1';
 const printConnectionReady = new Promise(resolve => { window.CFSPrintConnect = resolve; });
 const printDeliveryReady = new Promise(resolve => { window.CFSPrintDelivered = resolve; });
 
@@ -38,11 +40,15 @@ async function openPrintControl(connection) {
 	const pending = new Map();
 	let nextId = 1;
 	let downloadComplete = null;
-	await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = () => reject(new Error('Cannot connect to the local PDF print process.')); });
+	await new Promise((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error('The PDF print connection did not open within 15 seconds.')), 15000);
+		socket.onopen = () => { clearTimeout(timer); resolve(); };
+		socket.onerror = () => { clearTimeout(timer); reject(new Error('Cannot connect to the local PDF print process.')); };
+	});
 	socket.onmessage = event => {
 		const message = JSON.parse(event.data);
 		if (message.id && pending.has(message.id)) {
-			const item = pending.get(message.id); pending.delete(message.id);
+			const item = pending.get(message.id); pending.delete(message.id); clearTimeout(item.timer);
 			if (message.error) item.reject(new Error(message.error.message)); else item.resolve(message.result);
 		}
 		if (message.method === 'Browser.downloadProgress' && downloadComplete) {
@@ -50,11 +56,13 @@ async function openPrintControl(connection) {
 			else if (message.params.state === 'canceled') { downloadComplete.reject(new Error('PDF file delivery was canceled.')); downloadComplete = null; }
 		}
 	};
-	socket.onclose = () => { pending.forEach(item => item.reject(new Error('The PDF print process closed.'))); pending.clear(); };
+	socket.onclose = () => { pending.forEach(item => { clearTimeout(item.timer); item.reject(new Error('The PDF print process closed.')); }); pending.clear(); if (downloadComplete) { downloadComplete.reject(new Error('The PDF print process closed during file delivery.')); downloadComplete = null; } };
 	/** Sends one protocol operation to the owned browser or its print page. */
 	function call(method, params = {}, sessionId) {
 		return new Promise((resolve, reject) => {
-			const id = nextId++; pending.set(id, {resolve, reject});
+			const id = nextId++;
+			const timer = setTimeout(() => { pending.delete(id); reject(new Error(method + ' did not finish within 90 seconds.')); }, 90000);
+			pending.set(id, {resolve, reject, timer});
 			socket.send(JSON.stringify({id, method, params, ...(sessionId ? {sessionId} : {})}));
 		});
 	}
@@ -77,14 +85,22 @@ async function openPrintControl(connection) {
 async function paginateManual() {
 	let control;
 	try {
-		const connection = await printConnectionReady;
-		control = await openPrintControl(connection);
+		if (!printPreview) {
+			const connection = await printConnectionReady;
+			control = await openPrintControl(connection);
+		}
 		const settings = JSON.parse(document.getElementById('pdf-document-data').textContent);
 		console.info('CFS_PDF_STAGE: loading fonts and images');
 		document.documentElement.dataset.pdfStage = 'fonts';
 		await document.fonts.ready;
 		await Promise.all([...document.images].map(image => image.decode()));
 		console.info('CFS_PDF_STAGE: paginating manual');
+		class ExportProgress extends window.Paged.Handler {
+			afterPageLayout(element, page) {
+				console.info('CFS_PDF_STAGE: paginating page ' + (page.position + 1));
+			}
+		}
+		window.Paged.registerHandlers(ExportProgress);
 		document.documentElement.dataset.pdfStage = 'layout';
 		const flow = await window.PagedPolyfill.preview();
 		if (!flow.total) throw new Error('Pagination produced no pages.');
@@ -96,6 +112,7 @@ async function paginateManual() {
 			if (h.width < 1 || h.height < 1 || h.bottom > a.top + 1) throw new Error('The shared header component does not fit above the PDF content area.');
 		}
 		document.documentElement.dataset.pdfReady = String(flow.total);
+		if (printPreview) { document.title = 'CFS_PDF_READY:' + flow.total; return; }
 		document.title = settings.title;
 		console.info('CFS_PDF_STAGE: printing ' + flow.total + ' pages');
 		const targets = await control.call('Target.getTargets');
@@ -112,8 +129,9 @@ async function paginateManual() {
 	} catch (error) {
 		console.error('CFS_PDF_STAGE: failed: ' + error.message);
 		document.documentElement.dataset.pdfError = error.message;
+		if (printPreview) { document.title = 'CFS_PDF_ERROR:' + error.message; return; }
 		if (control) { try { await control.deliver(error.message, 'Print-error.txt'); waitForPrintDelivery(); await printDeliveryReady; } finally { control.close(); } }
 	}
 }
-loadPrintConnection();
+if (!printPreview) loadPrintConnection();
 document.addEventListener('DOMContentLoaded', paginateManual, {once: true});

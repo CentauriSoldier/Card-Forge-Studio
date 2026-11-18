@@ -1,3 +1,5 @@
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx      = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events  = require("wxLuma.Core.ControlEvents");
@@ -6,24 +8,26 @@ local ControlEditor = {};
 
 --[[!
 @fqxn wxLuma.UI.ControlEditor.create
-@desc Composes a native single-line editor with a completely skinned surface,
+@desc Composes a native single-line editor with an appearance-aware surface,
     optional leading icon and trailing action. Text editing remains native;
-    colors, glyphs and focus come from the named artwork family. The caller
+    System retains native borders; skins supply decorative colors and glyphs. The caller
     owns the shared Skin. Internal hooks are installed by the composing widget.
 @param wxWindow oParent Native owner.
 @param table tOptions Skin, optional Value, Hint, ReadOnly, MaxLength, Enabled,
-    Artwork, OnChange. Value is a string and updates are silent by default.
+    Artwork, Border, OnChange. Border applies to the native editor. Value is a
+    string and updates are silent by default.
 @param string sKind Public component kind and default artwork family.
 @ret table oComponent Component, followed by private artwork and event helpers.
 !]]
 function ControlEditor.create(oParent, tOptions, sKind)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "Editor requires Skin.");
     assert(tOptions.Value == nil or type(tOptions.Value) == "string", "Editor Value must be a string.");
-    local oComponent = _Surface.create(oParent, tOptions, sKind);
+    local oComponent = _Surface.create(oParent, _Border.hostOptions(tOptions), sKind);
     local tArt = _Artwork.create(tOptions.Skin, tOptions.Artwork or sKind);
     local oText = _wx.wxTextCtrl(oComponent.Control, _wx.wxID_ANY, tOptions.Value or "",
-        _wx.wxDefaultPosition, _wx.wxDefaultSize, _wx.wxBORDER_NONE + _wx.wxTE_PROCESS_ENTER);
-    oComponent.TextControl = oText;
+        _wx.wxDefaultPosition, _wx.wxDefaultSize, _Border.style(tOptions, _wx.wxTE_PROCESS_ENTER));
+    oComponent.TextControl, oComponent.BorderControl = oText, oText;
     oComponent.LeadingIcon, oComponent.ActionIcon = nil, nil;
     oText:SetFont(tOptions.Skin.Font);
     oText:SetBackgroundColour(tArt.color("Editor Normal"));
@@ -47,7 +51,11 @@ function ControlEditor.create(oParent, tOptions, sKind)
         oComponent.refresh();
         if (bNotify) then
             tEvents.emit("valueChanged", {Value = sNext, OldValue = sOld});
+            -- Application callbacks may dispose or replace the editor value.
+            -- Never continue native hooks for a retired or superseded update.
+            if (oComponent.Disposed or sValue ~= sNext) then return; end
             if (oComponent.onTextChanged) then oComponent.onTextChanged(sNext); end
+            if (oComponent.Disposed) then return; end
             if (oComponent.OnChange) then oComponent.OnChange(sNext, oComponent); end
         end
     end
@@ -80,6 +88,12 @@ function ControlEditor.create(oParent, tOptions, sKind)
     oComponent.onLayout = function(nWidth, nHeight)
         local nLeft = oComponent.LeadingIcon and 32 or 9;
         local nRight = oComponent.ActionIcon and 34 or 9;
+        -- Native dropdown buttons occupy the system metric, with no dead strip.
+        if (oComponent.ActionIcon == "Arrow" and _Theme.isTheme(oComponent.Skin)
+            and oComponent.Skin.getName() == "System") then
+            nRight = _wx.wxSystemSettings.GetMetric(_wx.wxSYS_VSCROLL_X, oComponent.Control);
+            if (nRight <= 0) then nRight = oComponent.Control:FromDIP(17); end
+        end
         oText:SetSize(nLeft, math.max(4, math.floor((nHeight - 23) / 2)),
             math.max(1, nWidth - nLeft - nRight), math.min(23, math.max(1, nHeight - 8)));
         if (oComponent.onEditorLayout) then oComponent.onEditorLayout(nWidth, nHeight); end
@@ -100,7 +114,11 @@ function ControlEditor.create(oParent, tOptions, sKind)
             tArt.part(oDC, oComponent.LeadingIcon.." "..oComponent.getState(), 8, (nHeight - 20) / 2, 20, 20);
         end
         if (oComponent.ActionIcon) then
-            tArt.part(oDC, oComponent.ActionIcon.." "..oComponent.getState(), nWidth - 28, (nHeight - 20) / 2, 20, 20);
+            local bNative = oComponent.ActionIcon == "Arrow" and _Theme.isTheme(oComponent.Skin)
+                and oComponent.Skin.dropdownButton(oComponent, oDC, nWidth, nHeight, oComponent.getState());
+            if (not bNative) then
+                tArt.part(oDC, oComponent.ActionIcon.." "..oComponent.getState(), nWidth - 28, (nHeight - 20) / 2, 20, 20);
+            end
         end
         if (not oComponent.isEnabled()) then
             local nLeft = oComponent.LeadingIcon and 32 or 9;
@@ -116,7 +134,7 @@ function ControlEditor.create(oParent, tOptions, sKind)
         if (sEvent == "up" and oComponent.Pressed and oComponent.Hover
             and oComponent.ActionIcon and nX >= nWidth - 34) then
             tEvents.emit("action");
-            if (oComponent.onAction) then oComponent.onAction(); end
+            if (not oComponent.Disposed and oComponent.onAction) then oComponent.onAction(); end
         elseif (sEvent == "down" and (not oComponent.ActionIcon or nX < nWidth - 34)) then
             oComponent.cancel();
             oText:SetFocus();
@@ -133,7 +151,7 @@ function ControlEditor.create(oParent, tOptions, sKind)
     oText:Connect(_wx.wxEVT_COMMAND_TEXT_ENTER, function()
         if (oComponent.isEnabled()) then
             tEvents.emit("submitted", {Value = oText:GetValue()});
-            if (oComponent.onTextEnter) then oComponent.onTextEnter(); end
+            if (not oComponent.Disposed and oComponent.onTextEnter) then oComponent.onTextEnter(); end
         end
     end);
     oText:Connect(_wx.wxEVT_KEY_DOWN, function(jEvent)
@@ -143,6 +161,7 @@ function ControlEditor.create(oParent, tOptions, sKind)
         oText:Connect(nEvent, function(jEvent) oComponent.refresh(); jEvent:Skip(); end);
     end
     oComponent.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent, tArt, tEvents;
 end
 

@@ -27,6 +27,9 @@ namespace CFS
     {
         private static _tEntries = {};
         private static _tListeners = {};
+        private static _tHandles = setmetatable({}, {__mode = "k"});
+        private static _nNextEntry = 1;
+        private static _nGeneration = 1;
         private static _sSpacer = "\r\n\r\n";
 
         --[[!
@@ -57,15 +60,28 @@ namespace CFS
         @param any vMessage Message.
         @param any vLevel Level.
         @param any bSkipWrite Skip write.
+        @param table|nil tParent Optional parent entry.
+        @return table tEntry Recorded entry.
         @vis private
         !]]
-        private static LogIt(vMessage, vLevel, bSkipWrite)
+        private static LogIt(vMessage, vLevel, bSkipWrite, tParent)
         {
+            local tParentInfo = tParent and Log._tHandles[tParent];
+            assert(tParent == nil or tParentInfo, "Log parent must be an entry returned by this logger.");
+            -- A cleared parent must not hide subsequent messages from an active job.
+            if (tParentInfo and tParentInfo.generation ~= Log._nGeneration) then
+                tParent, tParentInfo = nil, nil;
+            end
+            local nID = Log._nNextEntry;
+            local nDepth = tParentInfo and tParentInfo.depth + 1 or 0;
             local sMessage  = rawtype(vMessage) == "string" and tostring(vMessage) or "";
             local sLevel    = rawtype(vLevel) == "string" and vLevel or "NOTE";
             local sTime     = Log.DateTime();
             local sDisplay  = sMessage:gsub("\t", "\r\n"):gsub("stack traceback:", "\r\nstack traceback:\r\n");
-            local sRecord   = (sMessage ~= "" and "["..sLevel.." > "..sTime.."]\r\n" or "")..sDisplay..Log._sSpacer;
+            local sRelation = " [Entry "..nID..(tParentInfo and ", parent "..tParentInfo.id or "").."]";
+            local sIndent = string.rep("  ", nDepth);
+            local sRecord = sIndent.."["..sLevel.." > "..sTime.."]"..sRelation.."\r\n"
+                ..sIndent..sDisplay:gsub("\r\n", "\r\n"..sIndent)..Log._sSpacer;
 
             -- Keep the current file/memory synchronization: Debug is persisted too.
             -- The archived Debug method requested display-only messages with bSkipWrite.
@@ -73,15 +89,54 @@ namespace CFS
             assert(hFile:write(sRecord));
             assert(hFile:close(), "Cannot close application log.");
 
-            Log._tEntries[#Log._tEntries + 1] = {
+            local tEntry = {
                 level       = sLevel,
                 timestamp   = sTime,
                 message     = sDisplay,
             };
+            local tEntries = Log._tEntries;
+            if (tParent) then
+                tParent.subentries = tParent.subentries or {};
+                tEntries = tParent.subentries;
+            end
+            tEntries[#tEntries + 1] = tEntry;
+            Log._tHandles[tEntry] = {id = nID, depth = nDepth, generation = Log._nGeneration};
+            Log._nNextEntry = nID + 1;
             Log.Notify();
+            return tEntry;
         }
 
         --STATIC PUBLIC
+        --[[!
+        @fqxn CFS.Classes.Log.Methods.Update
+        @pulsarlua function Log.Update
+        @desc Updates an entry without replacing its subentries. Appends the update to disk and refreshes subscribers. A cleared entry becomes a new top-level entry.
+        @param table tEntry Entry returned by this logger.
+        @param string sMessage Replacement message.
+        @param string|nil sLevel Replacement level; defaults to the entry's current level.
+        @return table tEntry Updated or newly recorded entry.
+        !]]
+        public static Update(tEntry, sMessage, sLevel)
+        {
+            local tInfo = Log._tHandles[tEntry];
+            assert(tInfo, "Log entry must be an entry returned by this logger.");
+            assert(rawtype(sMessage) == "string", "Log update message must be a string.");
+            sLevel = sLevel or tEntry.level;
+            assert(sLevel == "NOTE" or sLevel == "WARNING" or sLevel == "ERROR" or sLevel == "DEBUG", "Invalid log update level.");
+            if (tInfo.generation ~= Log._nGeneration) then return Log.LogIt(sMessage, sLevel); end
+            local sTime = Log.DateTime();
+            local sDisplay = sMessage:gsub("\t", "\r\n"):gsub("stack traceback:", "\r\nstack traceback:\r\n");
+            local sIndent = string.rep("  ", tInfo.depth);
+            local sRecord = sIndent.."["..sLevel.." > "..sTime.."] [Entry "..tInfo.id..", update]\r\n"
+                ..sIndent..sDisplay:gsub("\r\n", "\r\n"..sIndent)..Log._sSpacer;
+            local hFile = assert(io.open((assert(_AppDataLocal).."/log.log"), "a"), "Cannot open application log.");
+            assert(hFile:write(sRecord));
+            assert(hFile:close(), "Cannot close application log.");
+            tEntry.message, tEntry.level, tEntry.timestamp = sDisplay, sLevel, sTime;
+            Log.Notify();
+            return tEntry;
+        }
+
                 --[[!
                 @fqxn CFS.Classes.Log.Methods.ClearFile
                 @pulsarlua function Log.ClearFile
@@ -101,40 +156,47 @@ namespace CFS
         public static ClearWindow()
         {
             Log._tEntries = {};
+            Log._nGeneration = Log._nGeneration + 1;
             Log.Notify();
         }
 
         --[[!
                 @fqxn CFS.Classes.Log.Methods.Debug
                 @pulsarlua function Log.Debug
+                @param table|nil tParent Entry returned by this logger; omit for a top-level message. After ClearWindow, a cleared parent produces a new top-level entry.
+                @return table tEntry Entry handle; may be passed as the parent of another message.
                 @desc Records a DEBUG entry in both disk and memory; the retained skip-write request is not applied by LogIt.
                 @param any sMessage Message.
                 !]]
-        public static Debug(sMessage)
+        public static Debug(sMessage, tParent)
         {
-            Log.LogIt(sMessage, "DEBUG", true);
+            return Log.LogIt(sMessage, "DEBUG", true, tParent);
         }
 
         --[[!
                 @fqxn CFS.Classes.Log.Methods.Error
                 @pulsarlua function Log.Error
+                @param table|nil tParent Entry returned by this logger; omit for a top-level message. After ClearWindow, a cleared parent produces a new top-level entry.
+                @return table tEntry Entry handle; may be passed as the parent of another message.
                 @desc Records an ERROR entry in disk and memory.
                 @param any sMessage Message.
                 !]]
-        public static Error(sMessage)
+        public static Error(sMessage, tParent)
         {
-            Log.LogIt(sMessage, "ERROR");
+            return Log.LogIt(sMessage, "ERROR", nil, tParent);
         }
 
         --[[!
                 @fqxn CFS.Classes.Log.Methods.Note
                 @pulsarlua function Log.Note
+                @param table|nil tParent Entry returned by this logger; omit for a top-level message. After ClearWindow, a cleared parent produces a new top-level entry.
+                @return table tEntry Entry handle; may be passed as the parent of another message.
                 @desc Records a NOTE entry in disk and memory.
                 @param any sMessage Message.
                 !]]
-        public static Note(sMessage)
+        public static Note(sMessage, tParent)
         {
-            Log.LogIt(sMessage, "NOTE");
+            return Log.LogIt(sMessage, "NOTE", nil, tParent);
         }
 
         --[[!
@@ -170,7 +232,7 @@ namespace CFS
         --[[!
                 @fqxn CFS.Classes.Log.Methods.GetEntries
                 @pulsarlua function Log.GetEntries
-                @desc Returns the live in-memory log-entry array.
+                @desc Returns the live top-level log-entry array. Entries may contain an ordered subentries array.
                 !]]
         public static GetEntries()
         {
@@ -180,7 +242,7 @@ namespace CFS
         --[[!
                 @fqxn CFS.Classes.Log.Methods.GetEntryCount
                 @pulsarlua function Log.GetEntryCount
-                @desc Returns the number of in-memory log entries.
+                @desc Returns the number of top-level in-memory log entries; subentries do not increment this count.
                 !]]
         public static GetEntryCount()
         {
@@ -213,12 +275,14 @@ namespace CFS
         --[[!
                 @fqxn CFS.Classes.Log.Methods.Warning
                 @pulsarlua function Log.Warning
+                @param table|nil tParent Entry returned by this logger; omit for a top-level message. After ClearWindow, a cleared parent produces a new top-level entry.
+                @return table tEntry Entry handle; may be passed as the parent of another message.
                 @desc Records a WARNING entry in disk and memory.
                 @param any sMessage Message.
                 !]]
-        public static Warning(sMessage)
+        public static Warning(sMessage, tParent)
         {
-            Log.LogIt(sMessage, "WARNING");
+            return Log.LogIt(sMessage, "WARNING", nil, tParent);
         }
 
         --PRIVATE

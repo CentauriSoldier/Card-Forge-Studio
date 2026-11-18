@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _ControlDiscProgress = require("wxLuma.Core.ControlDiscProgress");
 local GlobeProgress = {};
 
@@ -15,6 +16,7 @@ local GlobeProgress = {};
     get/setOrigin and get/setOrientation. Setters are silent unless notified.
 !]]
 function GlobeProgress.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     return _ControlDiscProgress.create(oParent, tOptions, "GlobeProgress");
 end
 

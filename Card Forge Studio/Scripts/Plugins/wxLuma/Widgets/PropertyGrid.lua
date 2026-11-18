@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx       = require("wx");
 local _Surface  = require("wxLuma.Core.ControlSurface");
 local _Artwork  = require("wxLuma.Core.ControlArtwork");
@@ -29,6 +30,7 @@ local _tTypes = {text = true, number = true, boolean = true, choice = true,
     getEditor, setReadOnly, Scroll, propertyChanged and standard input events.
 !]]
 function PropertyGrid.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(type(tOptions.Properties) == "table", "PropertyGrid requires Properties.");
     local nRow = tOptions.RowHeight or 42;
     local nLabel = tOptions.LabelWidth or 160;
@@ -114,6 +116,7 @@ function PropertyGrid.create(oParent, tOptions)
     oComponent.Scroll = oScroll;
     oScroll.Content:SetBackgroundStyle(_wx.wxBG_STYLE_PAINT);
     oScroll.Content:SetBackgroundColour(tArt.color("Surface Normal"));
+    if (_Theme.isTheme(tOptions.Skin)) then tOptions.Skin.setBackgroundRole(oScroll.Content, "Editor"); end
 
     --[[!
     @fqxn wxLuma.UI.PropertyGrid.fCopyValue
@@ -212,7 +215,9 @@ function PropertyGrid.create(oParent, tOptions)
         local tSpec = tById[sId];
         if (tSpec.ReadOnly ~= bReadOnly) then
             tSpec.ReadOnly = bReadOnly;
-            tEditors[sId].setEnabled(oComponent.isEnabled() and not bReadOnly);
+            -- Read-only is a local editor policy. Temporary ancestor disabling
+            -- must neither erase it nor prevent a later editable state.
+            tEditors[sId].setEnabled(oComponent.Control:IsThisEnabled() and not bReadOnly);
             oScroll.Content:Refresh(false);
             tEvents.emit("readOnlyChanged", {Id = sId, ReadOnly = bReadOnly});
         end
@@ -245,7 +250,9 @@ function PropertyGrid.create(oParent, tOptions)
                     oDC:SetClippingRegion(8, 4, math.max(1, nWidth - 38), math.max(1, nHeight - 8));
                     tArt.text(oDC, oChoice.getText(), 9, (nHeight - 18) / 2, oChoice.isEnabled());
                     oDC:DestroyClippingRegion();
-                    tArt.part(oDC, "Arrow "..oChoice.getState(), nWidth - 26, (nHeight - 16) / 2, 16, 16);
+                    if (not (_Theme.isTheme(oChoice.Skin) and oChoice.Skin.dropdownButton(oChoice, oDC, nWidth, nHeight, oChoice.getState()))) then
+                        tArt.part(oDC, "Arrow "..oChoice.getState(), nWidth - 26, (nHeight - 16) / 2, 16, 16);
+                    end
                 end;
             elseif (tSpec.Type == "color") then oEditor = _ColorPicker.create(oScroll.Content, tEditorOptions);
             elseif (tSpec.Type == "file" or tSpec.Type == "folder") then
@@ -300,6 +307,16 @@ function PropertyGrid.create(oParent, tOptions)
         for sId, oEditor in pairs(tEditors) do oEditor.setEnabled(bEnabled and not tById[sId].ReadOnly); end
         oScroll.Content:Refresh(false);
     end;
+    --[[!
+    @fqxn wxLuma.UI.PropertyGrid.onThemeChanged
+    @desc Refreshes the native property sheet background using its explicit
+        surface role, preserving row editors and their retained values.
+    !]]
+    oComponent.onThemeChanged = function()
+        oScroll.Content:SetBackgroundColour(tArt.color("Surface Normal"));
+        oComponent.onLayout(oComponent.Control:GetClientSizeWH());
+        oScroll.Content:Refresh(false);
+    end;
     oComponent.onDestroy = function()
         for _, oEditor in pairs(tEditors) do oEditor.destroy(); end
         oScroll.destroy(); tArt.destroy();
@@ -310,6 +327,7 @@ function PropertyGrid.create(oParent, tOptions)
         end
     end;
     oComponent.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

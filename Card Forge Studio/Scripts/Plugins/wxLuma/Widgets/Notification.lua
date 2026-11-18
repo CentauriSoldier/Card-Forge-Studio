@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -17,6 +18,7 @@ local _tSeverity = {info = true, success = true, warning = true, error = true};
 @ret table oComponent show/dismiss/isShown plus value/severity/duration state APIs.
 !]]
 function Notification.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local sValue, sSeverity, nDuration = tOptions.Value or "", tOptions.Severity or "info", tOptions.Duration or 3000;
     assert(type(sValue) == "string" and _tSeverity[sSeverity], "Invalid notification text/severity.");
     assert(_finite(nDuration) and nDuration >= 0 and nDuration % 1 == 0 and nDuration <= 2147483647, "Invalid Duration.");
@@ -133,6 +135,7 @@ function Notification.create(oParent, tOptions)
     end;
     oComponent.Control:Connect(oTimer:GetId(), _wx.wxEVT_TIMER, function() oComponent.dismiss("timeout"); end);
     oComponent.onDestroy = function() oTimer:Stop(); oTimer:delete(); tArt.destroy(); end;
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

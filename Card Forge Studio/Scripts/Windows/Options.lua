@@ -99,7 +99,10 @@ function Options.create(dParent, tContext)
     dDialog:SetMinSize(wx.wxSize(720, 520));
     local oLayout = wx.wxBoxSizer(wx.wxVERTICAL);
     local oBody = wx.wxBoxSizer(wx.wxHORIZONTAL);
-    local tNames = {"General", "Windows", "Forge", "Grids", "Game", "Card Set"};
+    local tNames = {"General", "Windows", "Forge", "Grids", "Game", "Card Set", "Manual Editor"};
+    table.sort(tNames);
+    local tPageIndices = {};
+    for nIndex, sName in ipairs(tNames) do tPageIndices[sName] = nIndex; end
     local oCategories = wx.wxListBox(dDialog, wx.wxID_ANY, wx.wxDefaultPosition, wx.wxDefaultSize, tNames);
     local nWidth = 110;
     for _, sName in ipairs(tNames) do local nText = oCategories:GetTextExtent(sName); nWidth = math.max(nWidth, nText + 32); end
@@ -126,7 +129,7 @@ function Options.create(dParent, tContext)
         oPage:Add(oTitle, 0, wx.wxBOTTOM, 12);
         local oDescription = wx.wxStaticText(dPage, wx.wxID_ANY, sDescription); oDescription:Wrap(490);
         oPage:Add(oDescription, 0, wx.wxBOTTOM, 20);
-        dPage:SetSizer(oPage); oContent:Add(dPage, 1, wx.wxEXPAND); tPages[#tPages + 1] = dPage;
+        dPage:SetSizer(oPage); oContent:Add(dPage, 1, wx.wxEXPAND); tPages[assert(tPageIndices[sTitle], "Unknown options category: "..sTitle)] = dPage;
         return dPage, oPage;
     end
     --[[!
@@ -406,6 +409,10 @@ function Options.create(dParent, tContext)
     end
     info("Game", tContext.game and FS.Game.Info, false);
     info("Card Set", tContext.cardSet and FS.CardSet.Info, true);
+    dPage, oPage = page("Manual Editor", "Choose how manual source text is displayed.");
+    tControls.manualLineNumbers = check(dPage, oPage, "Show line numbers",
+        INIFile.GetValue(FS.AppCFG, "ManualEditor", "LineNumbers") == "1");
+    if (tContext.game) then tControls.manualAppearance = require("Windows.ManualAppearance").create(dPage, oPage, FS.Game.Manual); end
     local tModel = require("Windows.Editors.Common").model(tFiles);
     --[[!
     @fqxn CFS.Windows.Options.Private.Functions.select
@@ -433,11 +440,7 @@ function Options.create(dParent, tContext)
         end
     end
     oCategories:Connect(wx.wxEVT_COMMAND_LISTBOX_SELECTED, function() select(oCategories:GetSelection() + 1); end);
-    local nInitial = 1;
-
-    for nIndex, sName in ipairs(tNames) do
-        if (sName == tContext.category) then nInitial = nIndex; end
-    end
+    local nInitial = tPageIndices[tContext.category] or tPageIndices.General;
 
     select(nInitial);
     oLayout:Add(oBody, 1, wx.wxEXPAND);
@@ -468,6 +471,7 @@ function Options.create(dParent, tContext)
     @vis private
     !]]
     local function apply()
+        if (tControls.manualAppearance) then tControls.manualAppearance.validate(); end
         for _, sKey in ipairs({"game", "card"}) do
             local tInfo = tControls[sKey];
             if (tInfo) then
@@ -502,11 +506,13 @@ function Options.create(dParent, tContext)
                 sOldSet, tSetInfo and tSetInfo.name:GetValue():match("^%s*(.-)%s*$"));
         end
 
+        if (tControls.manualAppearance) then tControls.manualAppearance.save(); end
         tModel.save();
         local bAutomatic = tControls.csv:GetValue();
         INIFile.SetValue(FS.AppCFG, "Settings", "ExternalCSVChanges", bAutomatic and "automatic" or "prompt");
         INIFile.SetValue(FS.AppCFG, "Settings", "LoadLastGame", tControls.loadLastGame:GetValue() and "1" or "0");
         INIFile.SetValue(FS.AppCFG, "Settings", "LoadLastCardSet", tControls.loadLastCardSet:GetValue() and "1" or "0");
+        INIFile.SetValue(FS.AppCFG, "ManualEditor", "LineNumbers", tControls.manualLineNumbers:GetValue() and "1" or "0");
         WindowState.setRaiseTogether(tControls.raise:GetValue());
         if (tContext.state and tContext.cardSet) then
             for sKey, sSetting in pairs({overlay = "UtilityOverlay", horizontalCenter = "HorizontalCenterline", verticalCenter = "VerticalCenterline"}) do

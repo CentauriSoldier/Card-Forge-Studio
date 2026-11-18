@@ -88,17 +88,6 @@ function ControlOptions.create(oComponent, tEvents, tDefaults, tValidators, tIni
     require("wxLuma.Core.ControlEvents").attach(oComponent, nil, tEventNames);
 
     --[[!
-    @fqxn wxLuma.UI.ControlOptions.equal
-    @desc Compares normalized option records without depending on table identity.
-    !]]
-    local function fEqual(vLeft, vRight)
-        if (type(vLeft) ~= "table" or type(vRight) ~= "table") then return vLeft == vRight; end
-        for sKey, vValue in pairs(vLeft) do if (not fEqual(vValue, vRight[sKey])) then return false; end end
-        for sKey in pairs(vRight) do if (vLeft[sKey] == nil) then return false; end end
-        return true;
-    end
-
-    --[[!
     @fqxn wxLuma.UI.ControlOptions.getOptions
     @desc Returns an independent plain snapshot of all settings in this group.
     !]]
@@ -122,7 +111,7 @@ function ControlOptions.create(oComponent, tEvents, tDefaults, tValidators, tIni
             fValidate(tMerged);
         end
         for _, sName in ipairs(tNames) do
-            if (tPrepared[sName] ~= nil and not fEqual(tValues[sName], tPrepared[sName])) then
+            if (tPrepared[sName] ~= nil and not ControlOptions.same(tValues[sName], tPrepared[sName])) then
                 tChanges[#tChanges + 1] = {Property = sName, Value = _copy(tPrepared[sName]), OldValue = _copy(tValues[sName])};
             end
         end

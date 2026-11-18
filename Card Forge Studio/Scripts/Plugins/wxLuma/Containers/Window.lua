@@ -1,3 +1,5 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _Containment = require("wxLuma.Core.ControlContainment");
 local _ControlObject = require("wxLuma.Core.ControlObject");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -92,12 +94,13 @@ end
 @ret table oWindow Control, draw, getGeometry and destroy methods.
 !]]
 function Window.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     tOptions = tOptions or {};
     assert(tOptions.Decorated == nil or type(tOptions.Decorated) == "boolean", "Decorated must be boolean.");
-    local bDecorated = tOptions.Decorated ~= false;
-    local pRoot    = tOptions.AssetPath or require("wxLuma.config").ImagePath .."/Window/";
+    local bDecorated = tOptions.Decorated ~= false and (not tOptions.Theme or tOptions.Theme.getName() ~= "System");
+    local pRoot    = tOptions.AssetPath or require("wxLuma.wxLumaConfig").SkinPath .."/Window/";
     local oControl = _wx.wxPanel(oParent, _wx.wxID_ANY, _wx.wxDefaultPosition, _wx.wxDefaultSize,
-        _wx.wxTAB_TRAVERSAL + _wx.wxCLIP_CHILDREN);
+        _Border.style(tOptions, _wx.wxTAB_TRAVERSAL + _wx.wxCLIP_CHILDREN));
     oControl:SetBackgroundStyle(_wx.wxBG_STYLE_PAINT);
     local tImages, tBitmaps, tEdgeBitmaps = {}, {}, {};
     local bDisposed                       = false;
@@ -133,7 +136,14 @@ function Window.create(oParent, tOptions)
             oScaled:delete();
         end
     end
-    if (bDecorated) then
+    --[[!
+    @fqxn wxLuma.UI.Window.fEnsureArtwork
+    @desc Loads window decoration only when its image skin is selected. The
+        cached source images can be reused after returning from System.
+    !]]
+    local function fEnsureArtwork()
+        if (tBitmaps["Window Grain"]) then return; end
+        if (not oTitleFont) then oTitleFont = _wx.wxFont(20, _wx.wxFONTFAMILY_ROMAN, _wx.wxFONTSTYLE_NORMAL, _wx.wxFONTWEIGHT_NORMAL); end
         for _, sCorner in ipairs(_tCorners) do
             fLoad("Window Corner " .. sCorner);
             fLoad("Window Ornament " .. sCorner, _nOrnament);
@@ -143,6 +153,7 @@ function Window.create(oParent, tOptions)
         end
         fLoad("Window Grain");
     end
+    if (bDecorated) then fEnsureArtwork(); end
 
     --[[!
     @fqxn wxLuma.UI.Window.getGeometry
@@ -250,9 +261,10 @@ function Window.create(oParent, tOptions)
             return;
         end
         if (not bDecorated) then
+            if (tOptions.Theme) then tOptions.Theme.fill(oDC, "Background", 0, 0, nWidth, nHeight); end
             if (tOptions.PaintContent) then
                 tOptions.PaintContent(oDC, {x = 0, y = 0, width = nWidth, height = nHeight});
-            else
+            elseif (not tOptions.Theme) then
                 oDC:SetBackground(_wx.wxBLACK_BRUSH); oDC:Clear();
             end
             return;
@@ -349,6 +361,18 @@ function Window.create(oParent, tOptions)
     end;
     _Containment.attach(oWindow, oControl, tOptions);
     _Events.attach(oWindow);
+    --[[!
+    @fqxn wxLuma.UI.Window.onThemeChanged
+    @desc Changes the surface provider and invalidates its static paint cache
+        while keeping native children and application content intact.
+    !]]
+    function oWindow.onThemeChanged()
+        bDecorated = tOptions.Decorated ~= false and tOptions.Theme.getName() ~= "System";
+        if (bDecorated) then fEnsureArtwork(); end
+        if (oSurface) then oSurface:delete(); oSurface = nil; end
+        oControl:Refresh(false);
+    end
+    _Theme.finish(oWindow, tOptions);
     return oWindow;
 end
 return Window;

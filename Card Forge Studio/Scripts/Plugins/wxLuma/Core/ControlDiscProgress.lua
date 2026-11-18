@@ -1,3 +1,6 @@
+local _Outline = require("wxLuma.Core.ControlProgressOutline");
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _Reserve = require("wxLuma.Core.ControlProgressReserve");
 local _wx             = require("wx");
 local _ControlSurface = require("wxLuma.Core.ControlSurface");
@@ -18,10 +21,15 @@ local ControlDiscProgress = {};
     ReserveRenderer is auto/native/strips (default auto). Native shapes and cached
     masks handle discs; strips opt into the original analytic boundary rasterizer.
     Omitted reserve geometry is automatic.
+    Outline (true), OutlineColour ({R,G,B}) and OutlineWidth (1..8, default 2)
+    configure the outer disc edge independently of the native Border.
 @param string sKind GlobeProgress or RadialProgress.
 @ret table oComponent Independent public component with shared input/containment API.
 !]]
 function ControlDiscProgress.create(oParent, tOptions, sKind)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
+    local tOutline = _Outline.create(tOptions);
     assert(sKind == "GlobeProgress" or sKind == "RadialProgress", "Invalid disc progress kind.");
     assert(type(tOptions) == "table", "Progress options must be a table.");
     assert(_finite(tOptions.Min) and _finite(tOptions.Max) and tOptions.Max > tOptions.Min
@@ -637,6 +645,8 @@ function ControlDiscProgress.create(oParent, tOptions, sKind)
             end
         end
 
+        -- The edge follows the disc, independently of its fill and focus.
+        tOutline.circle(oMemory, oComponent.Skin, bEnabled, nCenter, nRadius, nScale);
         oMemory:SelectObject(_wx.wxNullBitmap);
         oMemory:delete();
         local oImage = oBitmap:ConvertToImage();
@@ -731,6 +741,18 @@ function ControlDiscProgress.create(oParent, tOptions, sKind)
         fClearMaterials();
         oBackground:delete();
     end;
+    --[[!
+    @fqxn wxLuma.UI.ControlDiscProgress.onThemeChanged
+    @desc Rebuilds skin-derived materials and rasters while retaining reserve
+        geometry, progress values and application-specified colors.
+    !]]
+    oComponent.onThemeChanged = function()
+        fClearMaterials(); sCachedRaster, sReserveBaseKey = nil, nil;
+        oBackground:delete();
+        local oColor = _Theme.colour(oComponent.Skin, "Background", 24, 29, 36);
+        oBackground = _wx.wxBrush(oColor); oColor:delete();
+    end;
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

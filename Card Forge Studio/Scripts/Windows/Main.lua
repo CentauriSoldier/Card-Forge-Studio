@@ -104,8 +104,8 @@ function Main.create(tOptions)
     local tWelcome = Welcome.create(_pRuntime);
     local sPage = "Welcome";
     local tDataSession = tOptions.dataSession or DataSession.create();
-    local dBaseWindow, dFinalWindow, dStyleWindow, dSourceWindow, dGameEditorWindow, dWikiWindow, dTutorialsWindow;
-	local dManualWindow;
+    local dBaseWindow, dFinalWindow, dStyleWindow, dSourceWindow, dGameEditorWindow, dWikiWindow, dTutorialsWindow, dManualGuideWindow;
+	local dManualWindow, dManualExportWindow;
     local showPage;
     local bDataLoaded = false;
     local sActiveCardSetName = "";
@@ -559,6 +559,7 @@ function Main.create(tOptions)
         if (dStyleWindow and not dStyleWindow.close()) then return; end
         if (dSourceWindow and not dSourceWindow.close()) then return; end
         if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
+		if (dManualExportWindow and not dManualExportWindow.close()) then return; end
 		if (dManualWindow and not dManualWindow.close()) then return; end
         if (dWikiWindow and not dWikiWindow.close()) then return; end
 
@@ -603,6 +604,7 @@ function Main.create(tOptions)
             if (dSourceWindow and not dSourceWindow.close()) then return; end
             if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
             local oGame = tGames[nSelection + 1];
+			if (dManualExportWindow and not dManualExportWindow.close()) then return; end
 			if (dManualWindow and not dManualWindow.close()) then return; end
             if (dWikiWindow and not dWikiWindow.close()) then return; end
             CFS.Game.Activate(oGame);
@@ -728,6 +730,7 @@ function Main.create(tOptions)
             @vis private
             !]]
             changed = function(bAutomatic)
+                if (dManualWindow) then dManualWindow.applyOptions(); end
                 if (Forge) then Forge.RequestCardRedraw(); end
                 bAutomaticCSV = bAutomatic;
 
@@ -771,6 +774,7 @@ function Main.create(tOptions)
         if (dSourceWindow and not dSourceWindow.close()) then return; end
         if (dStyleWindow and not dStyleWindow.close()) then return; end
         if (dGameEditorWindow and not dGameEditorWindow.close()) then return; end
+		if (dManualExportWindow and not dManualExportWindow.close()) then return; end
 		if (dManualWindow and not dManualWindow.close()) then return; end
         if (dWikiWindow and not dWikiWindow.close()) then return; end
         CFS.Game.Deactivate();
@@ -834,6 +838,27 @@ function Main.create(tOptions)
         assert(wx.wxLaunchDefaultBrowser(sURL), "Could not open the documentation browser.");
     end
 
+	--[[!
+	@fqxn CFS.Windows.Main.Private.Functions.openManualExport
+	@desc Opens or raises one native manual export window for the active game. The editor shortcut and Game menu share this action.
+	@param string|nil sKind Optional Web/PDF tab.
+	@vis private
+	!]]
+	local function openManualExport(sKind)
+		local oGame = assert(CFS.Game.GetActive(), "Load a game first.");
+		if (not dManualExportWindow) then
+			dManualExportWindow = require("Windows.ManualExport").create(dFrame, FS.Game.Manual, {
+				gameName	= oGame.GetName(),
+				gameRoot	= FS.Game.Root,
+				exports		= FS.Game.Exports,
+				onOpenOptions = function() tMenuItems["Tools:Options..."].action(); end,
+				hasDrafts = function() return dManualWindow and dManualWindow.hasDrafts(); end,
+				onClose = function() dManualExportWindow = nil; end,
+			});
+		end
+		dManualExportWindow.show(sKind);
+	end
+
     addMenu("Game", {
         {"New", newGame},
         {"Load", selectGame},
@@ -893,6 +918,13 @@ function Main.create(tOptions)
 				gameRoot	= FS.Game.Root,
 				exports		= FS.Game.Exports,
 				--[[!
+				@fqxn CFS.Windows.Main.Private.Functions.manualEditorOpenExport
+				@desc Connects the editor shortcut to the shared native manual export window.
+				@vis private
+				!]]
+				onOpenExport = openManualExport,
+                onOpenOptions = function() tMenuItems["Tools:Options..."].action("Manual Editor"); end,
+				--[[!
 				@fqxn CFS.Windows.Main.Private.Functions.manualEditorClosed
 				@desc Clears the closed host reference so the current or next game can open its own editor.
 				@vis private
@@ -900,6 +932,7 @@ function Main.create(tOptions)
 				onClose = function() dManualWindow = nil; end,
 			});
 		end},
+		{"Manual Export", function() openManualExport(); end},
         {"Mechanics Viewer"},
         {false},
         {"Docs", function()
@@ -913,7 +946,11 @@ function Main.create(tOptions)
         {false},
         {"Close Game", closeGame},
     });
-    addMenu("Card Set", {{"New", newCardSet}, {"Load", selectCardSet}, {"Browse", function() browse(FS.CardSet.Root); end}, {"Open CSV"}, {false}, {"Info...", function() info("Card Set"); end}, {"Edit Source...", function()
+    addMenu("Card Set", {{"New", newCardSet}, {"Load", selectCardSet}, {"Browse", function() browse(FS.CardSet.Root); end}, {"Open CSV", function()
+        assert(bDataLoaded, "Load a card set first.");
+        assert(wx.wxFileExists(FS.CardSet.Data), "The card set CSV file is unavailable.");
+        assert(wx.wxLaunchDefaultApplication(FS.CardSet.Data), "Could not open the card set CSV with the operating system's default application.");
+    end}, {false}, {"Info...", function() info("Card Set"); end}, {"Edit Source...", function()
         assert(bDataLoaded, "Load a card set first.");
         if (dSourceWindow) then dSourceWindow.show(); return; end
         dSourceWindow = require("Windows.CardSetEditor").create(dFrame, {
@@ -944,10 +981,10 @@ function Main.create(tOptions)
     @desc Opens application options with the active game and card-set context.
     @vis private
     !]]
-    local function openOptions()
+    local function openOptions(sCategory)
         local oGame = CFS.Game.GetActive();
         require("Windows.Options").show(dFrame, {
-            game = oGame, cardSet = ProcSys.GetActiveCardSet(), state = tState,
+            game = oGame, cardSet = ProcSys.GetActiveCardSet(), state = tState, category = type(sCategory) == "string" and sCategory or nil,
             --[[!
             @fqxn CFS.Windows.Main.Private.Functions.changed3
             @desc Refreshes relevant preview or loading preferences after accepted option changes.
@@ -956,6 +993,7 @@ function Main.create(tOptions)
             @vis private
             !]]
             changed = function(bAutomatic, sName)
+                if (dManualWindow) then dManualWindow.applyOptions(); end
                 bAutomaticCSV = bAutomatic;
                 if (Forge) then Forge.RequestCardRedraw(); end
                 if (oGame and sName) then oGame.RefreshInfo(); dFrame:SetTitle(APP_NAME.." - "..oGame.GetName()); end
@@ -980,6 +1018,12 @@ function Main.create(tOptions)
             if (dTutorialsWindow) then dTutorialsWindow.show(); return; end
             dTutorialsWindow = require("Windows.Tutorials").create(dFrame, {
                 onClose = function() dTutorialsWindow = nil; end,
+            });
+        end,},
+        {"Manual Editor Guide", function()
+            if (dManualGuideWindow) then dManualGuideWindow.show(); return; end
+            dManualGuideWindow = require("Windows.ManualGuide").create(dFrame, {
+                onClose = function() dManualGuideWindow = nil; end,
             });
         end,},
         {false},
@@ -1061,7 +1105,7 @@ function Main.create(tOptions)
             if (sPath == "Card Set:Info..." or sPath == "Card Set:Edit Source...") then bAvailable = bDataLoaded; end
             if (sPath == "Card Set:New") then bAvailable = not not CFS.Game.GetActive(); end
             if (sPath == "Game:Info..." or sPath == "Game:Browse" or sPath == "Game:Edit Source...") then bAvailable = not not CFS.Game.GetActive(); end
-            if (sPath == "Card Set:Browse") then bAvailable = bDataLoaded; end
+            if (sPath == "Card Set:Browse" or sPath == "Card Set:Open CSV") then bAvailable = bDataLoaded; end
             if (sPath == "Game:Export Game..." or sPath == "Card Set:Import Card Set...") then bAvailable = not not CFS.Game.GetActive() and not tDataSession.exporting; end
             if (sPath == "Card Set:Export Card Set...") then bAvailable = bDataLoaded and not tDataSession.exporting; end
             if (sPath == "Game:Import Game...") then bAvailable = not tDataSession.exporting; end
@@ -1138,6 +1182,10 @@ function Main.create(tOptions)
             return;
         end
         if (dWikiWindow and not dWikiWindow.close()) then
+            if (oEvent:CanVeto()) then oEvent:Veto(); end
+            return;
+        end
+		if (dManualExportWindow and not dManualExportWindow.close(true)) then
             if (oEvent:CanVeto()) then oEvent:Veto(); end
             return;
         end

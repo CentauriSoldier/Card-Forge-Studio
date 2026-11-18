@@ -1,3 +1,5 @@
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -19,6 +21,7 @@ local DateTimePicker = {};
     Calendar surface and shared pointer/keyboard events.
 !]]
 function DateTimePicker.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local sMode = tOptions.Mode or "date";
     assert(sMode == "date" or sMode == "time" or sMode == "datetime", "Invalid date/time Mode.");
     local sValue = tOptions.Value or os.date(sMode == "date" and "%Y-%m-%d" or sMode == "time" and "%H:%M" or "%Y-%m-%d %H:%M");
@@ -28,15 +31,15 @@ function DateTimePicker.create(oParent, tOptions)
     assert(_Date.parse(sValue, sMode) and (sMin == nil or _Date.parse(sMin, sMode))
         and (sMax == nil or _Date.parse(sMax, sMode)) and (not sMin or not sMax or sMin <= sMax)
         and (not sMin or sValue >= sMin) and (not sMax or sValue <= sMax), "Invalid date/time value or bounds.");
-    local oComponent = _Surface.create(oParent, tOptions, "DateTimePicker");
+    local oComponent = _Surface.create(oParent, _Border.hostOptions(tOptions), "DateTimePicker");
     local tArt = _Artwork.create(tOptions.Skin, tOptions.Artwork or "Date Time Picker");
     local oText = _wx.wxTextCtrl(oComponent.Control, _wx.wxID_ANY, sValue, _wx.wxDefaultPosition,
-        _wx.wxDefaultSize, _wx.wxBORDER_NONE + _wx.wxTE_PROCESS_ENTER);
+        _wx.wxDefaultSize, _Border.style(tOptions, _wx.wxTE_PROCESS_ENTER));
     oText:SetFont(tOptions.Skin.Font);
     oText:SetBackgroundColour(tArt.color("Editor Normal"));
     oText:SetForegroundColour(tArt.color("Text Normal"));
     oText:SetEditable(not bReadOnly);
-    oComponent.TextControl = oText;
+    oComponent.TextControl, oComponent.BorderControl = oText, oText;
     local tEvents = _Events.attach(oComponent, {oText}, {"opened", "closed", "invalidInput", "rangeChanged", "readOnlyChanged"});
     local oPopup = _wx.wxFrame(oComponent.Control, _wx.wxID_ANY, "", _wx.wxDefaultPosition, _wx.wxDefaultSize,
         _wx.wxFRAME_NO_TASKBAR + _wx.wxFRAME_FLOAT_ON_PARENT + _wx.wxBORDER_NONE);
@@ -234,7 +237,10 @@ function DateTimePicker.create(oParent, tOptions)
             end
         end
     end;
-    oComponent.onLayout = function(nWidth, nHeight) oText:SetSize(9, math.max(4, (nHeight - 23) / 2), math.max(1, nWidth - 46), math.min(23, math.max(1, nHeight - 8))); end;
+    oComponent.onLayout = function(nWidth, nHeight)
+        -- The editor meets the calendar action region without unused padding.
+        oText:SetSize(9, math.max(4, (nHeight - 23) / 2), math.max(1, nWidth - 43), math.min(23, math.max(1, nHeight - 8)));
+    end;
     oComponent.onEnable = function(bEnabled) oText:Enable(bEnabled); if (not bEnabled) then oComponent.close(); end end;
     oComponent.pointer = function(sEvent, nX)
         local nWidth = oComponent.Control:GetClientSizeWH();
@@ -263,6 +269,7 @@ function DateTimePicker.create(oParent, tOptions)
         tArt.destroy();
     end;
     oComponent.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

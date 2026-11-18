@@ -1,8 +1,11 @@
+local _Outline = require("wxLuma.Core.ControlProgressOutline");
+local _Border = require("wxLuma.Core.ControlBorder");
 local _wx       = require("wx");
 local _Surface  = require("wxLuma.Core.ControlSurface");
 local _Events   = require("wxLuma.Core.ControlEvents");
 local _Reserve  = require("wxLuma.Core.ControlProgressReserve");
 local _Artwork  = require("wxLuma.Core.ControlArtwork");
+local _Theme    = require("wxLuma.Core.ControlTheme");
 local _finite   = require("wxLuma.Core.ControlNumeric").finite;
 local IrisProgress = {};
 
@@ -38,16 +41,22 @@ end
     opening. Opening grows with value by default; closing grows blade coverage.
     Maximum opening uncovers the entire disc. All boundaries are antialiased.
 @param wxWindow oParent Native parent, which owns the control.
-@param table tOptions Skin, Min, Max, Value; optional BladeCount (3..32, default 6),
+@param table tOptions Min, Max, Value; optional Theme or legacy Skin, BladeCount (3..32, default 6),
     Rotation (clock-face degrees, default 0), Direction (opening/closing), Text,
     Appearance (skin/colour), Colour ({R,G,B}), Artwork (Iris Progress), Reserved,
     ReserveDirection (inward/outward), BackgroundImage (optional path),
     BackgroundImageFit (cover/contain/stretch, default cover), Supersampling (2/4,
     default 4), Enabled, OnChange
     and standard containment. Background image is always clipped by globe/blades.
+    Outline (true), OutlineColour ({R,G,B}) and OutlineWidth (1..8, default 2)
+    configure the circular edge independently of the native Border.
 @ret table oComponent Independent IrisProgress proxy with standard progress events.
 !]]
 function IrisProgress.create(oParent, tOptions)
+    local oTheme;
+    tOptions, oTheme = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
+    local tOutline = _Outline.create(tOptions);
     assert(type(tOptions) == "table" and _finite(tOptions.Min) and _finite(tOptions.Max)
         and tOptions.Max > tOptions.Min and _finite(tOptions.Max - tOptions.Min), "Invalid iris range.");
     assert(_finite(tOptions.Value), "Iris value must be finite.");
@@ -112,7 +121,7 @@ function IrisProgress.create(oParent, tOptions)
     oComponent.Max   = tOptions.Max;
     oComponent.Value = math.max(tOptions.Min, math.min(tOptions.Max, tOptions.Value));
     local tReserve = _Reserve.attach(oComponent, tOptions, tEvents, "IrisProgress");
-    local tArt = _Artwork.create(oComponent.Skin, sArtwork);
+    local tArt = oTheme and oTheme.artwork(sArtwork) or _Artwork.create(oComponent.Skin, sArtwork);
     local tMaterials = {};
     local sMaterialKey;
 
@@ -343,7 +352,10 @@ function IrisProgress.create(oParent, tOptions)
         };
 
         for sPart, tChannels in pairs(tPalette) do
-            if (not tBrushes[sPart] and tSettings.Appearance == "skin") then
+            if (not tBrushes[sPart] and oTheme) then
+                tBrushes[sPart] = oTheme.irisBrush(sPart, sState, nSize, tSettings.Appearance,
+                    tRGB, sArtwork, tOptions.Colour ~= nil);
+            elseif (not tBrushes[sPart] and tSettings.Appearance == "skin") then
                 local oMaterial = sPart == "Background"
                     and oComponent.Skin.getBitmap(sArtwork.." "..sPart.." "..sState)
                     or oComponent.Skin.getBitmap(sArtwork.." "..sPart.." "..sState, nSize, nSize);
@@ -512,6 +524,8 @@ function IrisProgress.create(oParent, tOptions)
         oComposedDC:SetBackground(tBrushes.Background);
         oComposedDC:Clear();
         oComposedDC:DrawBitmap(oBitmap, 0, 0, true);
+        -- Resolve the silhouette before downsampling to retain antialiasing.
+        tOutline.circle(oComposedDC, oComponent.Skin, oComponent.isEnabled(), nCenter, nRadius, nScale);
         oComposedDC:SelectObject(_wx.wxNullBitmap);
         oComposedDC:delete();
 
@@ -581,6 +595,16 @@ function IrisProgress.create(oParent, tOptions)
 
         tArt.destroy();
     end;
+    if (oTheme) then
+        -- Provider changes invalidate every appearance-dependent cache, including
+        -- fitted translucent images which were composited over the old track.
+        oTheme.attach(oComponent, function()
+            fClearMaterials(); fClearPicture(); sRasterKey = nil;
+            oComponent.Control:SetFont(oTheme.Font);
+            oComponent.Control:SetBackgroundColour(oTheme.color("Background"));
+            oComponent.refresh();
+        end);
+    end
     return oComponent;
 end
 

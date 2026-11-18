@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _ControlMenu = require("wxLuma.Core.ControlMenu");
 local RadialMenu = {};
 
@@ -15,6 +16,7 @@ local RadialMenu = {};
     close/isOpen, back, activateItem, getSelection/getValue, item mutation and events.
 !]]
 function RadialMenu.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     return _ControlMenu.create(oParent, tOptions, "RadialMenu");
 end
 

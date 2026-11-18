@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _ControlDiscProgress = require("wxLuma.Core.ControlDiscProgress");
 local RadialProgress = {};
 
@@ -16,6 +17,7 @@ local RadialProgress = {};
     and get/setDirection. Setters are silent unless notified.
 !]]
 function RadialProgress.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     return _ControlDiscProgress.create(oParent, tOptions, "RadialProgress");
 end
 

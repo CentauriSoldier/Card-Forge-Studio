@@ -26,6 +26,9 @@ local _tWindowState = {
 WindowState.register("Log", _tWindowState);
 
 local _dFrame, _oCards, _oWindowState;
+local _tExpanded = setmetatable({}, {__mode = "k"});
+local _tVisibleEntries = {};
+local _nRootCount = 0;
 local _tLevelColours = {DEBUG = "#576575", NOTE = "#285a86", WARNING = "#805300", ERROR = "#a02525"};
 
 --[[!
@@ -54,12 +57,18 @@ end
 
 --[[!
 @fqxn CFS.Windows.Log.Private.Functions.entryText
-@desc Formats a log entry as plain text, retaining its level, timestamp and multiline message.
+@desc Formats an entry and all its descendants as indented text, retaining levels, timestamps and multiline messages.
 @param table tEntry Log entry.
 @return string Copyable entry text.
 !]]
-local function entryText(tEntry)
-    return "["..tEntry.level.." > "..tEntry.timestamp.."]\r\n"..tEntry.message;
+local function entryText(tEntry, nDepth)
+    local sIndent = string.rep("  ", nDepth or 0);
+    local tText = {sIndent.."["..tEntry.level.." > "..tEntry.timestamp.."]\r\n"
+        ..sIndent..tEntry.message:gsub("\r\n", "\r\n"..sIndent)};
+    for _, tChild in ipairs(tEntry.subentries or {}) do
+        tText[#tText + 1] = entryText(tChild, (nDepth or 0) + 1);
+    end
+    return table.concat(tText, "\r\n\r\n");
 end
 
 
@@ -78,7 +87,7 @@ end
 @desc Rebuilds the log-card HTML from current in-memory entries.
 @vis private
 !]]
-local function refreshCards()
+local function refreshCards(bPreserveScroll)
     if (not _oCards) then
         return;
     end
@@ -91,18 +100,34 @@ local function refreshCards()
         tHTML[#tHTML + 1] = '<p>No log messages.</p>';
     end
 
-    for nIndex = 1, #_tEntries do
-        local tEntry = _tEntries[nIndex];
-        local sBackground = nIndex % 2 == 1 and "#ffffff" or "#f7f8fa";
-        local sLevelColour = _tLevelColours[tEntry.level];
-        tHTML[#tHTML + 1] = '<table width="100%" cellspacing="0" cellpadding="12" bgcolor="'..sBackground..'"><tr><td>';
-        tHTML[#tHTML + 1] = '<font color="'..sLevelColour..'"><b>'..tEntry.level..'</b></font> &nbsp; <font color="#626a73">'..tEntry.timestamp..'</font><br><br>';
-        tHTML[#tHTML + 1] = escapeHTML(tEntry.message)..'</td><td width="65" valign="top" align="right"><table cellpadding="5" bgcolor="#e1e7ee"><tr><td><a href="copy:'..nIndex..'">Copy</a></td></tr></table></td></tr></table><br>';
+    local nScrollX, nScrollY = _oCards:GetViewStart();
+    _tVisibleEntries = {};
+    local function renderEntry(tEntry, nDepth, nRoot)
+        local nIndex = #_tVisibleEntries + 1;
+        _tVisibleEntries[nIndex] = tEntry;
+        local sBackground = nRoot % 2 == 1 and "#ffffff" or "#f7f8fa";
+        local sLevelColour = _tLevelColours[tEntry.level] or _tLevelColours.NOTE;
+        tHTML[#tHTML + 1] = '<table width="100%" cellspacing="0" cellpadding="12" bgcolor="'..sBackground..'"><tr>';
+        if (nDepth > 0) then tHTML[#tHTML + 1] = '<td width="'..(nDepth * 24)..'"></td>'; end
+        tHTML[#tHTML + 1] = '<td><font color="'..sLevelColour..'"><b>'..tEntry.level..'</b></font> &nbsp; <font color="#626a73">'..tEntry.timestamp..'</font><br><br>';
+        tHTML[#tHTML + 1] = escapeHTML(tEntry.message);
+        if (tEntry.subentries and #tEntry.subentries > 0) then
+            tHTML[#tHTML + 1] = '<br><br><a href="toggle:'..nIndex..'">'..(_tExpanded[tEntry] and '[-] Hide' or '[+] Show')
+                ..' subentries ('..#tEntry.subentries..')</a>';
+        end
+        tHTML[#tHTML + 1] = '</td><td width="65" valign="top" align="right"><table cellpadding="5" bgcolor="#e1e7ee"><tr><td><a href="copy:'..nIndex..'">Copy</a></td></tr></table></td></tr></table><br>';
+        if (_tExpanded[tEntry]) then
+            for _, tChild in ipairs(tEntry.subentries or {}) do renderEntry(tChild, nDepth + 1, nRoot); end
+        end
     end
+    for nIndex, tEntry in ipairs(_tEntries) do renderEntry(tEntry, 0, nIndex); end
 
     tHTML[#tHTML + 1] = '</font></body></html>';
     _oCards:SetPage(table.concat(tHTML));
-    _oCards:Scroll(0, _oCards:GetScrollRange(wx.wxVERTICAL));
+    if (not bPreserveScroll and #_tEntries > _nRootCount) then
+        _oCards:Scroll(0, _oCards:GetScrollRange(wx.wxVERTICAL));
+    else _oCards:Scroll(nScrollX, nScrollY); end
+    _nRootCount = #_tEntries;
     _dFrame:SetStatusText(tostring(#_tEntries).." messages");
 end
 
@@ -134,7 +159,7 @@ local function ensureWindow()
     oLayout:Add(_oCards, 1, wx.wxEXPAND + wx.wxLEFT + wx.wxRIGHT + wx.wxBOTTOM, 8);
     dPanel:SetSizer(oLayout);
     _dFrame:CreateStatusBar();
-    oCopyAll:SetToolTip("Copies every displayed log entry to the clipboard.");
+    oCopyAll:SetToolTip("Copies every log entry, including collapsed subentries, to the clipboard.");
     oCopyAll:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function()
         local tRecords = {};
 
@@ -147,11 +172,14 @@ local function ensureWindow()
         copyText(table.concat(tRecords, "\r\n\r\n"));
     end);
     _oCards:Connect(wx.wxEVT_HTML_LINK_CLICKED, function(oEvent)
-        local nIndex = tonumber(oEvent:GetLinkInfo():GetHref():match("^copy:(%d+)$"));
-        local tEntry = nIndex and Log.GetEntries()[nIndex];
-
-        if (tEntry) then
+        local sAction, sIndex = oEvent:GetLinkInfo():GetHref():match("^(%a+):(%d+)$");
+        local tEntry = sIndex and _tVisibleEntries[tonumber(sIndex)];
+        if (not tEntry) then return; end
+        if (sAction == "copy") then
             copyText(entryText(tEntry));
+        elseif (sAction == "toggle") then
+            _tExpanded[tEntry] = not _tExpanded[tEntry];
+            refreshCards(true);
         end
     end);
     oClear:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, function()

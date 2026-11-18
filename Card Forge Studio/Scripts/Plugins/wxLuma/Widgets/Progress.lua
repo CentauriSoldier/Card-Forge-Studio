@@ -1,3 +1,6 @@
+local _Outline = require("wxLuma.Core.ControlProgressOutline");
+local _Border = require("wxLuma.Core.ControlBorder");
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _Reserve = require("wxLuma.Core.ControlProgressReserve");
 local _wx           = require("wx");
 local _ControlEvents = require("wxLuma.Core.ControlEvents");
@@ -13,10 +16,15 @@ local finite        = require("wxLuma.Core.ControlNumeric").finite;
     Reserved (capacity units, default 0), ReserveOrigin (optional independent edge),
     Enabled and OnChange. Default is horizontal from left; vertical defaults to
     bottom. Origin alone infers orientation; conflicting explicit options fail.
+    Outline (true), OutlineColour ({R,G,B}) and OutlineWidth (1..8, default 2)
+    configure the track edge independently of the native Border.
 @desc Determinate progress/resource meter. Value clamps to usable capacity. Text
       supports %v/current and %m/max. No input or automatic timing.
 !]]
 function Progress.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
+    tOptions = _Border.withDefault(tOptions, _wx.wxBORDER_NONE);
+    local tOutline = _Outline.create(tOptions);
     local sAppearance = tOptions.Appearance or "colour";
     local sOrigin = tOptions.Origin;
     local sOrientation = tOptions.Orientation;
@@ -319,6 +327,7 @@ function Progress.create(oParent, tOptions)
                 _wx.wxColour(math.floor(tColour.R / 3), math.floor(tColour.G / 3),
                     math.floor(tColour.B / 3)), bVertical and _wx.wxEAST or _wx.wxSOUTH);
         end
+        tOutline.rectangle(oDC, oComponent.Skin, oComponent.isEnabled(), 4, 4, nInnerWidth, nInnerHeight);
         local sText = oComponent.Text:gsub("%%v", tostring(oComponent.Value)):gsub("%%m",
             tostring(oComponent.Max));
         oDC:SetFont(oComponent.Skin.Font);
@@ -328,6 +337,12 @@ function Progress.create(oParent, tOptions)
         oDC:DestroyClippingRegion();
     end;
     oComponent.setValue(tOptions.Value);
+    --[[!
+    @fqxn wxLuma.UI.Progress.onThemeChanged
+    @desc Invalidates the cached reserve paint while retaining its geometry.
+    !]]
+    oComponent.onThemeChanged = function() sReserveKey = nil; end;
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

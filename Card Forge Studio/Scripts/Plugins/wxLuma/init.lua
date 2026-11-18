@@ -28,6 +28,11 @@ local function load(pConfig)
     oImages:MakeAbsolute(_pRoot);
     Config.ImagePath = oImages:GetFullPath();
     oImages:delete();
+    local oSkinPath = _wx.wxFileName.DirName(Config.SkinPath or "Skins/Obsidian");
+    oSkinPath:MakeAbsolute(_pRoot);
+    Config.SkinPath = oSkinPath:GetFullPath(); oSkinPath:delete();
+    local Theme = require("wxLuma.Core.ControlTheme").create(Config.Skin == nil and "System" or Config.Skin,
+        Config.SkinPath);
 
     local Controls = {};
     for sKey, vValue in pairs(require("wxLuma.Controls")) do
@@ -40,14 +45,28 @@ local function load(pConfig)
     local fLoadSkin = Controls.loadSkin;
     local fCreateWindow = Window.create;
     Controls.loadSkin = function(pArtwork)
-        return fLoadSkin(pArtwork or Config.ImagePath.."/Controls/");
+        return fLoadSkin(pArtwork or Config.SkinPath);
     end;
+    -- Every visual factory shares this instance's configured appearance context.
+    -- Nonvisual helpers and explicit legacy skins retain their existing contract.
+    for sFactory, fCreate in pairs(Controls) do
+        if (sFactory ~= "loadSkin" and sFactory ~= "radioGroup"
+            and sFactory ~= "setDefaultContainmentOverflow" and sFactory ~= "getDefaultContainmentOverflow") then
+        Controls[sFactory] = function(oParent, tOptions)
+            local tCopy = {};
+            for sKey, vValue in pairs(tOptions or {}) do tCopy[sKey] = vValue; end
+            if (not tCopy.Skin and not tCopy.Theme) then tCopy.Theme = Theme; end
+            return fCreate(oParent, tCopy);
+        end;
+        end
+    end
     Window.create = function(oParent, tOptions)
         local tWindowOptions = {};
         for sKey, vValue in pairs(tOptions or {}) do
             tWindowOptions[sKey] = vValue;
         end
-        tWindowOptions.AssetPath = tWindowOptions.AssetPath or Config.ImagePath.."/Window/";
+        tWindowOptions.AssetPath = tWindowOptions.AssetPath or Config.SkinPath.."/Window/";
+        if (not tWindowOptions.Skin and not tWindowOptions.Theme) then tWindowOptions.Theme = Theme; end
         return fCreateWindow(oParent, tWindowOptions);
     end;
 
@@ -56,8 +75,9 @@ local function load(pConfig)
     TopLevelWindow.create = function(oParent, tOptions)
         local tWindowOptions = {};
         for sKey, vValue in pairs(tOptions or {}) do tWindowOptions[sKey] = vValue; end
-        tWindowOptions.AssetPath = tWindowOptions.AssetPath or Config.ImagePath.."/Window/";
-        tWindowOptions.SkinPath = tWindowOptions.SkinPath or Config.ImagePath.."/Controls/";
+        tWindowOptions.AssetPath = tWindowOptions.AssetPath or Config.SkinPath.."/Window/";
+        tWindowOptions.SkinPath = tWindowOptions.SkinPath or Config.SkinPath;
+        if (not tWindowOptions.Skin and not tWindowOptions.Theme) then tWindowOptions.Theme = Theme; end
         return fCreateTopLevelWindow(oParent, tWindowOptions);
     end;
     local wxLuma = {
@@ -67,6 +87,9 @@ local function load(pConfig)
         Path     = _pRoot,
         Config   = Config,
         State    = require("wxLuma.State"),
+        Theme    = Theme,
+        Progress = {Shape = require("wxLuma.Progress").Shape, Fill = require("wxLuma.Progress").Fill,
+            Direction = require("wxLuma.Progress").Direction, create = Controls.progress},
     };
 
     return wxLuma;

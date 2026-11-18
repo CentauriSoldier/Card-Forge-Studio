@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx      = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events  = require("wxLuma.Core.ControlEvents");
@@ -14,16 +15,19 @@ local Tabs     = {};
 @param wxWindow oParent Native owner.
 @param table tOptions Skin, Items (strings or {Id,Text,Image,Enabled}); optional
     Value (index), LayoutMode (wrap), Position (top), MinTabWidth (80), MaxTabWidth
-    (240), Artwork (Tabs), Enabled and OnChange(index, component).
+    (240), TextAlign (center; left/right overrides), Artwork (Tabs), Enabled and OnChange(index, component).
 @ret table oComponent Standard surface/events, numeric value, compatible Items
     caption/Pages arrays, plus stable-ID page, mutation and layout APIs.
 !]]
 function Tabs.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "Tabs requires Skin.");
     local sMode = tOptions.LayoutMode == nil and "wrap" or tOptions.LayoutMode;
     local sPosition = tOptions.Position == nil and "top" or tOptions.Position;
     local nMin = tOptions.MinTabWidth == nil and 80 or tOptions.MinTabWidth;
     local nMax = tOptions.MaxTabWidth == nil and 240 or tOptions.MaxTabWidth;
+    local sTextAlign = tOptions.TextAlign or "center";
+    assert(sTextAlign == "left" or sTextAlign == "center" or sTextAlign == "right", "Invalid tab TextAlign.");
     assert(sMode == "wrap" or sMode == "scroll", "Invalid LayoutMode.");
     assert(sPosition == "top" or sPosition == "bottom" or sPosition == "left" or sPosition == "right",
         "Invalid tab Position.");
@@ -276,7 +280,9 @@ function Tabs.create(oParent, tOptions)
                 end);
                 tPages[tItem.Id] = oPage;
             end
-            tPages[tItem.Id]:Enable(oComponent.isEnabled());
+            -- Ancestors disable their descendants natively. A rebuild must not
+            -- turn that temporary inherited state into a permanent page flag.
+            tPages[tItem.Id]:Enable(oComponent.Control:IsThisEnabled());
             oComponent.Items[nIndex] = tItem.Text;
             oComponent.Pages[nIndex] = tPages[tItem.Id];
             if (tItem.Id == sOldId and tItem.Enabled) then
@@ -589,14 +595,18 @@ function Tabs.create(oParent, tOptions)
             local sPart = tEntry.Index == oComponent.Value and "Tab Selected " or "Tab ";
             local oClip = _wx.wxDCClipper(oDC, _wx.wxRect(tEntry.X, tEntry.Y, tEntry.Width, tEntry.Height));
             tArt.part(oDC, sPart..sState, tEntry.DrawX, tEntry.DrawY, tEntry.DrawWidth, tEntry.DrawHeight);
-            if (tItem.Image) then
-                tArt.image(oDC, tItem.Image, tEntry.DrawX + 10, tEntry.DrawY + 6, 24);
-            end
-            tArt.text(oDC, tItem.Text, tEntry.DrawX + (tItem.Image and 40 or 14), tEntry.DrawY + 9,
+            -- Center the complete icon/caption group, using the actual font
+            -- metrics instead of fixed offsets inherited from the old skin.
+            oDC:SetFont(oComponent.Skin.Font);
+            local nTextWidth, nTextHeight = oDC:GetTextExtent(tItem.Text);
+            local nIconWidth = tItem.Image and 30 or 0;
+            local nGroupWidth = math.min(math.max(1, tEntry.DrawWidth - 20), nTextWidth + nIconWidth);
+            local nGroupX = sTextAlign == "left" and tEntry.DrawX + 10
+                or sTextAlign == "right" and tEntry.DrawX + tEntry.DrawWidth - 10 - nGroupWidth
+                or tEntry.DrawX + (tEntry.DrawWidth - nGroupWidth) / 2;
+            if (tItem.Image) then tArt.image(oDC, tItem.Image, nGroupX, tEntry.DrawY + (tEntry.DrawHeight - 24) / 2, 24); end
+            tArt.text(oDC, tItem.Text, nGroupX + nIconWidth, tEntry.DrawY + (tEntry.DrawHeight - nTextHeight) / 2,
                 bEnabled and tItem.Enabled);
-            if (oComponent.Control:HasFocus() and tEntry.Index == oComponent.Value) then
-                tArt.part(oDC, "Focus", tEntry.DrawX + 4, tEntry.DrawY + 32, math.max(1, tEntry.DrawWidth - 8), 2);
-            end
             oClip:delete();
         end
         for _, tNav in ipairs({{"back", tPlan and tPlan.Back}, {"forward", tPlan and tPlan.Forward}}) do
@@ -604,9 +614,13 @@ function Tabs.create(oParent, tOptions)
             if (tRect and tRect.Width > 0 and tRect.Height > 0) then
                 local bAvailable = bEnabled and (sName == "back" and tPlan.Offset > 0 or sName == "forward" and tPlan.Offset < tPlan.Maximum);
                 local sState = not bAvailable and "Disabled" or vPressed == sName and "Pressed" or vHover == sName and "Hover" or "Normal";
-                tArt.part(oDC, "Navigation "..sState, tRect.X, tRect.Y, tRect.Width, tRect.Height);
-                local sText = tPlan.Vertical and (sName == "back" and "^" or "v") or (sName == "back" and "<" or ">");
-                tArt.text(oDC, sText, tRect.X + (tRect.Width - 10) / 2, tRect.Y + (tRect.Height - 18) / 2, bAvailable);
+                local sDirection = tPlan.Vertical and (sName == "back" and "Up" or "Down") or (sName == "back" and "Left" or "Right");
+                if (not (_Theme.isTheme(oComponent.Skin) and oComponent.Skin.arrowButton(oComponent, oDC, sDirection,
+                    tRect.X, tRect.Y, tRect.Width, tRect.Height, sState))) then
+                    tArt.part(oDC, "Navigation "..sState, tRect.X, tRect.Y, tRect.Width, tRect.Height);
+                    tArt.part(oDC, "Navigation "..sDirection.." "..sState,
+                        tRect.X + (tRect.Width - 16) / 2, tRect.Y + (tRect.Height - 16) / 2, 16, 16);
+                end
             end
         end
     end;
@@ -617,6 +631,7 @@ function Tabs.create(oParent, tOptions)
     end
     tEvents = _Events.attach(oComponent, nil, {"itemsChanged", "selectionChanged", "itemHovered", "itemLeft",
         "positionChanged", "layoutModeChanged"});
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

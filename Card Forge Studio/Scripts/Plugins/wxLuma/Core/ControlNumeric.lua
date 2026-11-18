@@ -12,6 +12,74 @@ function ControlNumeric.finite(nValue)
 end
 
 --[[!
+@fqxn wxLuma.UI.ControlNumeric.validateRange
+@desc Requires finite ordered bounds, a positive step and a representable span and step count.
+@param number nMin Inclusive minimum.
+@param number nMax Inclusive maximum.
+@param number nStep Positive snapping increment.
+!]]
+function ControlNumeric.validateRange(nMin, nMax, nStep)
+    assert(ControlNumeric.finite(nMin) and ControlNumeric.finite(nMax) and nMax > nMin
+        and ControlNumeric.finite(nMax - nMin), "Invalid numeric range.");
+    assert(ControlNumeric.finite(nStep) and nStep > 0
+        and ControlNumeric.finite((nMax - nMin) / nStep), "Invalid numeric step.");
+end
+
+--[[!
+@fqxn wxLuma.UI.ControlNumeric.validateOptions
+@desc Validates numeric factory options before allocating native controls; integer editors require whole values.
+@param table tOptions Min, Max, Step and Value factory settings.
+@param boolean bWhole Whether every setting must be a whole number.
+!]]
+function ControlNumeric.validateOptions(tOptions, bWhole)
+    ControlNumeric.validateRange(tOptions.Min, tOptions.Max, tOptions.Step);
+    assert(ControlNumeric.finite(tOptions.Value), "Numeric controls require Value.");
+    if (bWhole) then
+        assert(tOptions.Min % 1 == 0 and tOptions.Max % 1 == 0 and tOptions.Step % 1 == 0
+            and tOptions.Value % 1 == 0, "Spinner requires whole-number values.");
+    end
+end
+
+--[[!
+@fqxn wxLuma.UI.ControlNumeric.snap
+@desc Clamps a finite value and rounds to a step from Min within a previously validated range.
+@param number nValue Requested finite value.
+@param number nMin Inclusive minimum.
+@param number nMax Inclusive maximum.
+@param number nStep Positive snapping increment.
+@ret number nSnapped Clamped, stepped value.
+!]]
+function ControlNumeric.snap(nValue, nMin, nMax, nStep)
+    local nClamped = math.max(nMin, math.min(nMax, nValue));
+    local nCount = math.floor((nClamped - nMin) / nStep + 0.5);
+
+    if (nCount == 0) then return nMin; end
+    -- A rounded step beyond the range must clamp before its product can overflow.
+    if (nCount >= (nMax - nMin) / nStep) then return nMax; end
+    return math.max(nMin, math.min(nMax, nMin + nCount * nStep));
+end
+
+--[[!
+@fqxn wxLuma.UI.ControlNumeric.advance
+@desc Moves by a signed whole number of steps, saturating before multiplication or addition can overflow.
+@param number nValue Current value within the validated range.
+@param number nMin Inclusive minimum.
+@param number nMax Inclusive maximum.
+@param number nStep Positive snapping increment.
+@param number nTimes Signed whole number of steps.
+@ret number nNext Finite value within the range, before snapping.
+!]]
+function ControlNumeric.advance(nValue, nMin, nMax, nStep, nTimes)
+    if (nTimes == 0) then return nValue; end
+    local nDistance = nTimes > 0 and nMax - nValue or nValue - nMin;
+    local nCount = math.abs(nTimes);
+
+    -- Compare against the remaining distance before forming the requested delta.
+    if (nStep >= nDistance / nCount) then return nTimes > 0 and nMax or nMin; end
+    return nValue + nStep * nTimes;
+end
+
+--[[!
 @fqxn wxLuma.UI.ControlNumeric.configure
 @desc Installs finite range validation, nearest-step snapping and keyboard stepping for numeric input.
 @param table oComponent The public component.
@@ -21,15 +89,8 @@ end
 !]]
 function ControlNumeric.configure(oComponent, tInput, tOptions, bWhole)
     local fFinite = ControlNumeric.finite;
-    assert(fFinite(tOptions.Min) and fFinite(tOptions.Max) and fFinite(tOptions.Step),
-        "Numeric controls require finite Min, Max, Step.");
-    assert(tOptions.Max > tOptions.Min and tOptions.Step > 0, "Invalid control range/step.");
+    ControlNumeric.validateOptions(tOptions, bWhole);
     oComponent.Min, oComponent.Max, oComponent.Step = tOptions.Min, tOptions.Max, tOptions.Step;
-    assert(fFinite(tOptions.Value), "Numeric controls require Value.");
-    if (bWhole) then
-        assert(oComponent.Min % 1 == 0 and oComponent.Max % 1 == 0 and oComponent.Step % 1 == 0
-            and tOptions.Value % 1 == 0, "Spinner requires whole-number values.");
-    end
 
     --[[!
     @fqxn wxLuma.UI.ControlNumeric.setValue
@@ -44,9 +105,7 @@ function ControlNumeric.configure(oComponent, tInput, tOptions, bWhole)
             assert(fFinite(nValue) and nValue % 1 == 0, "Spinner value must be a whole number.");
         end
         assert(fFinite(nValue), "Control value must be finite.");
-        local nClamped = math.max(oComponent.Min, math.min(oComponent.Max, nValue));
-        local nStep    = math.floor((nClamped - oComponent.Min) / oComponent.Step + 0.5);
-        nValue = math.max(oComponent.Min, math.min(oComponent.Max, oComponent.Min + nStep * oComponent.Step));
+        nValue = ControlNumeric.snap(nValue, oComponent.Min, oComponent.Max, oComponent.Step);
         local bChanged = oComponent.getValue() ~= nValue;
         oComponent.Value = nValue;
         if (tInput.TextControl) then
@@ -72,17 +131,17 @@ function ControlNumeric.configure(oComponent, tInput, tOptions, bWhole)
     tInput.key = function(nKey)
         local nValue;
         if (nKey == _wx.WXK_LEFT or nKey == _wx.WXK_DOWN) then
-            nValue = oComponent.Value - oComponent.Step;
+            nValue = ControlNumeric.advance(oComponent.Value, oComponent.Min, oComponent.Max, oComponent.Step, -1);
         elseif (nKey == _wx.WXK_RIGHT or nKey == _wx.WXK_UP) then
-            nValue = oComponent.Value + oComponent.Step;
+            nValue = ControlNumeric.advance(oComponent.Value, oComponent.Min, oComponent.Max, oComponent.Step, 1);
         elseif (nKey == _wx.WXK_HOME) then
             nValue = oComponent.Min;
         elseif (nKey == _wx.WXK_END) then
             nValue = oComponent.Max;
         elseif (nKey == _wx.WXK_PAGEUP) then
-            nValue = oComponent.Value + oComponent.Step * 10;
+            nValue = ControlNumeric.advance(oComponent.Value, oComponent.Min, oComponent.Max, oComponent.Step, 10);
         elseif (nKey == _wx.WXK_PAGEDOWN) then
-            nValue = oComponent.Value - oComponent.Step * 10;
+            nValue = ControlNumeric.advance(oComponent.Value, oComponent.Min, oComponent.Max, oComponent.Step, -10);
         end
         if (nValue) then
             oComponent.setValue(nValue, true);

@@ -63,6 +63,14 @@ function Adapter.create(dParent, pManual, tOptions)
 	local fNavigate;
 	local fDispatch;
 	local fClose;
+	local sReply = "";
+	local nOptionsRevision = 0;
+	local sOptionsScript = "";
+	local function publishReply()
+		local hReply = assert(io.open(pPage..".reply.tmp", "wb"));
+		assert(hReply:write(sReply..sOptionsScript)); assert(hReply:close());
+		assert(wx.wxRenameFile(pPage..".reply.tmp", pPage..".reply.js", true), "Cannot publish the editor reply.");
+	end
 	assert(wx.wxDirExists(pManual) and wx.wxDirExists(tOptions.exports), "Manual Editor game paths are unavailable.");
 
 	--[[!
@@ -84,8 +92,8 @@ function Adapter.create(dParent, pManual, tOptions)
 		tTokens.ASSET_BASE = fileURL(_pWeb.."/Editor.html");
 		tTokens.ASSET_REVISION = pPage:match("[^/\\]+$"):gsub("[^A-Za-z0-9]", "").."-"..nPageRevision;
 		tTokens.BOOTSTRAP = JSON.encode(tSnapshot):gsub("<", "\\u003c");
-		for _, sKey in ipairs({"FILE", "VERSION", "CONTENT", "STYLE_TAGS", "FILE_OPTIONS", "ORDER_ROWS", "STYLE_OPTIONS", "GAME_CSS", "WEB_CSS"}) do tTokens[sKey] = ""; end
-		for _, sKey in ipairs({"STYLE_STATE", "ORDER_STATE", "GLOSSARY_STATE"}) do tTokens[sKey] = "{}"; end
+		for _, sKey in ipairs({"FILE", "VERSION", "CONTENT", "STYLE_TAGS", "FILE_OPTIONS", "ORDER_ROWS", "STYLE_OPTIONS", "GAME_CSS"}) do tTokens[sKey] = ""; end
+		for _, sKey in ipairs({"ORDER_STATE", "GLOSSARY_STATE"}) do tTokens[sKey] = "{}"; end
 		sTemplate = sTemplate:gsub("{{([A-Z_]+)}}", function(sKey) return assert(tTokens[sKey], "Unknown manual template token: "..sKey); end);
 		hPage = assert(io.open(pPage, "wb"));
 		assert(hPage:write(sTemplate));
@@ -129,8 +137,11 @@ function Adapter.create(dParent, pManual, tOptions)
 		!]]
 		fExecute = function()
 			local sScript;
-			local hReply;
-			if (tRequest.file) then
+			if (tRequest.export) then
+				tOptions.onOpenExport();
+			elseif (tRequest.appearance) then
+                tOptions.onOpenOptions();
+			elseif (tRequest.file) then
 				sSelected = tRequest.file;
 				fBuild();
 				oBrowser:LoadURL(sPageURL);
@@ -139,9 +150,8 @@ function Adapter.create(dParent, pManual, tOptions)
 				if (sScript and not bClosePending) then
 					-- Publish outside browser callbacks. The page reads replies
 					-- asynchronously; no native RunScript wait can hold dispatch.
-					hReply = assert(io.open(pPage..".reply.tmp", "wb"));
-					assert(hReply:write(sScript)); assert(hReply:close());
-					assert(wx.wxRenameFile(pPage..".reply.tmp", pPage..".reply.js", true), "Cannot publish the editor reply.");
+					sReply = sScript;
+					publishReply();
 				end
 			end
 		end;
@@ -176,7 +186,11 @@ function Adapter.create(dParent, pManual, tOptions)
 			oEvent:Skip(); return;
 		end
 		oEvent:Veto();
-		if (sOpen) then
+		if (sURL == "cfsmanual://export") then
+			tPending[#tPending + 1] = {export = true};
+		elseif (sURL == "cfsmanual://appearance") then
+            tPending[#tPending + 1] = {appearance = true};
+		elseif (sOpen) then
 			tPending[#tPending + 1] = {file = sOpen:gsub("%%(%x%x)", function(sHex) return string.char(tonumber(sHex, 16)); end)};
 		elseif (sURL:match("^cfsmanual://bridge/")) then
 			tPending[#tPending + 1] = {url = sURL};
@@ -229,6 +243,20 @@ function Adapter.create(dParent, pManual, tOptions)
 	tWindow.frame, tWindow.browser, tWindow.manualRoot, tWindow.exportRoot = dFrame, oBrowser, pManual, tOptions.exports;
 
 	--[[!
+	@fqxn CFS.Manual.Adapter.Window.applyOptions
+	@desc Publishes saved display preferences to the current page without navigation.
+	!]]
+	function tWindow.applyOptions()
+		if (bClosed) then return; end
+		nOptionsRevision = nOptionsRevision + 1;
+		local tSettings = {revision = nOptionsRevision,
+			lineNumbers = INIFile.GetValue(FS.AppCFG, "ManualEditor", "LineNumbers") == "1",
+            appearanceCSS = require("Manual.Appearance").css(pManual, ".manual-appearance", fileURL(pManual):gsub("/$", "").."/Images/")};
+		sOptionsScript = "\ndocument.dispatchEvent(new CustomEvent('manual-editor-options', {detail:"..JSON.encode(tSettings).."}));";
+		publishReply();
+	end
+
+	--[[!
 	@fqxn CFS.Manual.Adapter.Window.show
 	@desc Shows and raises this modeless game-bound editor without disabling other Studio windows. Preserves the existing nonblocking menu and shared WindowState contracts.
 	@return boolean bShown Whether it remains open.
@@ -252,6 +280,15 @@ function Adapter.create(dParent, pManual, tOptions)
 		bAccepted = dFrame:Close();
 		if (not bAccepted and not bClosePending) then bShutdownPending = false; end
 		return bAccepted;
+	end
+
+	--[[!
+	@fqxn CFS.Manual.Adapter.Window.hasDrafts
+	@desc Reads the editor's existing reported draft state for native export protection.
+	@return boolean bDirty Whether authoring/settings drafts remain unsaved.
+	!]]
+	function tWindow.hasDrafts()
+		return tService.dirty == true;
 	end
 	oBrowser:LoadURL(sPageURL);
 	tWindow.show();

@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx        = require("wx");
 local _Surface   = require("wxLuma.Core.ControlSurface");
 local _Events    = require("wxLuma.Core.ControlEvents");
@@ -26,6 +27,7 @@ local TreeEx     = {};
 @ret table oTree Standard surface/events, typed data, hierarchy and checkbox APIs.
 !]]
 function TreeEx.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "TreeEx requires Skin.");
     assert(tOptions.Checkboxes == nil or type(tOptions.Checkboxes) == "boolean", "Invalid Checkboxes.");
     assert(tOptions.MultiSelect == nil or type(tOptions.MultiSelect) == "boolean", "Invalid MultiSelect.");
@@ -891,6 +893,7 @@ function TreeEx.create(oParent, tOptions)
         oTree.setValue(tOptions.Value);
     end
     oTree.setEnabled(tOptions.Enabled ~= false);
+    _Theme.finish(oTree, tOptions);
     return oTree;
 end
 

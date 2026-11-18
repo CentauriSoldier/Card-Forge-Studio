@@ -20,6 +20,13 @@ function ControlArtwork.create(oSkin, sPrefix)
     @ret wxColour oColor Borrowed palette entry.
     !]]
     function tArt.color(sPart)
+        if (oSkin.materialColor and oSkin.getName() == "System") then
+            return oSkin.materialColor(sPrefix.." "..sPart);
+        end
+        if (oSkin.Revision ~= tArt.Revision) then
+            for _, oColor in pairs(tColors) do oColor:delete(); end
+            tColors = {}; tArt.Revision = oSkin.Revision;
+        end
         if (not tColors[sPart]) then
             local oImage = oSkin.getBitmap(sPrefix.." "..sPart):ConvertToImage();
             tColors[sPart] = _wx.wxColour(oImage:GetRed(0, 0), oImage:GetGreen(0, 0), oImage:GetBlue(0, 0));
@@ -33,6 +40,8 @@ function ControlArtwork.create(oSkin, sPrefix)
     @desc Draws one skinned part at explicit bounds without adding fixed colors.
     !]]
     function tArt.part(oDC, sPart, nX, nY, nWidth, nHeight)
+        -- Suppress authored focus outlines in every skin as well as System.
+        if (sPart:match("^Focus")) then return; end
         if (nWidth > 0 and nHeight > 0) then
             oSkin.draw(oDC, sPrefix.." "..sPart, nX, nY, nWidth, nHeight);
         end
@@ -42,9 +51,9 @@ function ControlArtwork.create(oSkin, sPrefix)
     @fqxn wxLuma.UI.ControlArtwork.text
     @desc Draws text using the skin font and sampled enabled/disabled text material.
     !]]
-    function tArt.text(oDC, sText, nX, nY, bEnabled)
+    function tArt.text(oDC, sText, nX, nY, bEnabled, bSelected)
         oDC:SetFont(oSkin.Font);
-        oDC:SetTextForeground(tArt.color(bEnabled == false and "Text Disabled" or "Text Normal"));
+        oDC:SetTextForeground(tArt.color(bEnabled == false and "Text Disabled" or bSelected and "Text Selected" or "Text Normal"));
         oDC:SetBackgroundMode(_wx.wxTRANSPARENT);
         local _, nLineHeight = oDC:GetTextExtent("Ag");
         for sLine in (sText.."\n"):gmatch("(.-)\n") do

@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx     = require("wx");
 local _Editor = require("wxLuma.Core.ControlEditor");
 local _finite = require("wxLuma.Core.ControlNumeric").finite;
@@ -9,13 +10,16 @@ local SearchField = {};
     images. Search is immediate by default; Debounce delays typing searches.
     Enter searches immediately, Escape clears, and disposal cancels the timer.
 @param wxWindow oParent Native owner.
-@param table tOptions Skin; optional Value, Hint, Debounce (milliseconds, 0),
+@param table tOptions Skin; optional Value, Hint, Debounce (integer milliseconds,
+    0..2147483647, default 0),
     Artwork (Search Field), Enabled, OnChange, OnSearch(text, component).
 @ret table oComponent Editor with search/clear and standard value/events APIs.
 !]]
 function SearchField.create(oParent, tOptions)
-    local nDelay = tOptions.Debounce or 0;
-    assert(_finite(nDelay) and nDelay >= 0 and nDelay % 1 == 0, "Invalid search Debounce.");
+    tOptions = _Theme.options(tOptions, oParent);
+    local nDelay = tOptions.Debounce;
+    if (nDelay == nil) then nDelay = 0; end
+    assert(_finite(nDelay) and nDelay >= 0 and nDelay <= 2147483647 and nDelay % 1 == 0, "Invalid search Debounce.");
     local tCopy = {};
     for sKey, vValue in pairs(tOptions) do tCopy[sKey] = vValue; end
     tCopy.Artwork = tCopy.Artwork or "Search Field";
@@ -35,6 +39,9 @@ function SearchField.create(oParent, tOptions)
     @ret table oComponent This object.
     !]]
     function oComponent.setValue(sValue, bNotify)
+        -- Reject invalid calls before stopping a valid pending search or
+        -- touching a timer which disposal has already released.
+        assert(not oComponent.Disposed and type(sValue) == "string", "Invalid search value or disposed control.");
         oTimer:Stop();
         return fSetValue(sValue, bNotify);
     end
@@ -45,8 +52,8 @@ function SearchField.create(oParent, tOptions)
     @ret boolean bSearched Whether enabled input allowed the search.
     !]]
     function oComponent.search()
-        oTimer:Stop();
         if (not oComponent.isEnabled()) then return false; end
+        oTimer:Stop();
         local sValue = oComponent.getValue();
         tEvents.emit("searched", {Value = sValue});
         if (tOptions.OnSearch) then tOptions.OnSearch(sValue, oComponent); end
@@ -68,11 +75,16 @@ function SearchField.create(oParent, tOptions)
         return oComponent;
     end
     oComponent.onTextChanged = function()
+        -- A value listener can disable input before the internal search hook.
+        if (not oComponent.isEnabled()) then return; end
         oTimer:Stop();
         if (nDelay == 0) then oComponent.search(); else oTimer:Start(nDelay, true); end
     end;
     oComponent.onTextEnter = oComponent.search;
-    oComponent.onAction = function() oComponent.clear(); oComponent.TextControl:SetFocus(); end;
+    oComponent.onAction = function()
+        oComponent.clear();
+        if (oComponent.isEnabled()) then oComponent.TextControl:SetFocus(); end
+    end;
     oComponent.onEditorKey = function(nKey)
         if (nKey == _wx.WXK_ESCAPE and oComponent.getValue() ~= "") then oComponent.clear(); return true; end
         return false;
@@ -80,6 +92,7 @@ function SearchField.create(oParent, tOptions)
     oComponent.onEditorEnable = function(bEnabled) if (not bEnabled) then oTimer:Stop(); end end;
     oComponent.onEditorDestroy = function() oTimer:Stop(); oTimer:delete(); end;
     oComponent.Control:Connect(oTimer:GetId(), _wx.wxEVT_TIMER, function() oComponent.search(); end);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _Containment = require("wxLuma.Core.ControlContainment");
 local _wx           = require("wx");
 local Dropdown      = {};
@@ -14,6 +15,7 @@ local _List         = require("wxLuma.Widgets.List");
 @ret table oComponent Standard methods plus open/close/isOpen/setItems/getText, List and Popup.
 !]]
 function Dropdown.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local oComponent = createSurface(oParent, tOptions, "Dropdown");
     local tContainment = _Containment.getPolicy(oComponent);
     oComponent.Popup = _wx.wxFrame(oComponent.Control, _wx.wxID_ANY, "", _wx.wxDefaultPosition,
@@ -91,13 +93,14 @@ function Dropdown.create(oParent, tOptions)
 
     --[[!
     @fqxn wxLuma.UI.Dropdown.setItems
-    @desc Closes without committing, replaces list items and adopts its clamped selection without notifying.
+    @desc Validates/replaces list items, then closes without committing and adopts
+        the clamped selection silently. Rejected items preserve an open popup.
     @param table tItems An array of strings.
     @ret table oComponent This public component object.
     !]]
     function oComponent.setItems(tItems)
-        oComponent.close(false, false);
         oComponent.List.setItems(tItems);
+        oComponent.close(false, false);
         oComponent.Value = oComponent.List.getValue();
         oComponent.refresh();
         return oComponent;
@@ -131,7 +134,11 @@ function Dropdown.create(oParent, tOptions)
         nWidth = math.min(nWidth, oArea:GetWidth());
         local nVisible = math.max(1, math.floor((oArea:GetHeight() - 8) / oComponent.List.RowHeight));
         local nHeight  = math.min(nRows, #oComponent.List.Items, nVisible) * oComponent.List.RowHeight + 8;
-        oComponent.Popup:SetSize(nWidth, nHeight);
+        -- Include the list's native border outside its complete-row viewport.
+        local _, nOuterHeight = oComponent.List.Control:GetSizeWH();
+        local _, nClientHeight = oComponent.List.Control:GetClientSizeWH();
+        nHeight = nHeight + math.max(0, nOuterHeight - nClientHeight);
+        oComponent.Popup:SetClientSize(nWidth, nHeight);
         oComponent.List.layout(0, 0, nWidth, nHeight);
         oComponent.List.setValue(oComponent.Value > 0 and oComponent.Value or 1);
         oDisplay:delete();
@@ -231,11 +238,24 @@ function Dropdown.create(oParent, tOptions)
 
     -- Draw widget content inside the shared frame; shared code owns the paint DC.
     oComponent.drawContent = function(oDC, nWidth, nHeight)
+        if (_Theme.isTheme(oComponent.Skin) and oComponent.Skin.getName() == "System") then
+            -- A non-editable choice is a button face, not a text editor. Native
+            -- rendering supplies platform shading for the entire closed field.
+            local sState = oComponent.getState();
+            local nFlags = sState == "Disabled" and _wx.wxCONTROL_DISABLED
+                or (oComponent.isOpen() or sState == "Pressed") and _wx.wxCONTROL_PRESSED
+                or sState == "Hover" and _wx.wxCONTROL_CURRENT or 0;
+            local oRect = _wx.wxRect(0, 0, math.max(1, nWidth), math.max(1, nHeight));
+            _wx.wxRendererNative.Get():DrawPushButton(oComponent.Control, oDC, oRect, nFlags);
+            oRect:delete();
+        end
         oDC:SetClippingRegion(8, 4, math.max(1, nWidth - 38), math.max(1, nHeight - 8));
         oComponent.Skin.text(oDC, oComponent.getText(), 10, (nHeight - 18) / 2, oComponent.isEnabled());
         oDC:DestroyClippingRegion();
-        oComponent.Skin.drawOpaque(oDC, "Spinner Down " .. oComponent.getState(), nWidth - 27,
-            (nHeight - 18) / 2);
+        if (not (_Theme.isTheme(oComponent.Skin) and oComponent.Skin.dropdownButton(oComponent, oDC, nWidth, nHeight, oComponent.getState()))) then
+            oComponent.Skin.drawOpaque(oDC, "Dropdown Arrow " .. oComponent.getState(), nWidth - 27,
+                (nHeight - 18) / 2);
+        end
     end;
     oComponent.setValue(tOptions.Value or 0);
     oComponent.setEnabled(tOptions.Enabled ~= false);
@@ -246,6 +266,7 @@ function Dropdown.create(oParent, tOptions)
             end
         end
     end);
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

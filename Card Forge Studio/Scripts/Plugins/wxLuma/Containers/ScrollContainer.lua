@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx             = require("wx");
 local _ControlSurface = require("wxLuma.Core.ControlSurface");
 local _ControlEvents  = require("wxLuma.Core.ControlEvents");
@@ -16,6 +17,7 @@ local ScrollContainer = {};
 @ret table oComponent A public proxy with Content, Viewport and standard events.
 !]]
 function ScrollContainer.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local nContentWidth  = tOptions.ContentWidth or 0;
     local nContentHeight = tOptions.ContentHeight or 0;
     local nStep          = tOptions.Step or 32;
@@ -285,6 +287,7 @@ function ScrollContainer.create(oParent, tOptions)
     tEvents = _ControlEvents.attach(oComponent, {oViewport, oContent});
     oComponent.onEnable(tOptions.Enabled ~= false);
     fLayout(oComponent.Control:GetClientSizeWH());
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

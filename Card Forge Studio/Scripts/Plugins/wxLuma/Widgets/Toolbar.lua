@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx          = require("wx");
 local _Surface     = require("wxLuma.Core.ControlSurface");
 local _Events      = require("wxLuma.Core.ControlEvents");
@@ -19,6 +20,7 @@ local Toolbar      = {};
 @ret table oComponent Standard surface/events plus mutable command APIs.
 !]]
 function Toolbar.create(oParent, tOptions, sKind)
+    tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "Toolbar requires Skin.");
     local tArt = _Artwork.create(tOptions.Skin, tOptions.Artwork or "Toolbar");
     local tItems, tRects, tOverflow = {}, {}, {};
@@ -566,6 +568,7 @@ function Toolbar.create(oParent, tOptions, sKind)
     end);
     tEvents = _Events.attach(oComponent, nil, {"itemsChanged", "toolActivated", "selectionChanged",
         "itemHovered", "itemLeft", "itemFocused"});
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 

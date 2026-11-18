@@ -1,3 +1,4 @@
+local _Theme = require("wxLuma.Core.ControlTheme");
 local _wx = require("wx");
 local _Surface = require("wxLuma.Core.ControlSurface");
 local _Events = require("wxLuma.Core.ControlEvents");
@@ -15,6 +16,7 @@ local Breadcrumb = {};
 @ret table oComponent get/setItems, get/setValue, getPath and shared input events.
 !]]
 function Breadcrumb.create(oParent, tOptions)
+    tOptions = _Theme.options(tOptions, oParent);
     local tItems, tById, nSelected, tHits = {}, {}, 0, {};
     local oComponent = _Surface.create(oParent, tOptions, "Breadcrumb");
     local tArt = _Artwork.create(tOptions.Skin, tOptions.Artwork or "Breadcrumb");
@@ -161,6 +163,7 @@ function Breadcrumb.create(oParent, tOptions)
     oComponent.onDestroy = tArt.destroy;
     oComponent.setItems(tOptions.Items or {});
     if (tOptions.Value ~= nil) then oComponent.setValue(tOptions.Value); end
+    _Theme.finish(oComponent, tOptions);
     return oComponent;
 end
 
