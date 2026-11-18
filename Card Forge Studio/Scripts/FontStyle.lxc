@@ -23,6 +23,8 @@ namespace CFS
     {
         private static wx = require("wx");
         private static INI = require("Plugins.INI");
+        private static StyleAliases = require("StyleAliases");
+        private static _tAliases = {};
         private static clamp = math.clamp;
         private static floor = math.floor;
         private static isnumber = type.isnumber;
@@ -1037,6 +1039,7 @@ namespace CFS
 
             if (FontStyle._tState.INI) then
                 tSectionNames = FontStyle._tState.INI.GetSectionNames();
+                local tAliases = FontStyle.StyleAliases.read(FontStyle._tState.INI);
 
                 for _, sName in ipairs(tSectionNames) do
                     sName = sName:upper();
@@ -1075,6 +1078,7 @@ namespace CFS
 
                 end
 
+                FontStyle._tAliases = tAliases;
                 for sName in pairs(FontStyle._tStyles) do
 
                     if not (tSeen[sName]) then
@@ -1095,7 +1099,7 @@ namespace CFS
             local tStyleProxyMeta = {
                 __index = function(t, k)
                     local sName = rawtype(k) == "string" and k or "";
-                    return not (sName:isempty()) and FontStyle._tStyles[sName:upper()] or nil;
+                    return FontStyle.Get(sName);
                 end,
 
                 __newindex = function(t, k, v)
@@ -1131,13 +1135,21 @@ namespace CFS
                 !]]
         public static Parse(sName, oReader)
         {
+            local oSource = oReader or FontStyle._tState.INI;
+            if (FontStyle.isstring(sName) and oSource) then
+                local tKeys = oSource.GetValueNames(sName:upper());
+                if (not tKeys or #tKeys == 0) then
+                    local tAliases = oReader and FontStyle.StyleAliases.read(oReader) or FontStyle._tAliases;
+                    sName = tAliases[sName:upper()] or sName;
+                end
+            end
             return FontStyle.ParseFontStyleINI(sName, oReader);
         }
 
         --[[!
         @fqxn CFS.Classes.FontStyle.Methods.Get
         @pulsarlua function FontStyle.Get
-        @desc Gets a font style object by name.
+        @desc Gets the same font style object by canonical name or alias, case-insensitively.
         @param string sName The name of the font style to retrieve.
         @return FontStyle|nil oFontStyle The matching FontStyle object, or nil if not found.
         !]]
@@ -1146,7 +1158,7 @@ namespace CFS
             local oRet;
 
             if (FontStyle.isstring(sName) and not sName:isempty()) then
-                oRet = FontStyle._tStyles[sName:upper()];
+                oRet = FontStyle._tStyles[(FontStyle._tAliases[sName:upper()] or sName):upper()];
             end
 
             return oRet;
@@ -1164,7 +1176,7 @@ namespace CFS
             local bRet = false;
 
             if (FontStyle.isstring(sName) and not sName:isempty()) then
-                bRet = FontStyle._tStyles[sName:upper()] and true or false;
+                bRet = FontStyle.Get(sName) and true or false;
             end
 
             return bRet;

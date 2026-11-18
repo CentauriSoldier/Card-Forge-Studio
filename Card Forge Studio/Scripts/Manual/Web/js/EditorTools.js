@@ -28,28 +28,41 @@
 	let readingOptions = false;
 	let optionsRevision = 0;
 
-	/** Matches logical line numbers to the textarea's wrapped line heights. */
-	function drawLineNumbers() {
-		lineFrame = 0;
-		if (gutter.hidden || !editor.clientWidth) return;
-		mirror.style.width = editor.clientWidth + 'px';
-		const rows = document.createDocumentFragment();
-		for (const text of editor.value.split('\n')) {
-			const row = document.createElement('div');
-			row.textContent = text || '\u200b';
-			rows.append(row);
-		}
-		mirror.replaceChildren(rows);
-		const labels = document.createDocumentFragment();
-		Array.from(mirror.children).forEach((row, index) => {
-			const label = document.createElement('div');
-			label.textContent = index + 1;
-			label.style.height = row.getBoundingClientRect().height + 'px';
-			labels.append(label);
-		});
-		numbers.replaceChildren(labels);
-		numbers.style.transform = 'translateY(' + -editor.scrollTop + 'px)';
-	}
+    let lineRows = [], lineText = null, lineMetrics = '';
+    /** Retains unchanged rows and measures only edited lines unless wrapping metrics change. */
+    function drawLineNumbers() {
+        lineFrame = 0;
+        if (gutter.hidden || !editor.clientWidth) return;
+        const style = getComputedStyle(editor);
+        const metrics = [editor.clientWidth, style.font, style.lineHeight, style.letterSpacing, style.tabSize, style.padding, style.wordBreak, style.overflowWrap].join('|');
+        const text = editor.value;
+        if (text === lineText && metrics === lineMetrics) return;
+        const remeasure = metrics !== lineMetrics;
+        mirror.style.width = editor.clientWidth + 'px';
+        const lines = text.split('\n');
+        let first = 0, tail = 0;
+        while (first < lines.length && first < lineRows.length && lines[first] === lineRows[first].text) first++;
+        while (tail < lines.length - first && tail < lineRows.length - first && lines[lines.length - 1 - tail] === lineRows[lineRows.length - 1 - tail].text) tail++;
+        const oldEnd = lineRows.length - tail;
+        const retained = lineRows.slice(oldEnd);
+        for (const entry of lineRows.slice(first, oldEnd)) { entry.row.remove(); entry.label.remove(); }
+        const rows = document.createDocumentFragment(), labels = document.createDocumentFragment(), added = [];
+        for (let index = first; index < lines.length - tail; index++) {
+            const row = document.createElement('div'), label = document.createElement('div');
+            row.textContent = lines[index] || '\u200b'; label.textContent = index + 1;
+            rows.append(row); labels.append(label); added.push({text: lines[index], row, label});
+        }
+        mirror.insertBefore(rows, retained[0]?.row || null); numbers.insertBefore(labels, retained[0]?.label || null);
+        lineRows = [...lineRows.slice(0, first), ...added, ...retained];
+        for (let index = first + added.length; index < lineRows.length; index++) {
+            const value = String(index + 1); if (lineRows[index].label.textContent !== value) lineRows[index].label.textContent = value;
+        }
+        const changed = remeasure ? lineRows : added;
+        const heights = changed.map(entry => entry.row.getBoundingClientRect().height);
+        changed.forEach((entry, index) => { entry.label.style.height = heights[index] + 'px'; });
+        lineText = text; lineMetrics = metrics;
+        numbers.style.transform = 'translateY(' + -editor.scrollTop + 'px)';
+    }
 	function queueLineNumbers() {
 		if (!lineFrame) lineFrame = requestAnimationFrame(drawLineNumbers);
 	}
@@ -82,6 +95,7 @@
 	new ResizeObserver(queueLineNumbers).observe(editor);
 	new MutationObserver(queueLineNumbers).observe(document.getElementById('markdown-selections'), {childList: true});
 	readEditorOptions();
+    document.fonts?.addEventListener('loadingdone', () => { lineMetrics = ''; queueLineNumbers(); });
 
 
 	/** Rebuilds references using the exact styled buttons currently in the palette. */

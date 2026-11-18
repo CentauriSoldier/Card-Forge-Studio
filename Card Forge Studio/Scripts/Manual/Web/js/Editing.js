@@ -12,23 +12,39 @@
     panel.innerHTML = '<label>Find <input type="text" data-find aria-label="Find text"></label><label>Replace <input type="text" data-replace aria-label="Replacement text"></label><label><input type="checkbox" data-case> Match case</label><button type="button" data-action="previous">Previous</button><button type="button" data-action="next">Next</button><button type="button" data-action="replace">Replace</button><button type="button" data-action="replace-all">Replace all</button><button type="button" data-action="close" aria-label="Close find and replace">Close</button><span role="status" aria-live="polite"></span>';
     toolbar.after(panel);
     const findField = panel.querySelector('[data-find]'), replaceField = panel.querySelector('[data-replace]'), matchCase = panel.querySelector('[data-case]'), status = panel.querySelector('[role="status"]');
-    let entries = [], position = 0, restoring = false;
-    const snapshot = (nativeInput = false) => ({text: editor.value, start: editor.selectionStart, end: editor.selectionEnd, direction: editor.selectionDirection, top: editor.scrollTop, left: editor.scrollLeft, ranges: nativeInput ? [] : editorSelections.map(range => ({...range}))});
+    let entries = [], position = 0, restoring = false, currentText = '';
+    const snapshot = (nativeInput = false) => ({start: editor.selectionStart, end: editor.selectionEnd, direction: editor.selectionDirection, top: editor.scrollTop, left: editor.scrollLeft, ranges: nativeInput ? [] : editorSelections.map(range => ({...range}))});
     function update() { buttons.undo.disabled = position === 0; buttons.redo.disabled = position === entries.length - 1; }
-    function reset() { entries = [snapshot()]; position = 0; update(); }
-    function before() { if (!restoring && entries[position]?.text === editor.value) entries[position] = snapshot(); }
+    function reset() { currentText = editor.value; entries = [{...snapshot(), patch: null}]; position = 0; update(); }
+    function before() {
+        if (!restoring && currentText === editor.value) entries[position] = {...snapshot(), patch: entries[position].patch};
+    }
+    /** Store only the changed span; history still has the same 200-state boundary. */
     function record(nativeInput = false) {
-        if (restoring || entries[position]?.text === editor.value) return;
-        entries.splice(position + 1); entries.push(snapshot(nativeInput)); position++;
-        // Keep a bounded history without losing the saved-content comparison.
-        if (entries.length > 200) { entries.shift(); position--; }
+        const text = editor.value;
+        if (restoring || currentText === text) return;
+        let first = 0, oldEnd = currentText.length, newEnd = text.length;
+        const limit = Math.min(oldEnd, newEnd);
+        // Chunk comparisons avoid scanning an unchanged document character by character.
+        while (first + 1024 <= limit && currentText.slice(first, first + 1024) === text.slice(first, first + 1024)) first += 1024;
+        while (first < limit && currentText.charCodeAt(first) === text.charCodeAt(first)) first++;
+        while (oldEnd - first >= 1024 && newEnd - first >= 1024 && currentText.slice(oldEnd - 1024, oldEnd) === text.slice(newEnd - 1024, newEnd)) { oldEnd -= 1024; newEnd -= 1024; }
+        while (oldEnd > first && newEnd > first && currentText.charCodeAt(oldEnd - 1) === text.charCodeAt(newEnd - 1)) { oldEnd--; newEnd--; }
+        const patch = {start: first, removed: currentText.slice(first, oldEnd), inserted: text.slice(first, newEnd)};
+        entries.splice(position + 1); entries.push({...snapshot(nativeInput), patch}); position++; currentText = text;
+        if (entries.length > 200) { entries.shift(); entries[0].patch = null; position--; }
         update();
     }
     function travel(delta) {
         const target = position + delta; if (target < 0 || target >= entries.length) return;
-        before(); position = target; const state = entries[position]; restoring = true;
+        before();
+        const patch = entries[delta < 0 ? position : target].patch;
+        const remove = delta < 0 ? patch.inserted : patch.removed;
+        const insert = delta < 0 ? patch.removed : patch.inserted;
+        currentText = currentText.slice(0, patch.start) + insert + currentText.slice(patch.start + remove.length);
+        position = target; const state = entries[position]; restoring = true;
         try {
-            editor.value = state.text; editor.focus({preventScroll: true}); editor.setSelectionRange(state.start, state.end, state.direction);
+            editor.value = currentText; editor.focus({preventScroll: true}); editor.setSelectionRange(state.start, state.end, state.direction);
             editor.dispatchEvent(new Event('input', {bubbles: true}));
             editorSelections = state.ranges.map(range => ({...range})); selectionBase = []; activeSelection = selectionKey(); drawEditorSelections();
             editor.scrollTop = state.top; editor.scrollLeft = state.left;

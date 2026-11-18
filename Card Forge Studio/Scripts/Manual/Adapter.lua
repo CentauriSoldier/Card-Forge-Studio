@@ -252,7 +252,7 @@ function Adapter.create(dParent, pManual, tOptions)
 		local tSettings = {revision = nOptionsRevision,
 			lineNumbers = INIFile.GetValue(FS.AppCFG, "ManualEditor", "LineNumbers") == "1",
             appearanceCSS = require("Manual.Appearance").css(pManual, ".manual-appearance", fileURL(pManual):gsub("/$", "").."/Images/")};
-		sOptionsScript = "\ndocument.dispatchEvent(new CustomEvent('manual-editor-options', {detail:"..JSON.encode(tSettings).."}));";
+		sOptionsScript = "\nif ((window.cfsManualOptionsRevision || 0) < "..nOptionsRevision..") { window.cfsManualOptionsRevision = "..nOptionsRevision.."; document.dispatchEvent(new CustomEvent('manual-editor-options', {detail:"..JSON.encode(tSettings).."})); }";
 		publishReply();
 	end
 

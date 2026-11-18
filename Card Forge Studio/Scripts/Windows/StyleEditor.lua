@@ -18,6 +18,7 @@
 local wx = require("wx");
 local INI = require("Plugins.INI");
 local FontStyle = CFS.FontStyle;
+local StyleAliases = require("StyleAliases");
 local WindowState = require("Windows.WindowState");
 local StyleEditor = {};
 WindowState.register("StyleEditor", {savePosition = true, saveSize = true, saveVisible = false,});
@@ -60,7 +61,7 @@ local _tPotFields = {
 -- Related settings share compact boxes; the field list remains authoritative.
 local _tFieldBoxes = {
     Font = {
-        Family = "Typeface", Size = "Typeface", LetterSpacing = "Typeface",
+        Aliases = "Names", Family = "Typeface", Size = "Typeface", LetterSpacing = "Typeface",
         Bold = "Formatting", Italic = "Formatting", Underline = "Formatting", StrikeOut = "Formatting", HQ = "Formatting",
         Color = "Text color",
     },
@@ -87,7 +88,7 @@ local _tFieldBoxes = {
 };
 
 local tGroups = {
-    {"Font", {{"Family", "Font family", "text", "Times New Roman"}, {"Size", "Size", "number", "12", 1, 300}, {"Color", "Text color", "color", "0,0,0,255"}, {"Bold", "Bold", "boolean", "false"}, {"Italic", "Italic", "boolean", "false"}, {"Underline", "Underline", "boolean", "false"}, {"StrikeOut", "Strikeout", "boolean", "false"}, {"HQ", "High quality", "boolean", "true"}, {"LetterSpacing", "Letter spacing", "number", "0", 0, 100},}},
+    {"Font", {{"Aliases", "Aliases (comma-separated)", "text", ""}, {"Family", "Font family", "text", "Times New Roman"}, {"Size", "Size", "number", "12", 1, 300}, {"Color", "Text color", "color", "0,0,0,255"}, {"Bold", "Bold", "boolean", "false"}, {"Italic", "Italic", "boolean", "false"}, {"Underline", "Underline", "boolean", "false"}, {"StrikeOut", "Strikeout", "boolean", "false"}, {"HQ", "High quality", "boolean", "true"}, {"LetterSpacing", "Letter spacing", "number", "0", 0, 100},}},
     {"Gradient", {{"GradientEnabled", "Enabled", "boolean", "false"}, {"GradientDirection", "Direction", "choice", "Vertical", {"Vertical", "Horizontal"}}, {"GradientStops", "Color stops", "stops", "0:#EAF6FF; 0.45:#95BBD0; 0.5:#D7EEFA; 1:#52778E"},}},
     {"Bevel / Emboss", {{"BevelEnabled", "Enabled", "boolean", "false"}, {"BevelMode", "Mode", "choice", "Raised", {"Raised", "Inset", "Emboss", "Stamp"}}, {"BevelProfile", "Profile", "choice", "Chamfer", {"Chamfer", "Round", "Sharp"}}, {"BevelWidth", "Bevel width (pixels)", "number", "2", 1, 16}, {"BevelDepth", "Relief depth (pixels)", "number", "2", 1, 16}, {"BevelSoftness", "Edge softness (pixels)", "number", "1", 0, 8}, {"BevelEdgeTop", "Top-facing edges", "boolean", "true"}, {"BevelEdgeBottom", "Bottom-facing edges", "boolean", "true"}, {"BevelEdgeLeft", "Left-facing edges", "boolean", "true"}, {"BevelEdgeRight", "Right-facing edges", "boolean", "true"}, {"BevelLightAngle", "Light direction (0 right, 90 up)", "number", "135", 0, 359}, {"BevelLightElevation", "Light elevation (degrees)", "number", "45", 0, 90}, {"BevelHighlightColor", "Highlight color", "color", "255,255,255,255"}, {"BevelShadowColor", "Shadow color", "color", "16,24,32,255"}, {"BevelHighlightStrength", "Highlight strength (0–255)", "number", "180", 0, 255}, {"BevelShadowStrength", "Shadow strength (0–255)", "number", "180", 0, 255}, {"BevelSpecularStrength", "Specular strength (0–255)", "number", "80", 0, 255}, {"BevelSpecularPower", "Specular sharpness", "number", "16", 1, 128}, {"BevelOpacity", "Overall strength (0–255)", "number", "220", 0, 255},}},
     {"Wear", {{"WearEnabled", "Enabled", "boolean", "false"}, {"WearPattern", "Pattern", "choice", "Scratches", {"Scratches", "Chips", "Mixed"}}, {"WearChipSizeMin", "Minimum chip size (% of font height)", "number", "3", 1, 20}, {"WearChipSizeMax", "Maximum chip size (% of font height)", "number", "9", 1, 20}, {"WearChipRoughness", "Chip edge roughness (0–100)", "number", "65", 0, 100}, {"WearDensity", "Density (0–100)", "number", "18", 0, 100}, {"WearLengthMin", "Minimum length (% of font height)", "number", "8", 1, 200}, {"WearLengthMax", "Maximum length (% of font height)", "number", "45", 1, 200}, {"WearWidth", "Scratch thickness (pixels)", "number", "1", 1, 8}, {"WearAngle", "Scratch angle (degrees)", "number", "-15", -180, 180}, {"WearAngleSpread", "Angle variation (± degrees)", "number", "25", 0, 180}, {"WearOpacity", "Strength (0–255)", "number", "100", 0, 255}, {"WearColor", "Scratch color", "color", "48,42,32,255"}, {"WearHighlightEnabled", "Highlight enabled", "boolean", "true"}, {"WearHighlightColor", "Highlight color", "color", "255,244,203,255"}, {"WearHighlightOffset", "Highlight offset (pixels)", "number", "1", 0, 8}, {"WearSeed", "Pattern seed", "number", "1", 0, 2147483646},}},
@@ -174,6 +175,10 @@ function StyleEditor.model(pFile)
             local bEntry, sKey, nEntry = oConfig:GetFirstEntry();
             while (bEntry) do
                 local bFound, sValue = oConfig:Read(sKey, "");
+                if (sKey:lower() == "aliases") then
+                    assert(tModel.sections[sName].Aliases == nil, "Duplicate Aliases field in "..sName);
+                    sKey = "Aliases";
+                end
                 tModel.sections[sName][sKey] = bFound and sValue or "";
                 bEntry, sKey, nEntry = oConfig:GetNextEntry(nEntry);
             end
@@ -185,6 +190,21 @@ function StyleEditor.model(pFile)
     table.sort(tModel.names);
     local tChanged, tRemoved = {}, {};
     --[[!
+    @fqxn CFS.Windows.StyleEditor.Model.aliases
+    @desc Validates the draft alias namespace against canonical names and returns its lookup map without modifying the draft.
+    @return table tAliases Uppercase aliases mapped to canonical names.
+    !]]
+    function tModel.aliases()
+        local tNames = {};
+        for sName in pairs(tModel.sections) do tNames[#tNames + 1] = sName; end
+        return StyleAliases.build(tNames, function(sName)
+            for sKey, sValue in pairs(tModel.sections[sName]) do
+                if (sKey:lower() == "aliases") then return sValue; end
+            end
+            return "";
+        end);
+    end
+    --[[!
     @fqxn CFS.Windows.StyleEditor.Model.resolve
     @desc Resolves a style value through its inheritance chain.
     @param any sName Name.
@@ -192,6 +212,7 @@ function StyleEditor.model(pFile)
     @vis public
     !]]
     function tModel.resolve(sName, sKey)
+        if (sKey == "Aliases") then return (tModel.sections[sName] or {}).Aliases or ""; end
         local tSeen = {};
         while (true) do
             assert(not tSeen[sName], "Inheritance cycle for "..sKey..".");
@@ -212,6 +233,7 @@ function StyleEditor.model(pFile)
     @vis public
     !]]
     function tModel.validate(sName, sKey)
+        if (sKey == "Aliases") then tModel.aliases(); return; end
         local tField = tFields[sKey];
         local sValue = tModel.resolve(sName, sKey);
         if (sKey:match("^Bevel")) then
@@ -261,7 +283,8 @@ function StyleEditor.model(pFile)
         local sOld = tModel.sections[sName][sKey];
         tModel.sections[sName][sKey] = sValue;
         local bOK, sError = pcall(function()
-            for _, sSection in ipairs(tModel.names) do tModel.validate(sSection, sKey); end
+            if (sKey == "Aliases") then tModel.aliases();
+            else for _, sSection in ipairs(tModel.names) do tModel.validate(sSection, sKey); end end
         end);
         if (not bOK) then tModel.sections[sName][sKey] = sOld; error(sError, 0); end
         if (sOld ~= sValue) then
@@ -282,6 +305,7 @@ function StyleEditor.model(pFile)
         for sExisting in pairs(tModel.sections) do
             assert(sExisting:upper() ~= sName, "That style name already exists.");
         end
+        assert(not tModel.aliases()[sName], "That name is already a style alias.");
         return sName;
     end
     --[[!
@@ -310,7 +334,9 @@ function StyleEditor.model(pFile)
         assert(not sSource or tModel.sections[sSource], "Source style does not exist.");
         local tValues = {};
         if (sSource) then
-            for sKey, sValue in pairs(tModel.sections[sSource]) do tValues[sKey] = sValue; end
+            for sKey, sValue in pairs(tModel.sections[sSource]) do
+                if (sKey:lower() ~= "aliases") then tValues[sKey] = sValue; end
+            end
         else
             for sKey, tField in pairs(tFields) do tValues[sKey] = tField[4]; end
         end
@@ -406,6 +432,7 @@ function StyleEditor.model(pFile)
     @vis public
     !]]
     function tModel.exportText(tSelected, sMode)
+        tModel.aliases();
         assert(#tSelected > 0, "Select at least one style.");
         local tIncluded, tMissing, tLines = {}, {}, {};
         for _, sName in ipairs(tSelected) do
@@ -476,6 +503,7 @@ function StyleEditor.model(pFile)
             assert(bReplace or not tModel.sections[sName], "Style already exists: "..sName);
             tCandidate.sections[sName] = tIncoming.sections[sName];
         end
+        tCandidate.aliases();
         for sName, tValues in pairs(tCandidate.sections) do
             for sKey, sValue in pairs(tValues) do
                 local sSource = sValue:match("^%s*<%s*(.-)%s*>%s*$");
@@ -532,8 +560,9 @@ function StyleEditor.model(pFile)
     function tModel.save()
         if (not tModel.dirty) then return true; end
         assert(readFile(pFile) == tModel.original, "Styles changed outside this editor. Close and reopen it before saving.");
+        tModel.aliases();
         for _, sName in ipairs(tModel.names) do
-            for sKey in pairs(tFields) do tModel.validate(sName, sKey); end
+            for sKey in pairs(tFields) do if (sKey ~= "Aliases") then tModel.validate(sName, sKey); end end
         end
         local oStage = wx.wxFile();
         local pStage = wx.wxFileName.CreateTempFileName(pFile..".draft-", oStage);
@@ -545,7 +574,10 @@ function StyleEditor.model(pFile)
             assert(wx.wxCopyFile(pFile, pStage, true), "Could not stage the styles file.");
             for sName in pairs(tRemoved) do INI.DeleteSection(pStage, sName); end
             for sName, tValues in pairs(tChanged) do
-                for sKey, sValue in pairs(tValues) do INI.SetValue(pStage, sName, sKey, sValue); end
+                for sKey, sValue in pairs(tValues) do
+                    if (sKey == "Aliases") then INI.SetValue(pStage, sName, sKey, sValue, false, false);
+                    else INI.SetValue(pStage, sName, sKey, sValue); end
+                end
             end
             assert(readFile(pFile) == tModel.original, "Styles changed while saving. Original file preserved.");
             local oRecovery = wx.wxFile();
@@ -1275,7 +1307,10 @@ function StyleEditor.create(dParent, pFile, tOptions)
             oLabel:Wrap(160);
             oField:Add(oLabel, 0, wx.wxBOTTOM, 2);
             oField:Add(oColorLayout or oCell, 0, wx.wxEXPAND);
-            oField:Add(oLink, 0, wx.wxEXPAND + wx.wxTOP, 3);
+            if (sKey == "Aliases") then
+                oLink:Hide();
+                oInput:SetToolTip("Optional short names for this style, separated by commas. Names must be unique across the sheet. Aliases are not inherited or copied when duplicating a style.");
+            else oField:Add(oLink, 0, wx.wxEXPAND + wx.wxTOP, 3); end
             tBoxes[sBox].fields:Add(oField, 1, wx.wxEXPAND);
             tControls[sKey] = {
                 input = oInput, alpha = oAlpha, link = oLink, field = tField,
@@ -1586,7 +1621,16 @@ function StyleEditor.create(dParent, pFile, tOptions)
         if (nAnswer == wx.wxYES) then save(); return true; end
         return nAnswer == wx.wxNO;
     end
-    oUpperNames:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, protect(refreshNames));
+    oUpperNames:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, protect(function()
+        -- Display-only change: retain the list, draft fields and preview.
+        local bUpper = oUpperNames:GetValue();
+        local nSelected = oList:GetSelection();
+        for nIndex, sName in ipairs(tModel.names) do
+            local sLabel = bUpper and sName:upper() or sName;
+            if (oList:GetString(nIndex - 1) ~= sLabel) then oList:SetString(nIndex - 1, sLabel); end
+        end
+        if (oList:GetSelection() ~= nSelected) then oList:SetSelection(nSelected); end
+    end));
     oList:SetSelection(0);
     oList:Connect(wx.wxEVT_COMMAND_LISTBOX_SELECTED, protect(function() assert(not next(tInvalid), "Correct the invalid field before selecting another style."); sSelected = assert(tModel.names[oList:GetSelection() + 1]); refresh(); end));
     oSample:Connect(wx.wxEVT_COMMAND_TEXT_UPDATED, protect(function() for _, dCanvas in ipairs(tSamples) do dCanvas:Refresh(false); end end));

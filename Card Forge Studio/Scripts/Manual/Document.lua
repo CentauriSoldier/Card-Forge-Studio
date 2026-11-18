@@ -70,7 +70,7 @@ function Document.build(tData, sKind, tSettings)
 	local fNested;
 	local tHead		= {'<!doctype html><html lang="en" data-bs-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'..sTitle..'</title>'};
 	for _, sCSS in ipairs({tData.gameCSS}) do
-		for sName in sCSS:gmatch("%.font%-([A-Za-z_][A-Za-z0-9_-]*)%s*[%[{]") do tStyles[sName:lower()] = true; end
+		for sName, sCanonical in pairs(require("Manual.FontCSS").lookup(sCSS)) do tStyles[sName] = sCanonical; end
 	end
 	for _, tChapter in ipairs(tData.chapters) do tFiles[tChapter.name] = true; end
 	for nIndex, tSection in ipairs(tSections) do
@@ -200,7 +200,7 @@ function Document.preflight(tData, fAsset, tIssues)
         else tIDs[sID] = sSection; end
     end
     for _, sCSS in ipairs({tData.gameCSS}) do
-        for sName in sCSS:gmatch("%.font%-([A-Za-z_][A-Za-z0-9_-]*)%s*[%[{]") do tStyles[sName:lower()] = true; end
+        for sName, sCanonical in pairs(require("Manual.FontCSS").lookup(sCSS)) do tStyles[sName] = sCanonical; end
     end
     for _, tChapter in ipairs(tData.chapters) do tFiles[tChapter.name] = true; end
     local bOK, tSections = pcall(Document.sections, tData);

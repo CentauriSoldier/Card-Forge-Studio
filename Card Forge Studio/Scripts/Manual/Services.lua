@@ -84,9 +84,12 @@ function Services.create(tContext)
 	--[[!
 	@fqxn CFS.Manual.Services.Instance.snapshot
 	@desc Reads current chapters, order, glossary configuration and generated game styles. Generated game CSS is optional for a newly created game. Copies values into a transport object rather than exposing service version storage.
-	@return table tSnapshot Bound context and logical files.
+	@param boolean|nil bDelta Return changed versions and removed paths after a save. All source bytes are still checked for external edits.
+	@return table tSnapshot Bound context and logical files, or a save delta.
 	!]]
-	function tService.snapshot()
+	function tService.snapshot(bDelta)
+        local tPrevious = {};
+        if (bDelta) then for sName, tRecord in pairs(tVersions) do tPrevious[sName] = tRecord.version; end end
 		local tFiles	= {};
 		local tNames	= Documents.list(tContext.manualRoot);
 		if (CFS and CFS.FontStyle) then fGenerateFonts(); end
@@ -94,14 +97,25 @@ function Services.create(tContext)
 		for sRelative in pairs(tFixed) do
 			if (wx.wxFileExists(fPath(sRelative))) then tFiles[sRelative] = fRead(sRelative); end
 		end
-		return {appearanceCSS = require("Manual.Appearance").css(tContext.manualRoot, ".manual-appearance", tContext.manualURL:gsub("/$", "").."/Images/"), context = tContext, files = tFiles, fontCurrent = tService.fontSignature ~= nil, fontWarnings = tService.fontWarnings or {}};
+        local sAppearance = require("Manual.Appearance").css(tContext.manualRoot, ".manual-appearance", tContext.manualURL:gsub("/$", "").."/Images/", nil, tService.fontCSS);
+        local tSnapshot = {appearanceCSS = sAppearance, context = tContext, files = tFiles, fontCurrent = tService.fontSignature ~= nil, fontWarnings = tService.fontWarnings or {}};
+        if (bDelta) then
+            tSnapshot.context = nil; tSnapshot.removed = {};
+            for sName in pairs(tPrevious) do
+                if (not tFiles[sName]) then tSnapshot.removed[#tSnapshot.removed + 1] = sName; tVersions[sName] = nil; end
+            end
+            for sName, tRecord in pairs(tFiles) do if (tPrevious[sName] == tRecord.version) then tFiles[sName] = nil; end end
+            if (tService.appearanceCSS == sAppearance) then tSnapshot.appearanceCSS = nil; end
+        end
+        tService.appearanceCSS = sAppearance;
+        return tSnapshot;
 	end
 
 	--[[!
 	@fqxn CFS.Manual.Services.Instance.request
 	@desc Dispatches supported filesystem operations. Batch writes validate every version and original before the first mutation, then roll back completed writes if a later write fails. File-management requests also update order through Documents.change. Unsupported operations report errors rather than claiming success.
 	@param table tRequest Action with operation-specific fields.
-	@return table tResult Action result and refreshed snapshot.
+	@return table tResult Action result with a full snapshot for navigation or changed records for a successful write batch.
 	!]]
 	function tService.request(tRequest)
 		local sAction	= tRequest.action;
@@ -154,7 +168,7 @@ function Services.create(tContext)
 			end
 			error(sError, 2);
 		end
-		return {ok = true, snapshot = tService.snapshot()};
+		return {ok = true, delta = tService.snapshot(true)};
 	end
 	return tService;
 end

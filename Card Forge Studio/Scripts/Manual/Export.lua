@@ -108,12 +108,6 @@ function Export.read(tContext)
 	end;
 	for _, sName in ipairs(tNames) do tData.chapters[#tData.chapters + 1] = {name = sName, text = fRead("Content/"..sName)}; end
 	tData.gameCSS = fRead("Styles/font-styles.css");
-    if (tContext.kind == "web") then
-        local Appearance = require("Manual.Appearance");
-        local tAppearance = Appearance.load(tContext.manualRoot);
-        fRead("Config/Appearance.lua"); fRead(tAppearance.BaseCSS);
-        tData.appearanceCSS = Appearance.css(tContext.manualRoot, ".manual-appearance", "../content-images/", tAppearance);
-    end
 	tData.alternatives = assert(JSON.decode(fRead("Config/glossary-alternatives.json")));
 	tData.glossarySettings = assert(JSON.decode(fRead("Config/glossary-settings.json")));
 	if (CFS and CFS.FontStyle) then
@@ -122,6 +116,12 @@ function Export.read(tContext)
         tData.stylesSource = Documents.read(tContext.gameRoot.."/Styles.ini");
         tData.gameCSS = require("Manual.FontCSS").generate(tContext.gameRoot, tData.gameCSS);
         assert(Documents.read(tContext.gameRoot.."/Styles.ini") == tData.stylesSource, "Styles.ini changed while preparing export.");
+    end
+    if (tContext.kind == "web") then
+        local Appearance = require("Manual.Appearance");
+        local tAppearance = Appearance.load(tContext.manualRoot);
+        fRead("Config/Appearance.lua"); fRead(tAppearance.BaseCSS);
+        tData.appearanceCSS = Appearance.css(tContext.manualRoot, ".manual-appearance", "../content-images/", tAppearance, tData.gameCSS);
     end
 	if (tContext.kind == "web" and tContext.onProgress) then tContext.onProgress("preparing", "Checking that saved sources have not changed."); end
 	for sName, sText in pairs(tOriginals) do

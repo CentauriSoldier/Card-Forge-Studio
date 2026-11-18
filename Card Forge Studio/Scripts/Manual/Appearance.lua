@@ -129,10 +129,21 @@ function Appearance.save(pManual, tSettings, sOriginal)
     local sSource = '-- Manual-specific appearance; named game text styles are referenced, never modified.\nreturn '..Serializer.serialize(tSettings)..';\n';
     return Documents.save(pManual..'/Config/Appearance.lua', sOriginal, sSource);
 end
+local tFontCache;
+local function fontCSS(pManual)
+    local sINI = Documents.read(pManual..'/../Styles.ini');
+    local sCFG = Documents.read(pManual..'/../Scripts/CFG.lua');
+    local sPrevious = Documents.read(pManual..'/Styles/font-styles.css');
+    if (tFontCache and tFontCache.root == pManual and tFontCache.ini == sINI and tFontCache.cfg == sCFG and tFontCache.previous == sPrevious) then return tFontCache.css; end
+    local sCSS = require('Manual.FontCSS').generate(pManual..'/..', sPrevious);
+    assert(Documents.read(pManual..'/../Styles.ini') == sINI and Documents.read(pManual..'/../Scripts/CFG.lua') == sCFG, 'Game styles changed while preparing manual appearance.');
+    tFontCache = {root = pManual, ini = sINI, cfg = sCFG, previous = sPrevious, css = sCSS};
+    return sCSS;
+end
 function Appearance.styleNames(pManual)
     local tSeen, tNames = {}, {};
     for _, sFile in ipairs({'font-styles.css'}) do
-        local sCSS = require('Manual.FontCSS').generate(pManual..'/..', Documents.read(pManual..'/Styles/'..sFile));
+        local sCSS = fontCSS(pManual);
         for sName in sCSS:gmatch('%.font%-([%w_-]+)%s*{') do
             if (not tSeen[sName]) then tSeen[sName] = true; tNames[#tNames + 1] = sName; end
         end
@@ -162,7 +173,7 @@ local function scopeCSS(sCSS, sScope)
     end
     return table.concat(tOutput, '\n');
 end
-function Appearance.css(pManual, sScope, sImages, tSettings)
+function Appearance.css(pManual, sScope, sImages, tSettings, sFontCSS)
     tSettings = tSettings or Appearance.load(pManual);
     Appearance.validate(tSettings);
     local sBase = Documents.read(pManual..'/'..relative(tSettings.BaseCSS));
@@ -170,9 +181,12 @@ function Appearance.css(pManual, sScope, sImages, tSettings)
     local tCSS = {scopeCSS(sBase, sScope)};
     local tStyles = {};
     for _, sFile in ipairs({'font-styles.css'}) do
-        local sCSS = require('Manual.FontCSS').generate(pManual..'/..', Documents.read(pManual..'/Styles/'..sFile));
+        local sCSS = sFontCSS or fontCSS(pManual);
         for sName, sBody in sCSS:gmatch('%.font%-([%w_-]+)%s*{([^{}]*)}') do
             tStyles[sName:lower()] = (tStyles[sName:lower()] or '')..sBody;
+        end
+        for sAlias, sName in pairs(require('Manual.FontCSS').lookup(sCSS)) do
+            if (sAlias ~= sName) then tStyles[sAlias] = tStyles[sName]; end
         end
     end
     local function image(sPath)

@@ -84,14 +84,28 @@
 		const item = active; active = null;
 		clearTimeout(item.timeout);
 		document.title = 'Manual Editor';
-		try { const result = JSON.parse(json); if (!result.ok) throw new Error(result.message || 'Studio operation failed.'); if (result.snapshot) snapshot = result.snapshot; item.resolve(result); }
+		try { const result = JSON.parse(json); if (!result.ok) throw new Error(result.message || 'Studio operation failed.'); if (result.snapshot) snapshot = result.snapshot;
+            if (result.delta) {
+                const {files, removed, ...metadata} = result.delta;
+                const merged = {...snapshot.files, ...files};
+                for (const path of removed || []) delete merged[path];
+                snapshot = {...snapshot, ...metadata, files: merged};
+            }
+            item.resolve(result); }
 		catch (error) { item.reject(error); }
 		setTimeout(pump, 0);
 	}
 	/** Writes one validated batch against the snapshot versions held by Lua. */
 	async function write(files) { return request({action: 'write-batch', files: Object.entries(files).map(([path, text]) => ({path, text, version: record(path).version}))}); }
 	/** Reports current editor draft flags to the native close handler. */
-	function reportDirty() { request({action: 'draft-state', dirty: !!dirtyReader() || settingsDrafts.size > 0}).catch(() => {}); }
+	let lastDirty;
+	let dirtyTicket = 0;
+	function reportDirty() {
+		const dirty = !!dirtyReader() || settingsDrafts.size > 0;
+		if (dirty === lastDirty) return;
+		lastDirty = dirty; const ticket = ++dirtyTicket;
+		request({action: 'draft-state', dirty}).catch(() => { if (ticket === dirtyTicket) lastDirty = undefined; });
+	}
 	/** Includes pending or failed settings saves in Studio's close protection. */
 	function setSettingsDirty(name, dirty) { if (dirty) settingsDrafts.add(name); else settingsDrafts.delete(name); reportDirty(); }
 	/** Opens a chapter through the host so it rebuilds the original template. */
@@ -157,9 +171,20 @@
 	}
 	/** Reassembles the glossary in alphabetical order while preserving stable entry IDs. */
 	function composeGlossary(parts) { const blocks = Object.values(parts.entries).sort((a,b) => a.title.localeCompare(b.title,undefined,{sensitivity:'base',numeric:true})); return (parts.prefix.replace(/\r\n/g,'\n').replace(/\n+$/,'')+'\n\n'+blocks.map(entry => entry.header.replace(/\r\n/g,'\n').trimEnd()+'\n\n'+entry.markdown.replace(/\r\n/g,'\n').replace(/^\n+|\n+$/g,'')+'\n\n').join('')).replace(/\n/g,parts.newline); }
+    let previewGlossarySnapshot, previewGlossary;
+    function glossaryForPreview() {
+        if (previewGlossarySnapshot !== snapshot) {
+            const state = glossaryState();
+            previewGlossary = {state, index: validateGlossary(state.entries, state.alternatives)};
+            previewGlossarySnapshot = snapshot;
+        }
+        return previewGlossary;
+    }
 	/** Renders safe Markdown plus the existing style/glossary wrappers, including rich definitions. */
 	function render(source, linkGlossary = true) {
-		const namedStyles = new Set(styleNames().map(name => name.toLowerCase()));
+		const aliases = new Map();
+		for (const match of (snapshot.files['Styles/font-styles.css']?.text || '').matchAll(/\/\*\s*alias:\s*([\w-]+)\s*=\s*([\w-]+)\s*\*\//g)) aliases.set(match[1].toLowerCase(), match[2].toLowerCase());
+		const namedStyles = new Set([...styleNames().map(name => name.toLowerCase()), ...aliases.keys()]);
 		const styles = new Set([...namedStyles, 'g', 'sup']);
 		const marker = 'CFSSTYLE'+Math.random().toString(36).slice(2)+'TOKEN';
 		const tags = [];
@@ -173,16 +198,21 @@
 		html=html.replace(/<pre\b[\s\S]*?<\/pre>|<code\b[\s\S]*?<\/code>/g, code => marker+'CODE'+(protectedCode.push(code)-1)+'END');
 		let glossary = null;
 		let index = null;
-		if (linkGlossary) { try { glossary=glossaryState(); index=validateGlossary(glossary.entries,glossary.alternatives); } catch (_) { /* Missing glossary must not prevent ordinary Markdown preview. */ } }
+        const definitions = new Map();
+		if (linkGlossary) { try { const cached = glossaryForPreview(); glossary=cached.state; index=cached.index; } catch (_) { /* Missing glossary must not prevent ordinary Markdown preview. */ } }
 		for (let pass=0;pass<20;pass++) {
 			let replaced=false;
 			html=html.replace(/&lt;(:?)([A-Za-z_][A-Za-z0-9_-]*)&gt;((?:(?!&lt;\/?:?[A-Za-z_][A-Za-z0-9_-]*&gt;)[\s\S])*?)&lt;\/\1\2&gt;/gi,(whole,prefix,name,inside) => {
-				const key=name.toLowerCase(); if (!(prefix ? namedStyles : styles).has(key)) return whole; replaced=true;
-				const styled=!prefix&&key==='sup'?'<sup>'+inside+'</sup>':!prefix&&key==='g'?inside:'<span class="font-'+key+'" data-font-style="'+escape(name)+'" data-inline>'+inside+'</span>';
-				if (!index || (prefix && key === 'g') || !['g','keyword','manualkeyword'].includes(key) || inside.includes('data-glossary-title')) return styled;
+				const tag=name.toLowerCase(); if (!(prefix ? namedStyles : styles).has(tag)) return whole; replaced=true;
+				const builtin=!prefix && ['g','sup'].includes(tag);
+				const key=builtin ? tag : (aliases.get(tag) || tag);
+				const styled=builtin&&tag==='sup'?'<sup>'+inside+'</sup>':builtin&&tag==='g'?inside:'<span class="font-'+key+'" data-font-style="'+escape(key)+'" data-inline>'+inside+'</span>';
+				if (!index || !((builtin && tag === 'g') || (!builtin && key === 'keyword')) || inside.includes('data-glossary-title')) return styled;
 				const node=document.createElement('div');node.innerHTML=inside;const id=index.get(node.textContent.toLowerCase());if(!id)return styled;
-				const entry=glossary.entries[id];const definition=render(entry.markdown,false);
-				return '<a class="glossary-link" href="#'+escape(id)+'" data-glossary-title="'+escape(entry.title)+'" data-glossary-definition="'+escape(plain(entry.markdown))+'" data-glossary-html="'+escape(definition)+'" data-glossary-delay="'+glossary.hover_delay_ms+'">'+styled+'</a>';
+				const entry=glossary.entries[id];
+                if (!definitions.has(id)) definitions.set(id, {html: render(entry.markdown,false), plain: plain(entry.markdown)});
+                const definition=definitions.get(id);
+				return '<a class="glossary-link" href="#'+escape(id)+'" data-glossary-title="'+escape(entry.title)+'" data-glossary-definition="'+escape(definition.plain)+'" data-glossary-html="'+escape(definition.html)+'" data-glossary-delay="'+glossary.hover_delay_ms+'">'+styled+'</a>';
 			});
 			if(!replaced)break;
 		}

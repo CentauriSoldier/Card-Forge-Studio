@@ -23,8 +23,12 @@ window.CFSManualAppearance = {
         container.querySelectorAll('table').forEach(table => table.classList.add('table'));
     }
 };
+let manualAppearanceRevision = 0;
 document.addEventListener('manual-editor-options', event => {
-    if (typeof event.detail?.appearanceCSS === 'string') document.getElementById('manual-appearance-styles').textContent = event.detail.appearanceCSS;
+    if (!event.detail || event.detail.revision <= manualAppearanceRevision) return;
+    manualAppearanceRevision = event.detail.revision;
+    const style = document.getElementById('manual-appearance-styles');
+    if (typeof event.detail.appearanceCSS === 'string' && style.textContent !== event.detail.appearanceCSS) style.textContent = event.detail.appearanceCSS;
 });
 document.addEventListener('DOMContentLoaded', () => {
     const tools = document.querySelector('.markdown-tools');

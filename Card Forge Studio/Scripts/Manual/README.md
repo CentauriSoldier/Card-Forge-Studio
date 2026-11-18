@@ -161,10 +161,32 @@ The user authorized resuming the interrupted work in this chat. The earlier inte
 
 Options > Manual Editor edits Manual/Config/Appearance.lua. Blank appearance properties inherit Manual/Styles/Appearance Base.css; artwork stays under Manual/Images/Appearance. Appearance changes update the open preview on Apply. See Docs/Manual Appearance.md for fields and default assets.
 
-SP's six former manual-only tags are now ManualHardLimit, ManualKeyword, ManualNumber, ManualPhase, ManualTitle and ManualValueLimit in its Styles.ini. Content tags were migrated; ManualKeyword retains glossary linking. Native CFS definitions control font effects. Banner/quicksheet layout remains in the game appearance files. The native Style Editor and FontStyle framework were not modified for this migration.
+SP's six former manual-only styles are now ManualHardLimit, Keyword, ManualNumber, ManualPhase, ManualTitle and ManualValueLimit in Styles.ini. Keyword has alias K; manual content uses K and retains glossary linking. Native CFS definitions control font effects. Banner/quicksheet layout remains in the game appearance files.
 
 These appearance and style-migration changes received source/reference review only. No application or runtime tests were run; the user performs testing. Restart Studio to discard cached modules and regenerate the manual's game-font CSS. Existing published exports are replaced only on the next export.
 
 Explicit named-style syntax is `<:Name>text</:Name>`. It selects a CFS style even when the name matches a built-in tag: `<sup>` is superscript; `<:sup>` is the named style. Content and glossary style buttons use ordinary <Name> tags by default, adding the colon only for reserved names (sup and G). Built-in tags take precedence for those unprefixed names. Unknown explicit names still fail preflight; code examples remain literal.
 
 Web/js/Editing.js supplies content Undo/Redo (up to 200 states), clipboard buttons, Select all and literal Find/Replace. Typing and toolbar mutations share history; external source refresh resets it. Dirty status compares text with the last saved content. No runtime tests were run for these additions.
+
+## Manual performance changes (2026-11-18)
+
+- Options revisions dispatch once per editor page; unchanged appearance CSS is not reapplied by the reply poll.
+- Dirty-state messages are sent only on state transitions. A failed request permits a later retry; close protection remains native-owned.
+- Successful batch saves send changed record versions and deleted paths. The browser merges these before resolving the save promise. Full snapshots remain for navigation. Source rereads, byte-based conflict checks, staged writes, rollback and external-change detection remain in place.
+- Snapshots and exports pass their generated game CSS to appearance rendering. Options reuse one exact-source cache, invalidated by the manual path, Styles.ini, CFG.lua or prior generated CSS bytes.
+- Preview glossary state is reused until the authoritative snapshot changes. Repeated occurrences share one rendered definition within each preview.
+- Line numbers retain unchanged DOM rows. Edited rows are measured; width, font and wrapping-metric changes invalidate their measurements.
+- Undo stores reversible changed spans and selection/scroll metadata instead of a full document per state. The 200-state boundary and save-status comparison remain unchanged.
+
+Verification for this change was source/reference inspection and diff whitespace checks only. No app launch, runtime tests, benchmarks or measured speedup claims were made; user testing remains outstanding.
+
+## Native style aliases (2026-11-18)
+
+- Each Styles.ini section may define `Aliases=K,OtherName`. Aliases resolve case-insensitively to that section, without additional style objects or CSS declarations. Duplicate aliases and collisions with any style name are rejected.
+- Style Editor exposes Aliases under Font / Names. Draft editing, Save, import/export and create/rename validate ownership. Duplicate omits aliases; rename retains them. Alias metadata is not inherited. Property inheritance still names canonical sections.
+- Native `FontStyle.Get`, `Has`, `Parse`, and `STYLE[name]` accept aliases. `GetNames()` continues to list canonical styles only. Reader adapters without section enumeration retain their existing canonical-only contract.
+- Generated CSS carries alias metadata. Web preflight, Lua Markdown, browser preview and manual appearance resolve aliases to canonical classes. Reserved G/sup keep their built-in meanings unless escaped (`<:G>`, `<:sup>`). Aliases resolving to Keyword retain automatic glossary linking.
+- Skystrike: renamed ManualKeyword to Keyword without changing its formatting, added Aliases=K, and replaced 2,250 opening/closing tags across 22 manual Markdown files. Updated the saved generated CSS to match. No new K style was created.
+
+Verification: source inspection and diff whitespace checks only. No application launch or runtime tests; user verification remains outstanding.

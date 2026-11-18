@@ -100,10 +100,12 @@ function Markdown.render(sSource, tOptions)
 							nLevel = nLevel + (sSlash == "/" and -1 or 1);
 							if (nLevel == 0) then
 								local sInside	= fInline(sRest:sub(#sName + #sPrefix + 3, nStart - 1), nDepth + 1, bInLink);
-								local sKey		= sName:lower();
-								local sStyled	= sPrefix == "" and sKey == "sup" and "<sup>"..sInside.."</sup>" or sPrefix == "" and sKey == "g" and sInside or '<span class="font-'..sKey..'" data-font-style="'..sName..'" data-inline>'..sInside..'</span>';
+								local sTag = sName:lower();
+								local bBuiltin = sPrefix == "" and (sTag == "sup" or sTag == "g");
+								local sKey = not bBuiltin and type(tStyles[sTag]) == "string" and tStyles[sTag] or sTag;
+								local sStyled	= bBuiltin and sTag == "sup" and "<sup>"..sInside.."</sup>" or bBuiltin and sTag == "g" and sInside or '<span class="font-'..sKey..'" data-font-style="'..sKey..'" data-inline>'..sInside..'</span>';
 								local sPlain	= sInside:gsub("<[^>]*>", ""):gsub("&amp;", "&"):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&#39;", "'"):gsub("&quot;", '"');
-								local tEntry	= not bInLink and tOptions.glossary and ((sPrefix == "" and sKey == "g") or sKey == "keyword" or sKey == "manualkeyword") and tOptions.glossary[sPlain:lower()];
+								local tEntry	= not bInLink and tOptions.glossary and ((bBuiltin and sTag == "g") or (not bBuiltin and sKey == "keyword")) and tOptions.glossary[sPlain:lower()];
 								if (tEntry and not sInside:find("data-glossary-title", 1, true)) then
 									sStyled = '<a class="glossary-link" href="#'..Markdown.escape(tEntry.id)..'" data-glossary-title="'..Markdown.escape(tEntry.title)..'" data-glossary-definition="'..Markdown.escape(tEntry.plain)..'" data-glossary-html="'..Markdown.escape(tEntry.html)..'" data-glossary-delay="'..tostring(tOptions.delay or 0)..'">'..sStyled..'</a>';
 								end
