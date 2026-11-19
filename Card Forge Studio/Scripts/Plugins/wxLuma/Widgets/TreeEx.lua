@@ -8,7 +8,8 @@ local _Artwork   = require("wxLuma.Core.ControlArtwork");
 local _Checks    = require("wxLuma.Core.ControlChecks");
 local _Selection = require("wxLuma.Core.ControlSelection");
 local _finite    = require("wxLuma.Core.ControlNumeric").finite;
-local TreeEx     = {};
+local _Tree = require("wxLuma.Widgets.Tree");
+local TreeEx = {};
 
 --[[!
 @fqxn wxLuma.UI.TreeEx.create
@@ -22,6 +23,7 @@ local TreeEx     = {};
     node icon directly before its hierarchy label, independent of image columns.
     Optional Value
     (selected ID), Checkboxes, Checked (IDs), CheckPropagation (true), MultiSelect,
+    DragDrop (true),
     RowHeight (32), Indent
     (18), HierarchyColumn (1), Artwork (TreeEx), OnChange, OnActivate, OnCheckChange.
 @ret table oTree Standard surface/events, typed data, hierarchy and checkbox APIs.
@@ -29,6 +31,7 @@ local TreeEx     = {};
 function TreeEx.create(oParent, tOptions)
     tOptions = _Theme.options(tOptions, oParent);
     assert(tOptions and tOptions.Skin, "TreeEx requires Skin.");
+    assert(tOptions.DragDrop == nil or type(tOptions.DragDrop) == "boolean", "Invalid tree DragDrop.");
     assert(tOptions.Checkboxes == nil or type(tOptions.Checkboxes) == "boolean", "Invalid Checkboxes.");
     assert(tOptions.MultiSelect == nil or type(tOptions.MultiSelect) == "boolean", "Invalid MultiSelect.");
     assert(tOptions.CheckPropagation == nil or type(tOptions.CheckPropagation) == "boolean", "Invalid CheckPropagation.");
@@ -50,6 +53,7 @@ function TreeEx.create(oParent, tOptions)
     local tArt = _Artwork.create(tOptions.Skin, tOptions.Artwork or "TreeEx");
     local tLastSelected, sLastValue = {}, nil;
     local sPrefixId, sPrefixRole;
+    local tDrag;
     local bRebuilding = false;
     local bCheckSpaceDown = false;
 
@@ -437,6 +441,45 @@ function TreeEx.create(oParent, tOptions)
     end
 
     --[[!
+    @fqxn wxLuma.UI.TreeEx.moveNode
+    @desc Moves a subtree atomically while preserving selection and check IDs.
+    @param string sId Source node.
+    @param string|nil sParent Destination parent or nil for the root.
+    @param number|nil nIndex One-based destination after removal, or nil to append.
+    @param boolean|nil bNotify Emit itemMoved on a real change.
+    @ret table oTree This tree.
+    !]]
+    function oTree.moveNode(sId, sParent, nIndex, bNotify)
+        assert(not oTree.Disposed, "TreeEx is disposed.");
+        local tOld, tNew, nOldIndex, nNextIndex, sOldParent = _Tree.planMove(tNodes, tRoots, sId, sParent, nIndex);
+        if (tOld == tNew and nOldIndex == nNextIndex) then return oTree; end
+        local tCopy = oTree.getItems();
+        local tSource = sOldParent and fEdit(tCopy, sOldParent).Children or tCopy;
+        local tTarget = sParent and fEdit(tCopy, sParent).Children or tCopy;
+        table.insert(tTarget, nNextIndex, table.remove(tSource, nOldIndex));
+
+        -- Reveal the new ancestors if this move would hide a selected node.
+        for _, sSelected in ipairs(tLastSelected) do
+            local sNode = sSelected;
+            while (sNode and sNode ~= sId) do sNode = tNodes[sNode].Parent; end
+            if (sNode) then
+                local sAncestor = sParent;
+                while (sAncestor) do
+                    fEdit(tCopy, sAncestor).Expanded = true;
+                    sAncestor = tNodes[sAncestor].Parent;
+                end
+                break;
+            end
+        end
+        oTree.setItems(tCopy);
+        if (bNotify) then
+            tEvents.emit("itemMoved", {Id = sId, Parent = sParent, OldParent = sOldParent,
+                Index = nNextIndex, OldIndex = nOldIndex});
+        end
+        return oTree;
+    end
+
+    --[[!
     @fqxn wxLuma.UI.TreeEx.removeNode
     @desc Removes an entire subtree and prunes its selected/checked identities.
     @param string sId Existing node ID.
@@ -611,6 +654,8 @@ function TreeEx.create(oParent, tOptions)
     oRows.onCancel = function()
         sPrefixId, sPrefixRole = nil, nil;
         bCheckSpaceDown = false;
+        if (tDrag and tDrag.Drop and not oRows.Disposed) then oRows.refresh(); end
+        tDrag = nil;
         if (fRowsCancel) then
             fRowsCancel();
         end
@@ -647,6 +692,20 @@ function TreeEx.create(oParent, tOptions)
             tArt.image(oDC, tNode.Data.Image, nImageX, nY + (nHeight - nImageSize) / 2, nImageSize);
         end
         oClip:delete();
+
+        if (tDrag and tDrag.Drop and tDrag.Target == tNode.Id) then
+            local oColour = _Theme.colour(oTree.Skin, "Selection", 55, 130, 220);
+            local oPen = _wx.wxPen(oColour, 2, _wx.wxPENSTYLE_SOLID);
+            oDC:SetPen(oPen); oDC:SetBrush(_wx.wxTRANSPARENT_BRUSH);
+            if (tDrag.Drop.Role == "inside") then
+                oDC:DrawRectangle(nX + 1, nY + 1, nWidth - 2, nHeight - 2);
+            else
+                local nLineY = tDrag.Drop.Role == "before" and nY + 1 or nY + nHeight - 2;
+                oDC:DrawLine(nX, nLineY, nX + nWidth, nLineY);
+            end
+            oDC:SetPen(_wx.wxTRANSPARENT_PEN);
+            oPen:delete(); oColour:delete();
+        end
     end;
     oRows.pointer = function(sEvent, nX, nY, tModifiers)
         local nWidth = oRows.Control:GetClientSizeWH();
@@ -684,9 +743,52 @@ function TreeEx.create(oParent, tOptions)
             oRows.refresh();
             return;
         end
+        local bRow = tNode and oRows.Hover and nX >= 4 and nX < nWidth - 26 and nY >= 4
+            and nIndex < oRows.First + oRows.getVisibleCount();
+        if (tOptions.DragDrop ~= false and sEvent == "down" and bRow
+            and not (tModifiers and (tModifiers.Shift or tModifiers.Command))) then
+            tDrag = {Id = tNode.Id, X = nX, Y = nY};
+        end
+        if (tDrag and oRows.Pressed and (sEvent == "move" or sEvent == "leave" or sEvent == "up")) then
+            local bDragged = tDrag.Active or math.abs(nX - tDrag.X) >= 5 or math.abs(nY - tDrag.Y) >= 5;
+            if (bDragged) then
+                if (not tDrag.Active) then
+                    tDrag.Active = true;
+                    -- Regular row hover is a different cue from a valid drop.
+                    oRows.setHover(0);
+                    if (not tDrag or oRows.Disposed) then return; end
+                end
+                local sTarget = sEvent ~= "leave" and bRow and tNode.Id or nil;
+                local nFraction = ((nY - 4) % oRows.RowHeight) / oRows.RowHeight;
+                local tDrop = _Tree.dropDestination(tNodes, tRoots, tDrag.Id, sTarget, nFraction);
+                if (sEvent == "up") then
+                    local sSource = tDrag.Id;
+                    oRows.cancel();
+                    if (tDrop) then
+                        oTree.moveNode(sSource, tDrop.Parent, tDrop.Index, true);
+                        if (tDrop.Role == "inside" and not oTree.Disposed
+                            and tNodes[sSource] and tNodes[sSource].Parent == sTarget) then
+                            oTree.setExpanded(sTarget, true);
+                        end
+                    end
+                else
+                    local sOldRole = tDrag.Drop and tDrag.Drop.Role;
+                    local sNewRole = tDrop and tDrop.Role;
+                    if (tDrag.Target ~= sTarget or sOldRole ~= sNewRole) then
+                        tDrag.Target, tDrag.Drop = sTarget, tDrop;
+                        oRows.refresh();
+                    end
+                end
+                return;
+            end
+        end
         fRowsPointer(sEvent, nX, nY, tModifiers);
     end;
     oRows.key = function(nKey, tModifiers)
+        if (nKey == _wx.WXK_ESCAPE and tDrag) then
+            oRows.cancel();
+            return true;
+        end
         local nFocus = oRows.getFocusedIndex();
         local tNode = tVisible[nFocus > 0 and nFocus or oRows.getValue()];
         if (nKey == _wx.WXK_SPACE and oTree.isCheckboxesEnabled()
@@ -749,7 +851,7 @@ function TreeEx.create(oParent, tOptions)
     end);
     tEvents = _Events.attach(oTree, {oRows.Control}, {"itemsChanged", "itemAdded", "itemRemoved", "itemChanged",
         "cellChanged", "selectionChanged", "multiSelectChanged", "itemExpanded", "itemCollapsed", "itemActivated",
-        "checkChanged", "checkboxesChanged", "checkPropagationChanged", "itemHovered", "itemLeft"});
+        "checkChanged", "checkboxesChanged", "checkPropagationChanged", "itemHovered", "itemLeft", "itemMoved"});
 
     -- Row indices are transient; publish the stable node identity for audio
     -- subscriptions on the tree rather than requiring callers to inspect Rows.

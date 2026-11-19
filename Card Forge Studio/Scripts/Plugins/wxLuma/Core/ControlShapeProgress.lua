@@ -76,6 +76,16 @@ function ShapeProgress.create(oParent, tOptions, nShape, nMode)
     local tReservePlan, sBaseKey;
     local oWorkBitmap, oBaseBitmap, nBufferWidth, nBufferHeight;
     local nRevision = 0;
+    local tSkinBrushes, sBrushKey = {}, nil;
+
+    --[[!
+    @fqxn wxLuma.UI.ShapeProgress.releaseSkinBrushes
+    @desc Releases the owned stipple brushes before changing their size, appearance or theme.
+    !]]
+    local function fReleaseSkinBrushes()
+        for _, oBrush in pairs(tSkinBrushes) do oBrush:delete(); end
+        tSkinBrushes, sBrushKey = {}, nil;
+    end
 
     --[[!
     @fqxn wxLuma.UI.ShapeProgress.invalidate
@@ -228,10 +238,25 @@ function ShapeProgress.create(oParent, tOptions, nShape, nMode)
             local oMemory = _wx.wxMemoryDC(); oMemory:SelectObject(oWorkBitmap);
             oMemory:SetPen(_wx.wxTRANSPARENT_PEN);
             local tBrushes, tColors = {}, {};
+            if (sAppearance == "skin") then
+                local sNextBrushKey = table.concat({nW, nH, tostring(bEnabled)}, ":");
+                if (sBrushKey ~= sNextBrushKey) then
+                    fReleaseSkinBrushes();
+                    sBrushKey = sNextBrushKey;
+                end
+                tBrushes = tSkinBrushes;
+            elseif (sBrushKey) then
+                fReleaseSkinBrushes();
+            end
             for _, sPart in ipairs({"Track", "Fill", "Reserve"}) do
                 if (sPart ~= "Reserve" or tReserve.Reserved > 0) then
                     if (sAppearance == "skin") then
-                        tBrushes[sPart] = _wx.wxBrush(oComponent.Skin.getBitmap(sArtwork.." "..sPart..(bEnabled and " Normal" or " Disabled"), nW, nH));
+                        -- The brush owns a stipple reference. Other controls may replace
+                        -- the skin's borrowed bitmap with the same artwork at another size.
+                        if (not tBrushes[sPart]) then
+                            local sMaterial = sArtwork.." "..sPart..(bEnabled and " Normal" or " Disabled");
+                            tBrushes[sPart] = _wx.wxBrush(oComponent.Skin.getBitmap(sMaterial, nW, nH));
+                        end
                     else
                         local oColor;
                         if (sPart == "Fill" and bEnabled) then oColor = _wx.wxColour(oComponent.Colour.R, oComponent.Colour.G, oComponent.Colour.B);
@@ -265,7 +290,9 @@ function ShapeProgress.create(oParent, tOptions, nShape, nMode)
                 oPen:delete(); oColor:delete();
             end
             oMemory:SelectObject(_wx.wxNullBitmap); oMemory:delete();
-            for _, oBrush in pairs(tBrushes) do oBrush:delete(); end
+            if (sAppearance ~= "skin") then
+                for _, oBrush in pairs(tBrushes) do oBrush:delete(); end
+            end
             for _, oColor in ipairs(tColors) do oColor:delete(); end
             local oImage = oWorkBitmap:ConvertToImage(); local oScaled = oImage:Scale(nWidth, nHeight, _wx.wxIMAGE_QUALITY_HIGH);
             local oNext = _wx.wxBitmap(oScaled); oScaled:delete(); oImage:delete();
@@ -278,8 +305,12 @@ function ShapeProgress.create(oParent, tOptions, nShape, nMode)
         local oClip = _wx.wxDCClipper(oDC, _wx.wxRect(0, 0, nWidth, nHeight));
         oComponent.Skin.text(oDC, sDisplay, (nWidth - nW) / 2, (nHeight - nH) / 2, bEnabled); oClip:delete();
     end;
-    oComponent.onThemeChanged = fInvalidate;
+    oComponent.onThemeChanged = function()
+        fReleaseSkinBrushes();
+        fInvalidate();
+    end;
     oComponent.onDestroy = function()
+        fReleaseSkinBrushes();
         if (oRaster) then oRaster:delete(); oRaster = nil; end
         if (oWorkBitmap) then oWorkBitmap:delete(); oBaseBitmap:delete(); oWorkBitmap, oBaseBitmap = nil, nil; end
         tCachedGeometry, tReservePlan = nil, nil;

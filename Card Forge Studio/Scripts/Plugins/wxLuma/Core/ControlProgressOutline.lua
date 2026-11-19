@@ -39,16 +39,27 @@ function ControlProgressOutline.create(tOptions)
             or _Theme.colour(oSkin, bEnabled and "Border" or "DisabledText", 100, 110, 120);
         local nStroke = math.max(1, math.floor(nWidth * nScale + 0.5));
         nStroke = math.min(nStroke, math.max(1, math.floor(math.min(nW, nH) / 2)));
-        local oPen = _wx.wxPen(oColor, nStroke, _wx.wxPENSTYLE_SOLID);
-        oDC:SetPen(oPen); oDC:SetBrush(_wx.wxTRANSPARENT_BRUSH);
-        local nInset = nStroke / 2;
         if (bCircle) then
-            oDC:DrawCircle(nX + nW / 2, nY + nH / 2, math.max(0, nW / 2 - nInset));
+            local oPen = _wx.wxPen(oColor, nStroke, _wx.wxPENSTYLE_SOLID);
+            oDC:SetPen(oPen); oDC:SetBrush(_wx.wxTRANSPARENT_BRUSH);
+            oDC:DrawCircle(nX + nW / 2, nY + nH / 2, math.max(0, nW / 2 - nStroke / 2));
+            oPen:delete();
         else
-            oDC:DrawRectangle(nX + nInset, nY + nInset,
-                math.max(1, nW - nStroke), math.max(1, nH - nStroke));
+            -- Filled strips use the same pixel bounds as the track. A stroked
+            -- rectangle uses native endpoint rules that can leave an exposed row.
+            local oBrush = _wx.wxBrush(oColor);
+            oDC:SetPen(_wx.wxTRANSPARENT_PEN); oDC:SetBrush(oBrush);
+            oDC:DrawRectangle(nX, nY, nW, nStroke);
+            oDC:DrawRectangle(nX, nY + nH - nStroke, nW, nStroke);
+            local nSideHeight = nH - 2 * nStroke;
+            if (nSideHeight > 0) then
+                oDC:DrawRectangle(nX, nY + nStroke, nStroke, nSideHeight);
+                oDC:DrawRectangle(nX + nW - nStroke, nY + nStroke, nStroke, nSideHeight);
+            end
+            oDC:SetBrush(_wx.wxTRANSPARENT_BRUSH);
+            oBrush:delete();
         end
-        oPen:delete(); oColor:delete();
+        oColor:delete();
     end
 
     --[[!

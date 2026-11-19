@@ -26,8 +26,8 @@ end
     radial and angular fill. Iris remains a separate animated-blade object.</p>
 
     <p>This interface selects its painter at construction; it does not replace
-    every existing renderer with one implementation. Existing factories and their
-    skin materials remain usable. Shape and FillMode cannot change on a live
+    every existing renderer with one implementation. Each painter retains its
+    skin materials. Shape and FillMode cannot change on a live
     object. Polygon vertices, applicable geometry, direction, reserved capacity
     and value can change through their public setters.</p>
 
@@ -269,8 +269,8 @@ end
     silhouette, reserve geometry/amount, sampling, theme or relevant appearance
     rebuilds the corresponding caches. Sampling 2 is the lower-cost antialiased
     setting; sampling 4 increases resolution and work. Neither changes fill semantics.</p>
-    <p>Restart Win/test.exe and open Resources. Unified progress compares the numeric
-    interface with original controls; Polygon progress adds convex/concave silhouettes,
+    <p>Restart Win/test.exe and open Resources. Unified progress shows the numeric
+    modes; Polygon progress adds convex/concave silhouettes,
     independent reserve directions, bands and fill/reserve angle selectors. Dox examples
     describe supported finite options; they do not claim every real-valued coordinate
     or angle has been enumerated. Image-alpha silhouettes and arbitrary linear fill

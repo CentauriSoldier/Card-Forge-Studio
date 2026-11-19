@@ -54,7 +54,7 @@ function Knob.create(oParent, tOptions)
     local tInteraction;
     local bUserChange = false;
     local tNeedles = {};
-    local tRender;
+    local tRender, tSystemRender;
 
     --[[!
     @fqxn wxLuma.UI.Knob.complete
@@ -343,11 +343,83 @@ function Knob.create(oParent, tOptions)
     oComponent.Control:Connect(oWheelTimer:GetId(), _wx.wxEVT_TIMER, function()
         if (not oComponent.Disposed and tInteraction and tInteraction.Input == "wheel") then fComplete(); end
     end);
+    --[[!
+    @fqxn wxLuma.UI.Knob.drawSystemDial
+    @desc Paints the dial and needle using system colors, leaving the surrounding DC untouched.
+    !]]
+    local function fDrawSystemDial(oDC, nX, nY, nDiameter)
+        local oFace = _wx.wxSystemSettings.GetColour(_wx.wxSYS_COLOUR_BTNFACE);
+        local oParentColour = oComponent.Control:GetParent():GetBackgroundColour();
+
+        -- System panels may themselves use button face. Prefer the system
+        -- window color in that case so the dial still reads as a distinct disc.
+        local bWindowFace = oFace:Red() == oParentColour:Red() and oFace:Green() == oParentColour:Green()
+            and oFace:Blue() == oParentColour:Blue();
+        oParentColour:delete();
+        local bEnabled = oComponent.isEnabled();
+        local nFraction = (nValue - nMin) / (nMax - nMin);
+
+        if (not tSystemRender or tSystemRender.Diameter ~= nDiameter or tSystemRender.Fraction ~= nFraction
+            or tSystemRender.Enabled ~= bEnabled or tSystemRender.WindowFace ~= bWindowFace) then
+            if (bWindowFace) then
+                oFace:delete();
+                oFace = _wx.wxSystemSettings.GetColour(_wx.wxSYS_COLOUR_WINDOW);
+            end
+            local oEdge = _wx.wxSystemSettings.GetColour(_wx.wxSYS_COLOUR_BTNSHADOW);
+            local oNeedle = _wx.wxSystemSettings.GetColour(bEnabled and _wx.wxSYS_COLOUR_BTNTEXT
+                or _wx.wxSYS_COLOUR_GRAYTEXT);
+            local nScale = 3;
+            local nSize = nDiameter * nScale;
+
+            -- Pick a mask color absent from the drawing. InitAlpha converts
+            -- this mask to alpha before downsampling, including rim coverage.
+            local nMaskRed = 0;
+            while (nMaskRed == oFace:Red() or nMaskRed == oEdge:Red() or nMaskRed == oNeedle:Red()) do
+                nMaskRed = nMaskRed + 1;
+            end
+            local oMaskColour = _wx.wxColour(nMaskRed, 0, 0);
+            local oMaskBrush, oFaceBrush = _wx.wxBrush(oMaskColour), _wx.wxBrush(oFace);
+            local oEdgePen = _wx.wxPen(oEdge, nScale, _wx.wxPENSTYLE_SOLID);
+            local oNeedlePen = _wx.wxPen(oNeedle, math.max(nScale, math.floor(nSize * 0.025)), _wx.wxPENSTYLE_SOLID);
+            local oBitmap, oMemory = _wx.wxBitmap(nSize, nSize), _wx.wxMemoryDC();
+            oMemory:SelectObject(oBitmap);
+            oMemory:SetBackground(oMaskBrush); oMemory:Clear();
+            oMemory:SetBrush(oFaceBrush); oMemory:SetPen(oEdgePen);
+            oMemory:DrawEllipse(1, 1, nSize - 2, nSize - 2);
+
+            if (nDiameter >= 4) then
+                local nAngle = math.rad(135 + nFraction * 270);
+                local nCenter, nLength = nSize / 2, nSize * 0.36;
+                oMemory:SetPen(oNeedlePen);
+                oMemory:DrawLine(math.floor(nCenter), math.floor(nCenter),
+                    math.floor(nCenter + math.cos(nAngle) * nLength), math.floor(nCenter + math.sin(nAngle) * nLength));
+            end
+            oMemory:SelectObject(_wx.wxNullBitmap); oMemory:delete();
+            local oImage = oBitmap:ConvertToImage(); oBitmap:delete();
+            oImage:SetMaskColour(nMaskRed, 0, 0); oImage:InitAlpha();
+            local oScaled = oImage:Scale(nDiameter, nDiameter, _wx.wxIMAGE_QUALITY_HIGH);
+            local oRaster = _wx.wxBitmap(oScaled);
+            oScaled:delete(); oImage:delete();
+            oNeedlePen:delete(); oEdgePen:delete(); oFaceBrush:delete(); oMaskBrush:delete();
+            oNeedle:delete(); oEdge:delete(); oMaskColour:delete();
+
+            if (tSystemRender) then tSystemRender.Bitmap:delete(); end
+            tSystemRender = {Diameter = nDiameter, Fraction = nFraction, Enabled = bEnabled,
+                WindowFace = bWindowFace, Bitmap = oRaster};
+        end
+        oFace:delete();
+        oDC:DrawBitmap(tSystemRender.Bitmap, math.floor(nX), nY, true);
+    end
+
     oComponent.draw = function(oDC, nWidth, nHeight)
         if (oComponent.Disposed) then return; end
         local sState = oComponent.getState();
         local nDiameter = math.max(1, math.min(nWidth, nHeight - 26));
         local nX, nY = (nWidth - nDiameter) / 2, 2;
+        if (_Theme.isTheme(oComponent.Skin) and oComponent.Skin.getName() == "System") then
+            fDrawSystemDial(oDC, nX, nY, nDiameter);
+            return;
+        end
         if (not tRender or tRender.Width ~= nWidth or tRender.Height ~= nHeight
             or tRender.State ~= sState or tRender.Fraction ~= (nValue - nMin) / (nMax - nMin)) then
             -- Render the face and needle at triple resolution, then filter down.
@@ -402,6 +474,7 @@ function Knob.create(oParent, tOptions)
     @desc Discards skin-derived needle and dial rasters while retaining value.
     !]]
     oComponent.onThemeChanged = function()
+        if (tSystemRender) then tSystemRender.Bitmap:delete(); tSystemRender = nil; end
         if (tRender) then tRender.Bitmap:delete(); tRender = nil; end
         for _, tNeedle in pairs(tNeedles) do
             if (tNeedle.Scaled) then tNeedle.Scaled:delete(); end
@@ -409,6 +482,23 @@ function Knob.create(oParent, tOptions)
         end
         tNeedles = {};
     end;
+    -- wxWidgets 3.2 on Windows needs an initialized rectangular paint buffer.
+    -- Apply the parent's solid backing only for native paint, leaving draw()
+    -- free to composite the circle over any caller-supplied DC.
+    local oControl = oComponent.Control;
+    oControl:Connect(_wx.wxEVT_PAINT, function(oEvent)
+        if (oComponent.Disposed or not _Theme.isTheme(oComponent.Skin) or oComponent.Skin.getName() ~= "System") then
+            oEvent:Skip();
+            return;
+        end
+        local oDC = _wx.wxAutoBufferedPaintDC(oControl);
+        local oColour = oControl:GetParent():GetBackgroundColour();
+        local oBrush = _wx.wxBrush(oColour);
+        oDC:SetBackground(oBrush); oDC:Clear();
+        oComponent.draw(oDC, oControl:GetClientSizeWH());
+        oDC:delete(); oBrush:delete(); oColour:delete();
+    end);
+
     oComponent.onDestroy = function()
         oWheelTimer:Stop(); oWheelTimer:delete();
         oComponent.onThemeChanged(); tArt.destroy();

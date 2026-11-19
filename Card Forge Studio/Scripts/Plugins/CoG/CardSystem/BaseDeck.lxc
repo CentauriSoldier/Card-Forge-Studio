@@ -1,6 +1,6 @@
 --[[!
     @fqxn CoG.BaseDeck
-    @desc Ordered card collection. Index one is the top. Drawing removes the actual
+    @desc Ordered card collection. Index one is the bottom; the last index is the top. Drawing removes the actual
     instance; discarding, hands, ownership and game rules are caller responsibilities.
     Different instances with identical metadata are permitted. Methods use
     dot calls. List snapshots retain actual card references; cloning duplicates
@@ -182,7 +182,7 @@ namespace CoG {
 
         --[[!
         @fqxn CoG.BaseDeck.Methods.eachCard
-        @desc Iterates a shallow snapshot in top-to-bottom order. Later deck mutations do not change
+        @desc Iterates a shallow snapshot in bottom-to-top order. Later deck mutations do not change
         the iterator list; yielded cards are the actual objects, not clones.
         @ret function fIterator ipairs iterator.
         @ret table tSnapshot Independent ordered list of card references.
@@ -244,7 +244,7 @@ namespace CoG {
         @desc Adds a valid instance at the top or bottom. Existing identical instances are not added
         again. Invalid arguments or mutation during a shuffle callback raise assertions.
         @param BaseCard oCard Card instance to insert.
-        @param boolean|nil bTop True inserts at index one; false/nil appends at the bottom.
+        @param boolean|nil bTop True/nil appends at the top; false inserts at index one (bottom).
         @ret BaseDeck this Deck for chaining.
         @ret boolean bAdded False when the same instance was already present.
         @vis public
@@ -261,7 +261,7 @@ namespace CoG {
             end
 
             -- Step 3: insert at the chosen end and report that membership changed.
-            table.insert(this.cards, bTop and 1 or #this.cards + 1, oCard);
+            table.insert(this.cards, bTop == false and 1 or #this.cards + 1, oCard);
             return this, true;
         }
 
@@ -291,13 +291,14 @@ namespace CoG {
         @fqxn CoG.BaseDeck.Methods.peek
         @desc Returns the actual card at a position without removing it. Defaults to the top; a
         valid position beyond the deck returns nil. Invalid index shapes raise an assertion.
-        @param number|nil nIndex One-based position; defaults to one.
+        @param number|nil nIndex One-based position; defaults to the last occupied index.
         @ret BaseCard|nil oCard Existing card instance or nil.
         @vis public
         !]]
         public peek(nIndex) {
             -- Step 1: apply the top-card default, then validate index shape.
-            nIndex = nIndex == nil and 1 or nIndex;
+            if (nIndex == nil and #this.cards == 0) then return nil; end
+            nIndex = nIndex == nil and #this.cards or nIndex;
             BaseDeck.validateIndex(nIndex);
             -- Step 2: return the reference without changing deck membership.
             return this.cards[nIndex];
@@ -308,14 +309,15 @@ namespace CoG {
         @desc Removes and returns the actual card at a position, defaulting to the top. A valid
         position beyond the deck returns nil without mutation. Invalid index shapes and shuffle-time
         mutation raise assertions.
-        @param number|nil nIndex One-based position; defaults to one.
+        @param number|nil nIndex One-based position; defaults to the last occupied index.
         @ret BaseCard|nil oCard Removed instance, or nil when no card occupies the position.
         @vis public
         !]]
         public draw(nIndex) {
             -- Step 1: guard mutation, apply the top default and validate index shape.
             assert(not this.busy, "Cannot mutate the deck inside a shuffle callback.");
-            nIndex = nIndex == nil and 1 or nIndex;
+            if (nIndex == nil and #this.cards == 0) then return nil; end
+            nIndex = nIndex == nil and #this.cards or nIndex;
             BaseDeck.validateIndex(nIndex);
 
             -- Step 2: check existence before calling table.remove on an out-of-range position.
@@ -353,7 +355,7 @@ namespace CoG {
             local tDrawn = {};
 
             for nIndex = 1, nCount do
-                tDrawn[nIndex] = table.remove(this.cards, 1);
+                tDrawn[nIndex] = table.remove(this.cards);
             end
 
             return tDrawn, true;
