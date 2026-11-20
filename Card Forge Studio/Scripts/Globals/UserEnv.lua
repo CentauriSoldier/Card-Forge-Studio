@@ -74,7 +74,7 @@ end
 --[[!
 @fqxn CFS.UserEnv.Constants._pCardSet
 @pulsarlua string _pCardSet
-@desc Virtual path identifying the active card set, formed by joining "/" with its UUID. It is supplied when a set loads, replaced when another set loads, and cleared when the set closes. This string is an identifier path; it does not change the path rules of Import or Exists.
+@desc Relative path identifying the active card set, formed by joining FOLDER_CARD_SETS, "/", and its UUID, with no leading slash. It is supplied when a set loads, replaced when another set loads, and cleared when the set closes. Import, Exists, and image loading resolve paths against the active resource root and retain their own path validation rules.
 !]]
 
 --[[!

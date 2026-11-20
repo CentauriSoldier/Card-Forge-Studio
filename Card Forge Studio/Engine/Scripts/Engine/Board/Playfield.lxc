@@ -1,0 +1,107 @@
+--[[!
+@fqxn CardForgeEngine.Playfield
+@desc Ordered collection of Row objects. Removing an occupied child is rejected.
+    Layout describes presentation only; game rules remain external.
+!]]
+namespace CardForgeEngine
+{
+    class Playfield
+    {
+        private sID = "";
+        private sName = "";
+        private tChildren = {};
+        private tLayout = {};
+
+        public Playfield(sID, tOptions)
+        {
+            assert(sID == nil or string.isuuid(sID), "Expected a UUID.");
+            tOptions = tOptions or {};
+            assert(rawtype(tOptions) == "table", "Expected options.");
+            this.sID = sID and sID:lower() or string.uuid();
+            this.sName = tOptions.Name or "Playfield";
+            assert(rawtype(this.sName) == "string" and this.sName:find("%S"), "Name must be nonempty.");
+            this.setLayout(tOptions.Layout or {Kind = "Vertical"});
+        }
+
+        public final getID() { return this.sID; }
+        public final getName() { return this.sName; }
+        public final getRowCount() { return #this.tChildren; }
+        public final getRows()
+        {
+            local tCopy = {};
+            for nIndex, other in ipairs(this.tChildren) do tCopy[nIndex] = other; end
+            return tCopy;
+        }
+        public final eachRow() { return ipairs(this.getRows()); }
+        public final getRow(vPosition)
+        {
+            if (rawtype(vPosition) == "string") then
+                assert(string.isuuid(vPosition), "Expected a UUID.");
+                for _, other in this.eachRow() do
+                    if (other.getID() == vPosition:lower()) then return other; end
+                end
+                return;
+            end
+            assert(rawtype(vPosition) == "number" and vPosition >= 1 and vPosition < math.huge
+                and vPosition % 1 == 0, "Expected a positive index or UUID.");
+            return this.tChildren[vPosition];
+        }
+        public final addRow(other, nIndex)
+        {
+            assert(class.isa(other, "CardForgeEngine.Row"), "Expected a Row.");
+            assert(not this.getRow(other.getID()), "Duplicate Row UUID.");
+            nIndex = nIndex or #this.tChildren + 1;
+            assert(rawtype(nIndex) == "number" and nIndex % 1 == 0 and nIndex >= 1
+                and nIndex <= #this.tChildren + 1, "Insertion index is out of range.");
+            table.insert(this.tChildren, nIndex, other);
+            return this;
+        }
+        public final removeRow(vPosition)
+        {
+            local other = this.getRow(vPosition);
+            if (not other) then return; end
+            assert(other.isEmpty(), "Move occupants before removing a Row.");
+            for nIndex, oChild in this.eachRow() do
+                if (rawequal(oChild, other)) then return table.remove(this.tChildren, nIndex); end
+            end
+        }
+        public final isEmpty()
+        {
+            for _, other in this.eachRow() do if (not other.isEmpty()) then return false; end end
+            return true;
+        }
+        public final getLayout() { return clone(this.tLayout); }
+        public final setLayout(tLayout)
+        {
+            assert(rawtype(tLayout) == "table" and not class.isinstance(tLayout), "Expected layout data.");
+            this.tLayout = clone(tLayout);
+            return this;
+        }
+        public operator __len() { return #this.tChildren; }
+        public operator __pairs() { return this.eachRow(); }
+        public operator __tostring() { return this.sName.." ["..this.sID.."] ("..#this.tChildren.." children)"; }
+        public operator clone()
+        {
+            assert(class.getname(this) == "CardForgeEngine.Playfield", "Subclasses must define their clone policy.");
+            local other = Playfield(nil, {Name = this.sName, Layout = this.getLayout()});
+            for _, oChild in this.eachRow() do other.addRow(clone(oChild)); end
+            return other;
+        }
+        private validateSnapshot(tState)
+        {
+            local tSaved = tState.pri;
+            assert(string.isuuid(tSaved.sID) and tSaved.sID == tSaved.sID:lower(), "Invalid saved UUID.");
+            assert(rawtype(tSaved.sName) == "string" and tSaved.sName:find("%S"), "Invalid saved name.");
+            assert(rawtype(tSaved.tLayout) == "table" and rawtype(tSaved.tChildren) == "table", "Invalid saved collection.");
+            local tSeen, nCount = {}, 0;
+            for nIndex, other in pairs(tSaved.tChildren) do
+                assert(rawtype(nIndex) == "number" and nIndex % 1 == 0 and nIndex >= 1
+                    and nIndex <= #tSaved.tChildren, "Saved collection must be dense.");
+                assert(class.isa(other, "CardForgeEngine.Row") and not tSeen[other.getID()], "Invalid or duplicate child.");
+                tSeen[other.getID()] = true;
+                nCount = nCount + 1;
+            end
+            assert(nCount == #tSaved.tChildren, "Saved collection must be dense.");
+        }
+    }
+}

@@ -1,0 +1,184 @@
+--[[!
+@fqxn CardForgeEngine.PerspectiveCamera
+@desc Projects a Y-up world onto a viewport using a configurable perspective camera.
+!]]
+namespace CardForgeEngine
+{
+    final class PerspectiveCamera
+    {
+        private tPosition = {};
+        private tRight = {};
+        private tUp = {};
+        private tForward = {};
+        private nFocalScale = 0;
+        private nNear = 0;
+
+        --[[!
+        @fqxn CardForgeEngine.PerspectiveCamera.finite
+        @desc Checks that a coordinate or camera parameter is a finite number.
+        !]]
+        private static finite(nValue)
+        {
+            return rawtype(nValue) == "number" and math.abs(nValue) < math.huge;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.PerspectiveCamera.unit
+        @desc Normalizes a direction for use in the camera basis.
+        !]]
+        private static unit(nX, nY, nZ)
+        {
+            local nLength = math.sqrt(nX * nX + nY * nY + nZ * nZ);
+            assert(nLength > 0 and nLength < math.huge, "Invalid camera direction.");
+            return {X = nX / nLength, Y = nY / nLength, Z = nZ / nLength};
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.PerspectiveCamera.PerspectiveCamera
+        @desc Copies the camera position and target and builds an orthonormal basis.
+        @param table tOptions Position and Target vectors with X/Y/Z fields, vertical Fov
+            in degrees (default 52), and Near depth (default 0.05).
+        !]]
+        public PerspectiveCamera(tOptions)
+        {
+            assert(rawtype(tOptions) == "table", "Camera options are required.");
+            local tPosition, tTarget = tOptions.Position, tOptions.Target;
+            assert(rawtype(tPosition) == "table" and rawtype(tTarget) == "table",
+                "Camera position and target are required.");
+
+            for _, sAxis in ipairs({"X", "Y", "Z"}) do
+                assert(PerspectiveCamera.finite(tPosition[sAxis]) and PerspectiveCamera.finite(tTarget[sAxis]),
+                    "Camera coordinates must be finite numbers.");
+            end
+
+            local nFov = tOptions.Fov == nil and 52 or tOptions.Fov;
+            local nNear = tOptions.Near == nil and 0.05 or tOptions.Near;
+            assert(PerspectiveCamera.finite(nFov) and nFov > 0 and nFov < 180, "Invalid camera field of view.");
+            assert(PerspectiveCamera.finite(nNear) and nNear > 0, "Invalid camera near plane.");
+
+            local tForward = PerspectiveCamera.unit(
+                tTarget.X - tPosition.X, tTarget.Y - tPosition.Y, tTarget.Z - tPosition.Z);
+            -- A vertical view uses +X as screen right when world up is parallel.
+            local tRight = tForward.X == 0 and tForward.Z == 0 and {X = 1, Y = 0, Z = 0}
+                or PerspectiveCamera.unit(-tForward.Z, 0, tForward.X);
+            this.tPosition = {X = tPosition.X, Y = tPosition.Y, Z = tPosition.Z};
+            this.tForward = tForward;
+            this.tRight = tRight;
+            this.tUp = {
+                X = tRight.Y * tForward.Z - tRight.Z * tForward.Y,
+                Y = tRight.Z * tForward.X - tRight.X * tForward.Z,
+                Z = tRight.X * tForward.Y - tRight.Y * tForward.X,
+            };
+            this.nFocalScale = 0.5 / math.tan(math.rad(nFov) / 2);
+            this.nNear = nNear;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.PerspectiveCamera.project
+        @desc Maps a world point to screen X/Y and camera-space depth. Returns nil
+            for a point behind the near plane.
+        @param table tPoint World X/Y/Z coordinates.
+        @param number nWidth Viewport width.
+        @param number nHeight Viewport height.
+        @ret table|nil Projected X/Y and Depth.
+        !]]
+        public project(tPoint, nWidth, nHeight)
+        {
+            local nX = tPoint.X - this.tPosition.X;
+            local nY = tPoint.Y - this.tPosition.Y;
+            local nZ = tPoint.Z - this.tPosition.Z;
+            local tForward = this.tForward;
+            local nDepth = nX * tForward.X + nY * tForward.Y + nZ * tForward.Z;
+
+            if (nDepth < this.nNear) then return nil; end
+
+            local tRight, tUp = this.tRight, this.tUp;
+            local nScale = nHeight * this.nFocalScale / nDepth;
+            return {
+                X = nWidth / 2 + (nX * tRight.X + nY * tRight.Y + nZ * tRight.Z) * nScale,
+                Y = nHeight / 2 - (nX * tUp.X + nY * tUp.Y + nZ * tUp.Z) * nScale,
+                Depth = nDepth,
+            };
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.PerspectiveCamera.projectPolygon
+        @desc Clips a convex world polygon against the near plane, then projects
+            it with its texture coordinates and reciprocal depth intact.
+        @param table tVertices Ordered world vertices.
+        @param table tUV Corresponding U/V coordinates.
+        @param number nWidth Viewport width.
+        @param number nHeight Viewport height.
+        @ret table Projected vertices, possibly empty.
+        !]]
+        public projectPolygon(tVertices, tUV, nWidth, nHeight)
+        {
+            local tForward, tPosition = this.tForward, this.tPosition;
+            -- Keep clipped intersections slightly inside the near plane so
+            -- roundoff cannot cause project() to discard them.
+            local nPlane = this.nNear * (1 + 1e-9);
+            local tResult = {};
+
+            --[[!
+            @fqxn CardForgeEngine.PerspectiveCamera.projectPolygon.depth
+            @desc Computes a point's signed distance along the viewing direction.
+            !]]
+            local function fDepth(tPoint)
+                return (tPoint.X - tPosition.X) * tForward.X + (tPoint.Y - tPosition.Y) * tForward.Y
+                    + (tPoint.Z - tPosition.Z) * tForward.Z;
+            end
+
+            --[[!
+            @fqxn CardForgeEngine.PerspectiveCamera.projectPolygon.append
+            @desc Preserves perspective-correct texture interpolants at the projected vertex.
+            !]]
+            local function fAppend(tPoint, nU, nV)
+                local tProjected = this.project(tPoint, nWidth, nHeight);
+                local nQ = 1 / tProjected.Depth;
+                tProjected.Q, tProjected.UQ, tProjected.VQ = nQ, nU * nQ, nV * nQ;
+                tResult[#tResult + 1] = tProjected;
+            end
+
+            local tPrevious, tPreviousUV = tVertices[#tVertices], tUV[#tVertices];
+            local nPreviousDepth = fDepth(tPrevious);
+
+            for nIndex, tCurrent in ipairs(tVertices) do
+                local tCurrentUV = tUV[nIndex];
+                local nCurrentDepth = fDepth(tCurrent);
+                local bPreviousInside, bCurrentInside = nPreviousDepth >= nPlane, nCurrentDepth >= nPlane;
+
+                if (bPreviousInside ~= bCurrentInside) then
+                    local nRatio = (nPlane - nPreviousDepth) / (nCurrentDepth - nPreviousDepth);
+                    fAppend({
+                        X = tPrevious.X + (tCurrent.X - tPrevious.X) * nRatio,
+                        Y = tPrevious.Y + (tCurrent.Y - tPrevious.Y) * nRatio,
+                        Z = tPrevious.Z + (tCurrent.Z - tPrevious.Z) * nRatio,
+                    }, tPreviousUV.U + (tCurrentUV.U - tPreviousUV.U) * nRatio,
+                       tPreviousUV.V + (tCurrentUV.V - tPreviousUV.V) * nRatio);
+                end
+
+                if (bCurrentInside) then fAppend(tCurrent, tCurrentUV.U, tCurrentUV.V); end
+                tPrevious, tPreviousUV, nPreviousDepth = tCurrent, tCurrentUV, nCurrentDepth;
+            end
+
+            return tResult;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.PerspectiveCamera.isFacing
+        @desc Determines visibility from the winding of a planar face and the camera position.
+        @param table tVertices Ordered face vertices in world coordinates.
+        @ret boolean Whether the front of the face is toward the camera.
+        !]]
+        public isFacing(tVertices)
+        {
+            local tA, tB, tC = tVertices[1], tVertices[2], tVertices[3];
+            local nUX, nUY, nUZ = tB.X - tA.X, tB.Y - tA.Y, tB.Z - tA.Z;
+            local nVX, nVY, nVZ = tC.X - tA.X, tC.Y - tA.Y, tC.Z - tA.Z;
+
+            return (nUY * nVZ - nUZ * nVY) * (this.tPosition.X - tA.X)
+                 + (nUZ * nVX - nUX * nVZ) * (this.tPosition.Y - tA.Y)
+                 + (nUX * nVY - nUY * nVX) * (this.tPosition.Z - tA.Z) > 0;
+        }
+    }
+}

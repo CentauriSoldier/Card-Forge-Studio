@@ -1,0 +1,1 @@
+PASS: Card Forge Engine.exe -> root init.lua -> single native frame, welcome page, bundled artwork, arguments and shutdown.

@@ -1,0 +1,29 @@
+--[[!
+@fqxn CardForgeEngine.Hand
+@desc Configurable Zone with default presentation. No gameplay rules are implied.
+!]]
+namespace CardForgeEngine
+{
+    class Hand : CardForgeEngine.Zone
+    {
+        private static defaults(tOptions)
+        {
+            assert(tOptions == nil or rawtype(tOptions) == "table", "Expected zone options.");
+            local tCopy = clone(tOptions or {});
+            tCopy.Name = tCopy.Name or "Hand";
+            tCopy.Layout = tCopy.Layout or {Kind = "Fan", FaceUp = true};
+            return tCopy;
+        }
+
+        public Hand(sID, tOptions)
+        {
+            base(sID, Hand.defaults(tOptions));
+        }
+
+        public override operator clone()
+        {
+            assert(class.getname(this) == "CardForgeEngine.Hand", "Subclasses must define their clone policy.");
+            return this.copyTo(Hand(nil, this.getOptions()));
+        }
+    }
+}

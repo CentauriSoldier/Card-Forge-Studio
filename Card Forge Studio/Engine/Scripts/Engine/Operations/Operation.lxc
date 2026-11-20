@@ -1,0 +1,121 @@
+--[[!
+@fqxn CardForgeEngine.Operation
+@desc A queued user function with engine-enforced resolution-time card checks.
+    Requirements are copied on construction. Each Operation can resolve once.
+!]]
+namespace CardForgeEngine
+{
+    final class Operation
+    {
+        private tWork = {};
+        private bConsumed = false;
+
+        --[[!
+        @fqxn CardForgeEngine.Operation.Operation
+        @desc Captures a named function and a dense array of card requirements.
+            Check functions must be synchronous, side-effect-free predicates.
+        @param string sName Human-readable operation name for diagnostics.
+        @param function fRun Receives (game, cardsByID) only after all checks pass.
+        @param table|nil tRequirements Records with CardID and optional Check.
+            Check receives (card, game), returning true or false, reason.
+        !]]
+        public Operation(sName, fRun, tRequirements)
+        {
+            assert(rawtype(sName) == "string" and sName:find("%S"), "Operation name must be nonempty.");
+            assert(rawtype(fRun) == "function", "Operation requires a function.");
+            tRequirements = tRequirements or {};
+            assert(rawtype(tRequirements) == "table", "Requirements must be an array.");
+            local tCopy = {};
+            local nCount = 0;
+
+            -- Validate every key before copying so holes cannot omit a check.
+            for nIndex in pairs(tRequirements) do
+                assert(rawtype(nIndex) == "number" and nIndex % 1 == 0
+                    and nIndex >= 1 and nIndex <= #tRequirements, "Requirements must be a dense array.");
+                nCount = nCount + 1;
+            end
+            assert(nCount == #tRequirements, "Requirements must be a dense array.");
+            for nIndex, tRequirement in ipairs(tRequirements) do
+                assert(rawtype(tRequirement) == "table", "Card requirement must be a record.");
+                assert(rawtype(tRequirement.CardID) == "string" and tRequirement.CardID:find("%S"),
+                    "Requirement CardID must be nonempty.");
+                assert(tRequirement.Check == nil or rawtype(tRequirement.Check) == "function",
+                    "Requirement Check must be a function.");
+                tCopy[nIndex] = {CardID = tRequirement.CardID, Check = tRequirement.Check};
+            end
+            this.tWork = {Name = sName, Run = fRun, Requirements = tCopy};
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Operation.getName
+        @desc Returns the operation's diagnostic name without exposing its function.
+        @ret string Operation name.
+        !]]
+        public getName()
+        {
+            return this.tWork.Name;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Operation.resolve
+        @desc Resolves current card identities, enforces every predicate, then calls
+            user code. Missing/rejected cards skip automatically; predicate or user
+            errors fail without escaping into the resolver. No implicit rollback.
+        @param CardForgeEngine.Game other Game whose live registry supplies cards.
+        @param table tPermit Private dispatch permit; callers use Game.resolveNext.
+        @ret table Result with Status, Code, Operation and optional Reason.
+        !]]
+        public resolve(other, tPermit)
+        {
+            assert(class.isa(other, "CardForgeEngine.Game"), "Operation requires a CardForgeEngine.Game.");
+
+            assert(other.isResolutionAuthorized(this, tPermit), "Operations resolve only through Game.resolveNext.");
+
+            local function fResult(sStatus, sCode, sReason)
+                return {Status = sStatus, Code = sCode, Operation = this.tWork.Name, Reason = sReason};
+            end
+
+            if (this.bConsumed) then
+                return fResult("Skipped", "AlreadyResolved", "Operation has already been resolved.");
+            end
+            this.bConsumed = true;
+            local tCards = {};
+
+            -- Resolve identities first: no queued raw card reference is trusted.
+            for _, tRequirement in ipairs(this.tWork.Requirements) do
+                local oCard = other.getCard(tRequirement.CardID);
+                if (not oCard) then
+                    return fResult("Skipped", "CardMissing", "Card is not in the game: "..tRequirement.CardID);
+                end
+                tCards[tRequirement.CardID] = oCard;
+            end
+
+            for _, tRequirement in ipairs(this.tWork.Requirements) do
+                if (tRequirement.Check) then
+                    local bOK, bAllowed, sReason = pcall(tRequirement.Check,
+                        tCards[tRequirement.CardID], other);
+                    if (not bOK) then
+                        return fResult("Failed", "ConditionError", tostring(bAllowed));
+                    end
+                    if (bAllowed ~= true) then
+                        return fResult("Skipped", "ConditionRejected",
+                            rawtype(sReason) == "string" and sReason or "Card condition did not pass.");
+                    end
+                end
+            end
+
+            -- Detect registry changes even if a faulty predicate broke its
+            -- no-side-effects contract. Do not run with a stale card reference.
+            for sID, oCard in pairs(tCards) do
+                if (other.getCard(sID) ~= oCard) then
+                    return fResult("Skipped", "CardChanged", "Card changed during validation: "..sID);
+                end
+            end
+            local bOK, sError = pcall(this.tWork.Run, other, tCards);
+            if (not bOK) then
+                return fResult("Failed", "CallbackError", tostring(sError));
+            end
+            return fResult("Resolved", "Completed");
+        }
+    }
+}

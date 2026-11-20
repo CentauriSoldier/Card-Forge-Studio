@@ -1,0 +1,59 @@
+--[[!
+@fqxn CardForgeEngine.CardAnimator
+@desc Presentation pose and interruptible motion for one card. Does not mutate game state.
+!]]
+namespace CardForgeEngine
+{
+    final class CardAnimator
+    {
+        private tPose = {};
+        private oTween = null;
+        private nArc = 0;
+        private bMoving = false;
+
+        public CardAnimator(tPose)
+        {
+            local tDefaults = {X = 0, Y = 0, Angle = 0, Scale = 1, Flip = 0, Alpha = 1};
+            assert(rawtype(tPose) == "table", "Expected a card pose.");
+            for sKey, nDefault in pairs(tDefaults) do
+                local nValue = tPose[sKey] == nil and nDefault or tPose[sKey];
+                assert(rawtype(nValue) == "number" and math.abs(nValue) < math.huge, "Invalid card pose.");
+                this.tPose[sKey] = nValue;
+            end
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.CardAnimator.moveTo
+        @desc Retargets from the currently displayed pose, avoiding jumps on interruption.
+        !]]
+        public moveTo(tTarget, nDuration, nArc)
+        {
+            assert(rawtype(tTarget) == "table", "Expected a target pose.");
+            local tEnd = clone(this.tPose);
+            for sKey, nValue in pairs(tTarget) do
+                assert(tEnd[sKey] ~= nil, "Unknown card pose field: "..tostring(sKey));
+                tEnd[sKey] = nValue;
+            end
+            nArc = nArc or 0;
+            assert(rawtype(nArc) == "number" and math.abs(nArc) < math.huge, "Invalid motion arc.");
+            this.oTween = CardForgeEngine.Tween(this.tPose, tEnd, nDuration);
+            this.nArc = nArc;
+            this.bMoving = true;
+        }
+
+        public update(nDelta)
+        {
+            assert(rawtype(nDelta) == "number" and nDelta >= 0 and nDelta < math.huge,
+                "Animation delta must be finite and nonnegative.");
+            if (this.bMoving) then
+                local tPose, nProgress = this.oTween.advance(nDelta);
+                tPose.Y = tPose.Y - math.sin(nProgress * math.pi) * this.nArc;
+                this.tPose = tPose;
+                if (this.oTween.isComplete()) then this.bMoving = false; end
+            end
+        }
+
+        public getPose() { return clone(this.tPose); }
+        public isMoving() { return this.bMoving; }
+    }
+}

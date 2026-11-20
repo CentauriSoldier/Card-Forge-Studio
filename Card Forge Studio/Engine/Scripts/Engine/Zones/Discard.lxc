@@ -1,0 +1,29 @@
+--[[!
+@fqxn CardForgeEngine.Discard
+@desc Configurable Zone with default presentation. No gameplay rules are implied.
+!]]
+namespace CardForgeEngine
+{
+    class Discard : CardForgeEngine.Zone
+    {
+        private static defaults(tOptions)
+        {
+            assert(tOptions == nil or rawtype(tOptions) == "table", "Expected zone options.");
+            local tCopy = clone(tOptions or {});
+            tCopy.Name = tCopy.Name or "Discard";
+            tCopy.Layout = tCopy.Layout or {Kind = "Stack", FaceUp = true};
+            return tCopy;
+        }
+
+        public Discard(sID, tOptions)
+        {
+            base(sID, Discard.defaults(tOptions));
+        }
+
+        public override operator clone()
+        {
+            assert(class.getname(this) == "CardForgeEngine.Discard", "Subclasses must define their clone policy.");
+            return this.copyTo(Discard(nil, this.getOptions()));
+        }
+    }
+}

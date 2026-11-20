@@ -1,0 +1,392 @@
+--[[!
+@fqxn CardForgeEngine.Game
+@desc Minimal game context: stable card identities, named independent stacks and
+    automatic resolution diagnostics. No turn, zone or combat rules are assumed.
+!]]
+namespace CardForgeEngine
+{
+    class Game
+    {
+        private static _tCardGames = setmetatable({}, {__mode = "k"});
+        private tZones = {};
+        private tLocations = {};
+        private tZoneWrite = {};
+        private bPreparing = false;
+        private tCards = {};
+        private tKnownCards = {};
+        private tStacks = {};
+        private tResults = {};
+        private bResolving = false;
+        private tDispatch = {};
+
+        --[[!
+        @fqxn CardForgeEngine.Game.Game
+        @desc Starts with an empty registry and no implicitly selected stack.
+        !]]
+        public Game() {}
+
+        public final getCards()
+        {
+            local tCopy = {};
+            for sID, other in pairs(this.tCards) do tCopy[sID] = other; end
+            return tCopy;
+        }
+        public final eachCard() { return pairs(this.getCards()); }
+        public operator __len()
+        {
+            local nCount = 0;
+            for _ in pairs(this.tCards) do nCount = nCount + 1; end
+            return nCount;
+        }
+        public operator __pairs() { return this.eachCard(); }
+        public operator __tostring() { return "Game ("..#this.." cards)"; }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.clone
+        @desc Copies current zones/cards with new identities. Pending callback operations
+            cannot be remapped safely, so cloning requires empty stacks and an idle game.
+            Diagnostic history and removed identities are not copied to the new game.
+        !]]
+        public operator clone()
+        {
+            assert(class.getname(this) == "CardForgeEngine.Game", "Subclasses must define their clone policy.");
+            assert(not this.bPreparing and not this.bResolving, "Cannot clone an active game.");
+            for _, oStack in pairs(this.tStacks) do assert(oStack.size() == 0, "Cannot clone pending operations."); end
+            local other = Game();
+            for _, oZone in pairs(this.tZones) do other.addZone(clone(oZone)); end
+            for sName in pairs(this.tStacks) do other.createStack(sName); end
+            return other;
+        }
+
+        private prepareSnapshot(tState)
+        {
+            assert(not this.bPreparing and not this.bResolving, "Cannot save an active game.");
+            tState.pri.tZoneWrite = {};
+            tState.pri.tDispatch = {};
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.validateSnapshot
+        @desc Validates registry/zone agreement, then rebuilds runtime ownership bindings.
+            Restoring retains IDs and object sharing through LuaEx's native serializer.
+        !]]
+        private validateSnapshot(tState)
+        {
+            local tSaved = tState.pri;
+            assert(not tSaved.bPreparing and not tSaved.bResolving, "Saved game must be idle.");
+            for _, sField in ipairs({"tZones", "tLocations", "tCards", "tKnownCards", "tStacks", "tResults"}) do
+                assert(rawtype(tSaved[sField]) == "table", "Invalid saved game collection.");
+            end
+            local tSeen = {};
+            for sZoneID, oZone in pairs(tSaved.tZones) do
+                assert(class.isa(oZone, "CardForgeEngine.Zone") and sZoneID == oZone.getID(), "Invalid saved zone registry.");
+                assert(oZone.getGame() == nil or rawequal(oZone.getGame(), this), "Saved zone belongs to another game.");
+                for _, other in oZone.eachCard() do
+                    assert(class.isa(other, "CardForgeEngine.Card"), "Invalid saved card.");
+                    local sID = other.getInstanceID();
+                    assert(not tSeen[sID] and rawequal(tSaved.tCards[sID], other)
+                        and rawequal(tSaved.tKnownCards[sID], other) and tSaved.tLocations[sID] == sZoneID,
+                        "Saved card must occur in exactly one registered zone.");
+                    assert(Game._tCardGames[other] == nil or rawequal(Game._tCardGames[other], this), "Saved card belongs to another game.");
+                    tSeen[sID] = true;
+                end
+            end
+            for sID in pairs(tSaved.tCards) do assert(tSeen[sID], "Saved card has no zone."); end
+            for sID in pairs(tSaved.tLocations) do assert(tSeen[sID], "Saved location has no card."); end
+            for sID, other in pairs(tSaved.tKnownCards) do
+                assert(class.isa(other, "CardForgeEngine.Card") and sID == other.getInstanceID(), "Invalid saved identity history.");
+            end
+            for sName, oStack in pairs(tSaved.tStacks) do
+                assert(rawtype(sName) == "string" and sName:find("%S")
+                    and class.isa(oStack, "CardForgeEngine.Stack"), "Invalid saved stack.");
+            end
+            for _, oZone in pairs(tSaved.tZones) do this.writeZone(oZone, CoG.BaseDeck(oZone.getCards()), false); end
+            for _, other in pairs(tSaved.tCards) do Game._tCardGames[other] = this; end
+            tSaved.tZoneWrite, tSaved.tDispatch = {}, {};
+        }
+        --[[!
+        @fqxn CardForgeEngine.Game.writeZone
+        @desc Scoped permit for installing prevalidated storage. No game callbacks run here.
+        !]]
+        private writeZone(other, oCards, bDetach)
+        {
+            local tPermit = {};
+            this.tZoneWrite = {Zone = other, Permit = tPermit};
+            local bOK, sError = pcall(other.apply, this, tPermit, oCards, bDetach);
+            this.tZoneWrite = {};
+            assert(bOK, sError);
+        }
+
+        public final isZoneWriteAuthorized(other, tPermit)
+        {
+            return rawequal(this.tZoneWrite.Zone, other) and rawequal(this.tZoneWrite.Permit, tPermit)
+                and tPermit ~= nil;
+        }
+
+        private static checkedID(sID)
+        {
+            assert(string.isuuid(sID), "Expected a UUID.");
+            return sID:lower();
+        }
+
+        private static insertionIndex(vPosition, nCount)
+        {
+            if (vPosition == nil or vPosition == "Top") then return nCount + 1; end
+            if (vPosition == "Bottom") then return 1; end
+            assert(rawtype(vPosition) == "number" and vPosition % 1 == 0
+                and vPosition >= 1 and vPosition <= nCount + 1, "Insertion index is out of range.");
+            return vPosition;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.addZone
+        @desc Registers a zone and its existing occupants, including cloned/restored zones.
+            All identities and capacity are checked before registration changes.
+        !]]
+        public final addZone(other)
+        {
+            assert(not this.bPreparing, "Cannot mutate a game during shuffle preparation.");
+            assert(class.isa(other, "CardForgeEngine.Zone"), "Expected a Zone.");
+            local sZoneID = other.getID();
+            assert(this.tZones[sZoneID] == nil and other.getGame() == nil, "Zone is already registered.");
+            local tCards, tSeen = other.getCards(), {};
+            for _, oCard in ipairs(tCards) do
+                assert(class.isa(oCard, "CardForgeEngine.Card"), "Zone entries must be engine cards.");
+                local sID = oCard.getInstanceID();
+                assert(not tSeen[sID] and not this.tCards[sID], "Duplicate card UUID.");
+                assert(Game._tCardGames[oCard] == nil, "Card already belongs to a game.");
+                assert(this.tKnownCards[sID] == nil or rawequal(this.tKnownCards[sID], oCard), "Card UUID belongs to a different instance.");
+                tSeen[sID] = true;
+            end
+            local oPrepared = CoG.BaseDeck(tCards);
+            this.writeZone(other, oPrepared, false);
+            this.tZones[sZoneID] = other;
+            for _, oCard in ipairs(tCards) do
+                local sID = oCard.getInstanceID();
+                this.tCards[sID], this.tKnownCards[sID], this.tLocations[sID] = oCard, oCard, sZoneID;
+                Game._tCardGames[oCard] = this;
+            end
+            return this;
+        }
+
+        public final getZone(sID) { return this.tZones[Game.checkedID(sID)]; }
+        public final getZones()
+        {
+            local tCopy = {};
+            for sID, other in pairs(this.tZones) do tCopy[sID] = other; end
+            return tCopy;
+        }
+
+        public final removeZone(sID)
+        {
+            assert(not this.bPreparing, "Cannot mutate a game during shuffle preparation.");
+            sID = Game.checkedID(sID);
+            local other = this.tZones[sID];
+            if (not other) then return; end
+            assert(other.isEmpty(), "Move zone occupants before removing the zone.");
+            this.writeZone(other, CoG.BaseDeck(), true);
+            this.tZones[sID] = nil;
+            return other;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.addCard
+        @desc Adds a new/unregistered card directly into its required initial zone.
+            Existing cards move through moveCard. Omitted position means top.
+        !]]
+        public final addCard(other, sZoneID, vPosition)
+        {
+            assert(not this.bPreparing, "Cannot mutate a game during shuffle preparation.");
+            assert(class.isa(other, "CardForgeEngine.Card"), "Expected a CardForgeEngine.Card.");
+            local oZone = assert(this.getZone(sZoneID), "Unknown destination zone.");
+            local sID = other.getInstanceID();
+            assert(this.tCards[sID] == nil and Game._tCardGames[other] == nil, "Card is already registered; use moveCard.");
+            assert(this.tKnownCards[sID] == nil or rawequal(this.tKnownCards[sID], other), "Card UUID belongs to a different instance.");
+            local tCards = oZone.getCards();
+            local nIndex = Game.insertionIndex(vPosition, #tCards);
+            local nCapacity = oZone.getCapacity();
+            assert(nCapacity == nil or #tCards < nCapacity, "Destination zone is full.");
+            table.insert(tCards, nIndex, other);
+            this.writeZone(oZone, CoG.BaseDeck(tCards), false);
+            this.tCards[sID], this.tKnownCards[sID], this.tLocations[sID] = other, other, oZone.getID();
+            Game._tCardGames[other] = this;
+            return this;
+        }
+
+        public final getCard(sID) { return this.tCards[Game.checkedID(sID)]; }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.getCardLocation
+        @desc Resolves the current occupied slot by UUID. Returns detached, data-only location.
+        !]]
+        public final getCardLocation(sID)
+        {
+            sID = Game.checkedID(sID);
+            local sZoneID = this.tLocations[sID];
+            if (sZoneID) then return {ZoneID = sZoneID, Index = this.tZones[sZoneID].indexOf(sID)}; end
+        }
+
+        public final removeCard(sID)
+        {
+            assert(not this.bPreparing, "Cannot mutate a game during shuffle preparation.");
+            sID = Game.checkedID(sID);
+            local other = this.tCards[sID];
+            if (not other) then return; end
+            local oZone = this.tZones[this.tLocations[sID]];
+            local tCards = oZone.getCards();
+            table.remove(tCards, assert(oZone.indexOf(sID), "Card location is inconsistent."));
+            this.writeZone(oZone, CoG.BaseDeck(tCards), false);
+            this.tCards[sID], this.tLocations[sID], Game._tCardGames[other] = nil, nil, nil;
+            return other;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.moveCard
+        @desc Moves one live card without applying game rules or changing metadata.
+            Numeric destination indices are evaluated AFTER source removal. Validation
+            and both destination collections are prepared before membership changes.
+        @ret table Data-only movement result suitable for presentation/network events.
+        !]]
+        public final moveCard(sID, sDestinationID, vPosition)
+        {
+            assert(not this.bPreparing, "Cannot mutate a game during shuffle preparation.");
+            sID = Game.checkedID(sID);
+            local other = assert(this.tCards[sID], "Card is not in the game.");
+            local oSource = this.tZones[this.tLocations[sID]];
+            local oDestination = assert(this.getZone(sDestinationID), "Unknown destination zone.");
+            local nSourceIndex = assert(oSource.indexOf(sID), "Card location is inconsistent.");
+            local tSource = oSource.getCards();
+            table.remove(tSource, nSourceIndex);
+            local bSameZone = rawequal(oSource, oDestination);
+            local tDestination = bSameZone and tSource or oDestination.getCards();
+            local nDestinationIndex = Game.insertionIndex(vPosition, #tDestination);
+            local nCapacity = oDestination.getCapacity();
+            assert(nCapacity == nil or #tDestination < nCapacity, "Destination zone is full.");
+            local tResult = {Kind = "Move", CardID = sID, FromZoneID = oSource.getID(),
+                FromIndex = nSourceIndex, ToZoneID = oDestination.getID(), ToIndex = nDestinationIndex,
+                Changed = not bSameZone or nSourceIndex ~= nDestinationIndex};
+            if (not tResult.Changed) then return tResult; end
+            table.insert(tDestination, nDestinationIndex, other);
+            local oNextDestination = CoG.BaseDeck(tDestination);
+            local oNextSource = not bSameZone and CoG.BaseDeck(tSource) or nil;
+            if (oNextSource) then this.writeZone(oSource, oNextSource, false); end
+            this.writeZone(oDestination, oNextDestination, false);
+            this.tLocations[sID] = oDestination.getID();
+            return tResult;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.shuffleZone
+        @desc Reuses CoG's validated shuffle on temporary storage. Failed random callbacks
+            leave card order unchanged; membership mutations are blocked during preparation.
+        !]]
+        public final shuffleZone(sZoneID, fRandom)
+        {
+            assert(not this.bPreparing, "Cannot mutate a game during shuffle preparation.");
+            local oZone = assert(this.getZone(sZoneID), "Unknown zone.");
+            local oPrepared = CoG.BaseDeck(oZone.getCards());
+            this.bPreparing = true;
+            local bOK, sError = pcall(oPrepared.shuffle, fRandom);
+            this.bPreparing = false;
+            assert(bOK, sError);
+            this.writeZone(oZone, oPrepared, false);
+            local tIDs = {};
+            for nIndex, other in oPrepared.eachCard() do tIDs[nIndex] = other.getInstanceID(); end
+            return {Kind = "Shuffle", ZoneID = oZone.getID(), CardIDs = tIDs};
+        }
+        --[[!
+        @fqxn CardForgeEngine.Game.createStack
+        @desc Creates an independent named LIFO stack; duplicate names are errors.
+        @param string sName Stack identifier selected by the game's rules.
+        @ret CardForgeEngine.Stack New stack.
+        !]]
+        public final createStack(sName)
+        {
+            assert(rawtype(sName) == "string" and sName:find("%S"), "Stack name must be nonempty.");
+            assert(this.tStacks[sName] == nil, "Stack already exists: "..sName);
+            local oStack = CardForgeEngine.Stack();
+            this.tStacks[sName] = oStack;
+            return oStack;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.getStack
+        @desc Retrieves a named stack without creating one or selecting a scheduler.
+        @param string sName Stack identifier.
+        @ret CardForgeEngine.Stack|nil Matching stack.
+        !]]
+        public final getStack(sName)
+        {
+            assert(rawtype(sName) == "string", "Stack name must be a string.");
+            return this.tStacks[sName];
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.isResolutionAuthorized
+        @desc Checks the private, single-dispatch permit used by the engine.
+            Exposes no permit and does not allow user code to start resolution.
+        @param CardForgeEngine.Operation other Currently dispatched Operation.
+        @param table tPermit Opaque permit supplied only by resolveNext.
+        @ret boolean Whether this exact dispatch is active.
+        !]]
+        public final isResolutionAuthorized(other, tPermit)
+        {
+            return this.bResolving and this.tDispatch.Operation == other
+                and this.tDispatch.Permit == tPermit;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.resolveNext
+        @desc Pops and resolves one Operation on the explicitly selected stack.
+            Reentrant resolution is rejected across every stack in this game.
+            User functions may enqueue later work. Skips/errors never prompt players.
+        @param string sName Stack to resolve.
+        @ret table Result; Empty means the selected stack has no work.
+        !]]
+        public final resolveNext(sName)
+        {
+            assert(not this.bResolving, "Cannot resolve another Operation during resolution.");
+            local oStack = assert(this.getStack(sName), "Unknown stack: "..tostring(sName));
+            local oOperation = oStack.pop();
+            if (not oOperation) then
+                return {Status = "Empty", Code = "StackEmpty", Stack = sName};
+            end
+
+            this.bResolving = true;
+            local tPermit = {};
+            this.tDispatch = {Operation = oOperation, Permit = tPermit};
+            local bOK, tResult = pcall(oOperation.resolve, this, tPermit);
+            this.tDispatch = {};
+            this.bResolving = false;
+            if (not bOK) then
+                tResult = {Status = "Failed", Code = "ResolverError",
+                    Operation = oOperation.getName(), Reason = tostring(tResult)};
+            end
+            tResult.Stack = sName;
+
+            -- Keep a bounded, automatic diagnostic history without retaining
+            -- live card references or requiring a UI to acknowledge each result.
+            local tStored = {};
+            for sKey, vValue in pairs(tResult) do tStored[sKey] = vValue; end
+            this.tResults[#this.tResults + 1] = tStored;
+            if (#this.tResults > 128) then table.remove(this.tResults, 1); end
+            return tResult;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Game.getResults
+        @desc Returns copied diagnostic records, oldest first, for the last 128
+            nonempty resolutions. Caller edits do not change engine history.
+        @ret table Array of result records.
+        !]]
+        public final getResults()
+        {
+            local tCopy = {};
+            for nIndex, tResult in ipairs(this.tResults) do
+                tCopy[nIndex] = {};
+                for sKey, vValue in pairs(tResult) do tCopy[nIndex][sKey] = vValue; end
+            end
+            return tCopy;
+        }
+    }
+}

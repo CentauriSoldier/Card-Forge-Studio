@@ -1,0 +1,51 @@
+--[[!
+@fqxn CardForgeEngine.Tween
+@desc Time-based numeric interpolation independent of rendering and game rules.
+!]]
+namespace CardForgeEngine
+{
+    final class Tween
+    {
+        private tFrom = {};
+        private tTo = {};
+        private nDuration = 0;
+        private nElapsed = 0;
+
+        public Tween(tFrom, tTo, nDuration)
+        {
+            assert(rawtype(tFrom) == "table" and rawtype(tTo) == "table", "Tween endpoints must be tables.");
+            assert(rawtype(nDuration) == "number" and nDuration > 0 and nDuration < math.huge,
+                "Tween duration must be finite and positive.");
+            for sKey, nValue in pairs(tTo) do
+                assert(rawtype(nValue) == "number" and math.abs(nValue) < math.huge
+                    and rawtype(tFrom[sKey]) == "number" and math.abs(tFrom[sKey]) < math.huge,
+                    "Tween endpoints must contain matching finite numbers.");
+                this.tFrom[sKey], this.tTo[sKey] = tFrom[sKey], nValue;
+            end
+            this.nDuration = nDuration;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Tween.advance
+        @desc Advances in seconds using cubic ease-out. Endpoints are exact.
+        @ret table Interpolated values.
+        @ret number Normalized progress, including zero and one.
+        !]]
+        public advance(nDelta)
+        {
+            assert(rawtype(nDelta) == "number" and nDelta >= 0 and nDelta < math.huge,
+                "Animation delta must be finite and nonnegative.");
+            this.nElapsed = math.min(this.nDuration, this.nElapsed + nDelta);
+            local nProgress = this.nElapsed / this.nDuration;
+            local nEase = 1 - (1 - nProgress) ^ 3;
+            local tValues = {};
+            for sKey, nTarget in pairs(this.tTo) do
+                tValues[sKey] = nProgress == 1 and nTarget
+                    or this.tFrom[sKey] + (nTarget - this.tFrom[sKey]) * nEase;
+            end
+            return tValues, nProgress;
+        }
+
+        public isComplete() { return this.nElapsed >= this.nDuration; }
+    }
+}

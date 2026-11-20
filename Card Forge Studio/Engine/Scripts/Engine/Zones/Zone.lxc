@@ -1,0 +1,151 @@
+--[[!
+@fqxn CardForgeEngine.Zone
+@desc Ordered occupied slots backed by CoG.BaseDeck. Index one is bottom; last is
+    top. Game owns membership changes. Capacity and presentation are independent.
+!]]
+namespace CardForgeEngine
+{
+    class Zone
+    {
+        private static _tGames = setmetatable({}, {__mode = "k"});
+        private sID = "";
+        private sName = "";
+        private nCapacity = -1;
+        private tLayout = {};
+        private oCards = null;
+
+        --[[!
+        @fqxn CardForgeEngine.Zone.Zone
+        @param string|nil sID UUID; nil generates a new one.
+        @param table|nil tOptions Name, Capacity (nil means unlimited), Layout.
+        !]]
+        public Zone(sID, tOptions)
+        {
+            assert(sID == nil or string.isuuid(sID), "Zone ID must be a UUID.");
+            tOptions = tOptions or {};
+            assert(rawtype(tOptions) == "table", "Expected zone options.");
+            local sName = tOptions.Name or "Zone";
+            assert(rawtype(sName) == "string" and sName:find("%S"), "Zone name must be nonempty.");
+            this.sID = sID and sID:lower() or string.uuid();
+            this.sName = sName;
+            this.oCards = CoG.BaseDeck();
+            this.setCapacity(tOptions.Capacity);
+            this.setLayout(tOptions.Layout or {Kind = "Stack"});
+        }
+
+        public final getID() { return this.sID; }
+        public final getName() { return this.sName; }
+        public final getGame() { return Zone._tGames[this]; }
+        public final getCardCount() { return this.oCards.getCardCount(); }
+        public final isEmpty() { return this.oCards.isEmpty(); }
+        public final getCards() { return this.oCards.getCards(); }
+        public final eachCard() { return this.oCards.eachCard(); }
+        public operator __len() { return this.getCardCount(); }
+        public operator __pairs() { return this.eachCard(); }
+        public operator __tostring() { return this.sName.." ["..this.sID.."] ("..this.getCardCount().." cards)"; }
+
+        public final getCapacity()
+        {
+            if (this.nCapacity >= 0) then return this.nCapacity; end
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Zone.setCapacity
+        @desc Nil removes the limit. Shrinking below occupancy fails without changing state.
+        !]]
+        public final setCapacity(nCapacity)
+        {
+            assert(nCapacity == nil or (rawtype(nCapacity) == "number" and nCapacity >= 0
+                and nCapacity < math.huge and nCapacity % 1 == 0), "Capacity must be a nonnegative integer or nil.");
+            assert(nCapacity == nil or nCapacity >= this.getCardCount(), "Move occupants before reducing capacity.");
+            this.nCapacity = nCapacity == nil and -1 or nCapacity;
+            return this;
+        }
+
+        public final getLayout() { return clone(this.tLayout); }
+        public final setLayout(tLayout)
+        {
+            assert(rawtype(tLayout) == "table" and not class.isinstance(tLayout), "Expected layout data.");
+            this.tLayout = clone(tLayout);
+            return this;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Zone.getCard
+        @desc Returns the card in an occupied slot. Nil/Top chooses last, Bottom chooses
+            first; explicit positive indices are allowed. Missing positions return nil.
+        !]]
+        public final getCard(vPosition)
+        {
+            if (vPosition == nil or vPosition == "Top") then return this.oCards.peek(); end
+            if (vPosition == "Bottom") then return this.oCards.peek(1); end
+            return this.oCards.peek(vPosition);
+        }
+
+        public final indexOf(sCardID)
+        {
+            assert(string.isuuid(sCardID), "Card ID must be a UUID.");
+            sCardID = sCardID:lower();
+            for nIndex, other in this.eachCard() do
+                if (other.getInstanceID() == sCardID) then return nIndex; end
+            end
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Zone.apply
+        @desc Internal Game dispatch only. A prepared CoG collection is installed in one
+            assignment. Bindings live outside snapshots so cloning a zone does not copy its game.
+        !]]
+        public final apply(other, tPermit, oCards, bDetach)
+        {
+            assert(class.isa(other, "CardForgeEngine.Game") and other.isZoneWriteAuthorized(this, tPermit),
+                "Zone contents may only change through their game.");
+            assert(Zone._tGames[this] == nil or rawequal(Zone._tGames[this], other), "Zone belongs to another game.");
+            assert(class.isa(oCards, "CoG.BaseDeck"), "Expected prepared card storage.");
+            assert(this.nCapacity < 0 or #oCards <= this.nCapacity, "Zone capacity exceeded.");
+            this.oCards = oCards;
+            Zone._tGames[this] = not bDetach and other or nil;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Zone.copyTo
+        @desc Copies contents into a newly constructed, unregistered zone. Card clones
+            receive fresh UUIDs. Concrete subclasses supply their own constructor.
+        !]]
+        protected copyTo(other)
+        {
+            assert(class.getname(other) == class.getname(this), "Zone clone must preserve its concrete class.");
+            other.oCards = clone(this.oCards);
+            return other;
+        }
+
+        public final getOptions()
+        {
+            return {Name = this.sName, Capacity = this.getCapacity(), Layout = this.getLayout()};
+        }
+
+        public operator clone()
+        {
+            assert(class.getname(this) == "CardForgeEngine.Zone", "Zone subclasses must define their clone policy.");
+            return this.copyTo(Zone(nil, this.getOptions()));
+        }
+
+        private validateSnapshot(tState)
+        {
+            local tSaved = tState.pri;
+            assert(string.isuuid(tSaved.sID) and tSaved.sID == tSaved.sID:lower(), "Invalid saved zone UUID.");
+            assert(rawtype(tSaved.sName) == "string" and tSaved.sName:find("%S"), "Invalid saved zone name.");
+            assert(rawtype(tSaved.nCapacity) == "number" and tSaved.nCapacity % 1 == 0
+                and tSaved.nCapacity >= -1 and tSaved.nCapacity < math.huge, "Invalid saved capacity.");
+            assert(rawtype(tSaved.tLayout) == "table" and class.isa(tSaved.oCards, "CoG.BaseDeck"), "Invalid saved zone data.");
+            assert(tSaved.nCapacity < 0 or #tSaved.oCards <= tSaved.nCapacity, "Saved zone exceeds its capacity.");
+            local tSeen = {};
+            for _, other in tSaved.oCards.eachCard() do
+                assert(class.isa(other, "CardForgeEngine.Card"), "Zone contains a non-engine card.");
+                local sID = other.getInstanceID();
+                assert(not tSeen[sID], "Duplicate card UUID in zone.");
+                tSeen[sID] = true;
+            end
+        }
+    }
+}

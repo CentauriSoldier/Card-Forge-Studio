@@ -1,0 +1,6 @@
+/**
+ * @file CardForgeEngine.rc
+ * @brief Embeds the blue space-engine icon as the application's primary icon.
+ * The build supplies Bin/Windows as an include directory for Card Forge Engine.ico.
+ */
+1 ICON "Card Forge Engine.ico"

@@ -1,0 +1,41 @@
+--[[!
+@fqxn CardForgeEngine.Stack
+@desc LuaEx Stack specialized for queued Operations. Storage, peek/pop/clear and
+    iteration are inherited; resolution order remains strictly last-in, first-out.
+!]]
+namespace CardForgeEngine
+{
+    class Stack : LuaEx.Classes.Stack
+    {
+        --[[!
+        @fqxn CardForgeEngine.Stack.Stack
+        @desc Starts empty; Operations enter through the validated push method.
+        !]]
+        public Stack()
+        {
+            base();
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Stack.push
+        @desc Accepts only engine-wrapped Operations, never an unvalidated function.
+        @param CardForgeEngine.Operation other Operation to place at the top.
+        @ret CardForgeEngine.Stack This stack.
+        !]]
+        public final override push(other)
+        {
+            assert(class.isa(other, "CardForgeEngine.Operation"), "Stacks accept only CardForgeEngine.Operation instances.");
+            base.push(other);
+            return this;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Stack.reverse
+        @desc Rejects reversal so resolution stacks cannot silently become FIFO.
+        !]]
+        public final override reverse()
+        {
+            error("Resolution stacks cannot be reversed.", 2);
+        }
+    }
+}

@@ -1,0 +1,149 @@
+--[[!
+@fqxn CardForgeEngine.CardAnimationScene
+@desc Interactive presentation fixture for draw, hand, play and discard animations.
+    Uses logical 1280x800 coordinates. This is not a gameplay rule resolver.
+!]]
+namespace CardForgeEngine
+{
+    final class CardAnimationScene
+    {
+        private tCards = {};
+        private tHand = {};
+        private tPlayed = {};
+        private tEffects = {};
+        private nNextID = 0;
+        private nHover = 0;
+
+        public CardAnimationScene() {}
+
+        private layoutHand()
+        {
+            local nCount = #this.tHand;
+            local nSpacing = math.min(125, 710 / math.max(1, nCount - 1));
+            for nIndex, nID in ipairs(this.tHand) do
+                local tEntry = this.tCards[nID];
+                local nOffset = nIndex - (nCount + 1) / 2;
+                local bHover = nID == this.nHover;
+                tEntry.Animator.moveTo({
+                    X = 640 + nOffset * nSpacing,
+                    Y = bHover and 550 or 640 + math.abs(nOffset) ^ 1.4 * 2,
+                    Angle = bHover and 0 or nOffset * 0.065,
+                    Scale = bHover and 1.18 or 0.86,
+                    Flip = 0, Alpha = 1,
+                }, tEntry.State == "Drawing" and 0.65 or 0.24, tEntry.State == "Drawing" and 100 or 0);
+            end
+        }
+
+        public draw()
+        {
+            if (#this.tHand >= 10) then return false; end
+            this.nNextID = this.nNextID + 1;
+            local nID = this.nNextID;
+            this.tCards[nID] = {
+                ID = nID, Artwork = (nID - 1) % 3 + 1, State = "Drawing",
+                Animator = CardForgeEngine.CardAnimator({X = 147, Y = 422, Scale = 0.72, Angle = -0.12, Flip = math.pi}),
+            };
+            this.tHand[#this.tHand + 1] = nID;
+            this.layoutHand();
+            return nID;
+        }
+
+        public hover(nID)
+        {
+            assert(rawtype(nID) == "number" and nID % 1 == 0, "Expected a card presentation ID.");
+            local tEntry = this.tCards[nID];
+            if (nID ~= 0 and (not tEntry or tEntry.State ~= "Hand")) then return false; end
+            if (nID ~= this.nHover) then
+                this.nHover = nID;
+                this.layoutHand();
+            end
+            return true;
+        }
+
+        public play(nID)
+        {
+            local tEntry = this.tCards[nID];
+            if (not tEntry or tEntry.State ~= "Hand" or #this.tPlayed >= 5) then return false; end
+            for nIndex, nHandID in ipairs(this.tHand) do
+                if (nHandID == nID) then table.remove(this.tHand, nIndex); break; end
+            end
+            this.nHover = 0;
+            this.tPlayed[#this.tPlayed + 1] = nID;
+            tEntry.State = "Playing";
+            tEntry.Animator.moveTo({X = 410 + (#this.tPlayed - 1) * 114, Y = 310,
+                Angle = 0, Scale = 0.66, Flip = 0}, 0.48, 100);
+            this.layoutHand();
+            return true;
+        }
+
+        public discard()
+        {
+            this.tHand, this.tPlayed, this.nHover = {}, {}, 0;
+            for _, tEntry in pairs(this.tCards) do
+                if (tEntry.State ~= "Discarding") then
+                    tEntry.State = "Discarding";
+                    tEntry.Animator.moveTo({X = 1130, Y = 422, Angle = 0.12,
+                        Scale = 0.72, Flip = math.pi, Alpha = 0}, 0.55, 80);
+                end
+            end
+        }
+
+        public update(nDelta)
+        {
+            assert(rawtype(nDelta) == "number" and nDelta >= 0 and nDelta < math.huge,
+                "Animation delta must be finite and nonnegative.");
+            for nIndex = #this.tEffects, 1, -1 do
+                local tEffect = this.tEffects[nIndex];
+                tEffect.Age = tEffect.Age + nDelta;
+                if (tEffect.Age >= 0.7) then table.remove(this.tEffects, nIndex); end
+            end
+            for nID, tEntry in pairs(this.tCards) do
+                tEntry.Animator.update(nDelta);
+                if (not tEntry.Animator.isMoving()) then
+                    if (tEntry.State == "Drawing") then tEntry.State = "Hand";
+                    elseif (tEntry.State == "Playing") then
+                        tEntry.State = "Played";
+                        local tPose = tEntry.Animator.getPose();
+                        this.tEffects[#this.tEffects + 1] = {X = tPose.X, Y = tPose.Y, Age = 0};
+                    elseif (tEntry.State == "Discarding") then this.tCards[nID] = nil; end
+                end
+            end
+
+        }
+
+        public getSnapshot()
+        {
+            local tResult = {Cards = {}, Effects = clone(this.tEffects), Hover = this.nHover,
+                HandCount = #this.tHand, PlayedCount = #this.tPlayed};
+            for _, tEntry in pairs(this.tCards) do
+                tResult.Cards[#tResult.Cards + 1] = {ID = tEntry.ID, Artwork = tEntry.Artwork,
+                    State = tEntry.State, Pose = tEntry.Animator.getPose()};
+            end
+            local nHover = this.nHover;
+            table.sort(tResult.Cards, function(tLeft, tRight)
+                if (tLeft.ID == nHover) then return false; end
+                if (tRight.ID == nHover) then return true; end
+                return tLeft.ID < tRight.ID;
+            end);
+            return tResult;
+        }
+
+        public hitTest(nX, nY)
+        {
+            local tCards = this.getSnapshot().Cards;
+            for nIndex = #tCards, 1, -1 do
+                local tEntry = tCards[nIndex];
+                if (tEntry.State == "Hand") then
+                    local tPose = tEntry.Pose;
+                    local nDX, nDY = nX - tPose.X, nY - tPose.Y;
+                    local nCos, nSin = math.cos(tPose.Angle), math.sin(tPose.Angle);
+                    local nLocalX, nLocalY = nDX * nCos + nDY * nSin, -nDX * nSin + nDY * nCos;
+                    if (math.abs(nLocalX) <= 90 * tPose.Scale and math.abs(nLocalY) <= 135 * tPose.Scale) then
+                        return tEntry.ID;
+                    end
+                end
+            end
+            return 0;
+        }
+    }
+}

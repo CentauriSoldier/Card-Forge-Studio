@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.20)
+project(CardForgeEngine_Launcher LANGUAGES C)
+
+# Native startup only. Application behavior stays in root init.lua and Lua modules.
+if(NOT WIN32)
+    message(FATAL_ERROR "This launcher currently supports Windows only.")
+endif()
+enable_language(RC)
+add_executable(CardForgeEngine WIN32 main.c CardForgeEngine.rc)
+target_include_directories(CardForgeEngine PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
+target_compile_features(CardForgeEngine PRIVATE c_std_11)
+target_link_libraries(CardForgeEngine PRIVATE user32 shell32)
+if(MSVC)
+    target_compile_options(CardForgeEngine PRIVATE /W4 /WX)
+else()
+    target_compile_options(CardForgeEngine PRIVATE -Wall -Wextra -Werror)
+    target_link_options(CardForgeEngine PRIVATE -municode)
+endif()
+
+set_target_properties(CardForgeEngine PROPERTIES OUTPUT_NAME "Card Forge Engine")

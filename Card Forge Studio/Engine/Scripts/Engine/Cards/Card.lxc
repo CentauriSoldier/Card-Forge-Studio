@@ -1,0 +1,78 @@
+--[[!
+@fqxn CardForgeEngine.Card
+@desc Engine card identity layered on CoG's generic card metadata/presentation.
+    Explicit UUIDs are preserved; omitted UUIDs are generated through LuaEx.
+!]]
+namespace CardForgeEngine
+{
+    class Card : CoG.BaseCard
+    {
+        private sInstanceID = "";
+
+        --[[!
+        @fqxn CardForgeEngine.Card.checkedName
+        @desc Validates identity before the parent constructor allocates components.
+        @param string sInstanceID Optional UUID. Omission creates a new card identity.
+        @param string|nil sName Display name passed to CoG.
+        @ret string Display name.
+        @vis internal
+        !]]
+        private static checkedName(sInstanceID, sName)
+        {
+            assert(sInstanceID == nil or string.isuuid(sInstanceID), "Card instance ID must be a UUID.");
+            return sName or "Card";
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Card.Card
+        @desc Constructs a CoG card with immutable engine identity.
+        @param string sInstanceID Optional UUID supplied by the authoring/runtime loader.
+        @param string|nil sName Display name.
+        @param string|nil sDescription Display description.
+        !]]
+        public Card(sInstanceID, sName, sDescription, eRarity, bFaceUp, bEnabled)
+        {
+            base(Card.checkedName(sInstanceID, sName), sDescription, eRarity, nil, bFaceUp, bEnabled);
+            this.sInstanceID = sInstanceID and sInstanceID:lower() or string.uuid();
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Card.clone
+        @desc Copies metadata, flags and tags into a new card UUID. As in CoG.BaseCard,
+            callbacks and affixes are fresh. Subclasses define their own copy policy.
+        !]]
+        public override operator clone()
+        {
+            assert(class.getname(this) == "CardForgeEngine.Card", "Card subclasses must define their clone policy.");
+            local other = Card(nil, this.getName(), this.getDescription(), this.getRarity(),
+                this.isFaceUp(), this.isEnabled());
+            assert(other.getInstanceID() ~= this.sInstanceID, "Generated card UUID collided with its source.");
+            for sTag, bEnabled in this.getTagSystem().eachTag() do other.getTagSystem().add(sTag, not bEnabled); end
+            return other;
+        }
+
+        public operator __tostring()
+        {
+            return this.getName().." ["..this.sInstanceID.."]";
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.Card.validateSnapshot
+        @desc Saves retain identity; restoration never generates a replacement UUID.
+        !]]
+        private validateSnapshot(tState)
+        {
+            assert(string.isuuid(tState.pri.sInstanceID), "Invalid saved card UUID.");
+            assert(tState.pri.sInstanceID == tState.pri.sInstanceID:lower(), "Saved card UUID must be lowercase.");
+        }
+        --[[!
+        @fqxn CardForgeEngine.Card.getInstanceID
+        @desc Returns the stable instance ID used by queued Operations.
+        @ret string Instance identifier.
+        !]]
+        public final getInstanceID()
+        {
+            return this.sInstanceID;
+        }
+    }
+}

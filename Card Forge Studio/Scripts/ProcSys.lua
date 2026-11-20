@@ -550,7 +550,7 @@ function ProcSys.LoadCardSet(oCardSet, fProgress)
         STYLE        	= STYLE,
         _TABLE       	= PROCSYS_TO_TABLE,
         _NUMBER      	= PROCSYS_TO_NUMBER,
-		_pCardSet		= "/"..oCardSet.GetUUID(),
+		_pCardSet		= FOLDER_CARD_SETS.."/"..oCardSet.GetUUID(),
 		_sCardSetID 	= oCardSet.GetUUID(),
         _sCardSetName 	= oCardSet.GetName(),
         _nCardWidth   	= oCardSet.GetCardWidth(),

@@ -1,0 +1,29 @@
+--[[!
+@fqxn CardForgeEngine.Deck
+@desc Configurable Zone with default presentation. No gameplay rules are implied.
+!]]
+namespace CardForgeEngine
+{
+    class Deck : CardForgeEngine.Zone
+    {
+        private static defaults(tOptions)
+        {
+            assert(tOptions == nil or rawtype(tOptions) == "table", "Expected zone options.");
+            local tCopy = clone(tOptions or {});
+            tCopy.Name = tCopy.Name or "Deck";
+            tCopy.Layout = tCopy.Layout or {Kind = "Stack", FaceUp = false};
+            return tCopy;
+        }
+
+        public Deck(sID, tOptions)
+        {
+            base(sID, Deck.defaults(tOptions));
+        }
+
+        public override operator clone()
+        {
+            assert(class.getname(this) == "CardForgeEngine.Deck", "Subclasses must define their clone policy.");
+            return this.copyTo(Deck(nil, this.getOptions()));
+        }
+    }
+}

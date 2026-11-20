@@ -1,0 +1,224 @@
+--[[!
+@fqxn CardForgeEngine.GameRoom
+@desc Configurable world geometry for a floor, walls and a card table.
+    This scene supplies no card zones, game rules or native graphics objects.
+!]]
+namespace CardForgeEngine
+{
+    final class GameRoom
+    {
+        private tRoom = {};
+        private tTable = {};
+        private tMaterials = {};
+
+        --[[!
+        @fqxn CardForgeEngine.GameRoom.options
+        @desc Copies recognized numeric settings and validates their representation.
+        !]]
+        private static options(tDefaults, tOptions)
+        {
+            assert(tOptions == nil or rawtype(tOptions) == "table", "Expected a room options table.");
+            local tResult = {};
+
+            for sKey, nDefault in pairs(tDefaults) do
+                local nValue = tOptions and tOptions[sKey];
+
+                if (nValue == nil) then nValue = nDefault; end
+
+                assert(rawtype(nValue) == "number" and math.abs(nValue) < math.huge, "Invalid room setting: "..sKey);
+                assert(sKey == "X" or sKey == "Z" or nValue > 0, "Room dimensions must be positive.");
+                tResult[sKey] = nValue;
+            end
+
+            return tResult;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.GameRoom.point
+        @desc Constructs one detached point in the room's Y-up coordinate system.
+        !]]
+        private static point(nX, nY, nZ)
+        {
+            return {X = nX, Y = nY, Z = nZ};
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.GameRoom.materials
+        @desc Copies RGB materials and supplies installation-relative default textures.
+        !]]
+        private static materials(tOverrides)
+        {
+            assert(tOverrides == nil or rawtype(tOverrides) == "table", "Expected room materials.");
+            local tDefaults = {
+                Background = {R = 24,  G = 31,  B = 37},
+                BackWall   = {R = 45,  G = 59,  B = 66,  Texture = "wall.png",  Shade = 0.77},
+                SideWall   = {R = 35,  G = 47,  B = 54,  Texture = "wall.png",  Shade = 0.62},
+                Floor      = {R = 71,  G = 77,  B = 78,  Texture = "floor.png", Shade = 0.76},
+                FloorLine  = {R = 79,  G = 85,  B = 86},
+                Shadow     = {R = 50,  G = 56,  B = 58},
+                WoodTop    = {R = 163, G = 117, B = 75,  Texture = "wood.png",  Shade = 1.00},
+                WoodFront  = {R = 114, G = 72,  B = 49,  Texture = "wood.png",  Shade = 0.80},
+                WoodSide   = {R = 91,  G = 55,  B = 41,  Texture = "wood.png",  Shade = 0.65},
+                Felt       = {R = 43,  G = 119, B = 103, Texture = "felt.png",  Shade = 1.00},
+            };
+            local tResult = {};
+
+            for sName, tDefault in pairs(tDefaults) do
+                local tOverride = tOverrides and tOverrides[sName];
+                local tSource = tOverride == nil and tDefault or tOverride;
+                assert(rawtype(tSource) == "table", "Invalid room material: "..sName);
+                local tColour = {
+                    Texture = tOverride == nil and tDefault.Texture and "Images/Game Room/"..tDefault.Texture or nil,
+                    Shade = tDefault.Shade,
+                };
+
+                for _, sChannel in ipairs({"R", "G", "B"}) do
+                    local nValue = tSource[sChannel];
+                    assert(rawtype(nValue) == "number" and nValue >= 0 and nValue <= 255 and nValue % 1 == 0,
+                        "Invalid room material channel: "..sName.."."..sChannel);
+                    tColour[sChannel] = nValue;
+                end
+
+                tResult[sName] = tColour;
+            end
+
+            return tResult;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.GameRoom.addBox
+        @desc Adds the outward-wound faces of a box above the floor.
+        !]]
+        private static addBox(tFaces, nLeft, nRight, nBottom, nTop, nFar, nNear)
+        {
+            local tA = GameRoom.point(nLeft,  nBottom, nFar);
+            local tB = GameRoom.point(nRight, nBottom, nFar);
+            local tC = GameRoom.point(nRight, nBottom, nNear);
+            local tD = GameRoom.point(nLeft,  nBottom, nNear);
+            local tE = GameRoom.point(nLeft,  nTop,    nFar);
+            local tF = GameRoom.point(nRight, nTop,    nFar);
+            local tG = GameRoom.point(nRight, nTop,    nNear);
+            local tH = GameRoom.point(nLeft,  nTop,    nNear);
+
+            tFaces[#tFaces + 1] = {Material = "WoodTop",   Vertices = {tE, tH, tG, tF}};
+            tFaces[#tFaces + 1] = {Material = "WoodFront", Vertices = {tD, tC, tG, tH}};
+            tFaces[#tFaces + 1] = {Material = "WoodSide",  Vertices = {tC, tB, tF, tG}};
+            tFaces[#tFaces + 1] = {Material = "WoodFront", Vertices = {tB, tA, tE, tF}};
+            tFaces[#tFaces + 1] = {Material = "WoodSide",  Vertices = {tA, tD, tH, tE}};
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.GameRoom.GameRoom
+        @desc Sets a room's dimensions, tabletop dimensions, placement and materials.
+        @param table|nil tOptions Width, Depth, Height, GridSpacing, Materials, and Table
+            settings X, Z, Width, Depth, Height, Thickness, LegWidth, LegInset and RailWidth.
+        !]]
+        public GameRoom(tOptions)
+        {
+            if (tOptions == nil) then tOptions = {}; end
+            assert(rawtype(tOptions) == "table", "Expected room options.");
+
+            local tRoom = GameRoom.options({Width = 15, Depth = 13, Height = 5, GridSpacing = 1.25}, tOptions);
+            local tTable = GameRoom.options({
+                X = 0, Z = 0, Width = 6.8, Depth = 4.4, Height = 1.65,
+                Thickness = 0.26, LegWidth = 0.24, LegInset = 0.42, RailWidth = 0.16,
+            }, tOptions.Table);
+            local nMinSide = math.min(tTable.Width, tTable.Depth);
+            assert(tTable.Thickness < tTable.Height and 2 * tTable.RailWidth < nMinSide
+                and 2 * (tTable.LegInset + tTable.LegWidth) < nMinSide, "Invalid table geometry.");
+            assert(math.abs(tTable.X) + tTable.Width / 2 <= tRoom.Width / 2
+                and math.abs(tTable.Z) + tTable.Depth / 2 <= tRoom.Depth / 2
+                and tTable.Height < tRoom.Height, "The table must fit in the room.");
+            assert(tRoom.Width / tRoom.GridSpacing <= 100 and tRoom.Depth / tRoom.GridSpacing <= 100,
+                "Room grid must have at most 100 spaces along each axis.");
+            this.tRoom, this.tTable = tRoom, tTable;
+            this.tMaterials = GameRoom.materials(tOptions.Materials);
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.GameRoom.getTabletop
+        @desc Returns the world-space bounds and height of the playable surface.
+        @ret table A detached tabletop descriptor with MinX, MaxX, MinZ, MaxZ and Y.
+        !]]
+        public getTabletop()
+        {
+            local tTable = this.tTable;
+            return {
+                MinX = tTable.X - tTable.Width / 2 + tTable.RailWidth,
+                MaxX = tTable.X + tTable.Width / 2 - tTable.RailWidth,
+                MinZ = tTable.Z - tTable.Depth / 2 + tTable.RailWidth,
+                MaxZ = tTable.Z + tTable.Depth / 2 - tTable.RailWidth,
+                Y = tTable.Height,
+            };
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.GameRoom.getGeometry
+        @desc Builds detached architecture, floor marks and furniture layers from the room settings.
+        @ret table Scene geometry and RGB materials for any renderer.
+        !]]
+        public getGeometry()
+        {
+            local tRoom, tTable = this.tRoom, this.tTable;
+            local nX, nZ, nY = tRoom.Width / 2, tRoom.Depth / 2, tRoom.Height;
+            local tA = GameRoom.point(-nX, 0, -nZ);
+            local tB = GameRoom.point( nX, 0, -nZ);
+            local tC = GameRoom.point( nX, 0,  nZ);
+            local tD = GameRoom.point(-nX, 0,  nZ);
+            local tArchitecture = {
+                {Material = "BackWall", Vertices = {tA, tB, GameRoom.point(nX, nY, -nZ), GameRoom.point(-nX, nY, -nZ)}},
+                {Material = "SideWall", Vertices = {tD, tA, GameRoom.point(-nX, nY, -nZ), GameRoom.point(-nX, nY, nZ)}},
+                {Material = "Floor",    Vertices = {tA, tD, tC, tB}},
+            };
+            local tGrid = {};
+
+            for nGridX = -nX + tRoom.GridSpacing, nX, tRoom.GridSpacing do
+                tGrid[#tGrid + 1] = {GameRoom.point(nGridX, 0, -nZ), GameRoom.point(nGridX, 0, nZ)};
+            end
+            for nGridZ = -nZ + tRoom.GridSpacing, nZ, tRoom.GridSpacing do
+                tGrid[#tGrid + 1] = {GameRoom.point(-nX, 0, nGridZ), GameRoom.point(nX, 0, nGridZ)};
+            end
+
+            local nLeft  = tTable.X - tTable.Width / 2;
+            local nRight = tTable.X + tTable.Width / 2;
+            local nFar   = tTable.Z - tTable.Depth / 2;
+            local nNear  = tTable.Z + tTable.Depth / 2;
+            local nSlabBottom = tTable.Height - tTable.Thickness;
+            local tLegs, tTop = {}, {};
+
+            -- The legs are independent meshes; a table can move without
+            -- changing the room or any part of the camera.
+            for _, nLegX in ipairs({nLeft + tTable.LegInset, nRight - tTable.LegInset - tTable.LegWidth}) do
+                for _, nLegZ in ipairs({nFar + tTable.LegInset, nNear - tTable.LegInset - tTable.LegWidth}) do
+                    GameRoom.addBox(tLegs, nLegX, nLegX + tTable.LegWidth, 0, nSlabBottom,
+                        nLegZ, nLegZ + tTable.LegWidth);
+                end
+            end
+            GameRoom.addBox(tTop, nLeft, nRight, nSlabBottom, tTable.Height, nFar, nNear);
+
+            local tSurface = this.getTabletop();
+            local tFelt = {
+                Material = "Felt",
+                Vertices = {
+                    GameRoom.point(tSurface.MinX, tSurface.Y, tSurface.MinZ),
+                    GameRoom.point(tSurface.MinX, tSurface.Y, tSurface.MaxZ),
+                    GameRoom.point(tSurface.MaxX, tSurface.Y, tSurface.MaxZ),
+                    GameRoom.point(tSurface.MaxX, tSurface.Y, tSurface.MinZ),
+                },
+            };
+
+            return {
+                Materials = clone(this.tMaterials),
+                Architecture = tArchitecture,
+                FloorLines = tGrid,
+                Shadow = {Material = "Shadow", Vertices = {
+                    GameRoom.point(nLeft, 0, nFar),  GameRoom.point(nLeft,  0, nNear),
+                    GameRoom.point(nRight, 0, nNear), GameRoom.point(nRight, 0, nFar),
+                }},
+                Legs = tLegs,
+                Table = tTop,
+                Surface = tFelt,
+            };
+        }
+    }
+}

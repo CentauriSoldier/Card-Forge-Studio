@@ -1,0 +1,86 @@
+--[[!
+@fqxn CardForgeEngine.CardMesh
+@desc A thin, textured card solid positioned in the room's Y-up world.
+    Card identity and face-up state belong to its CoG card instance.
+!]]
+namespace CardForgeEngine
+{
+    final class CardMesh
+    {
+        private oCard = null;
+        private tPlacement = {};
+        private pFront = "";
+        private pBack = "";
+
+        --[[!
+        @fqxn CardForgeEngine.CardMesh.CardMesh
+        @desc Stores presentation settings separately from the gameplay card.
+        @param CoG.BaseCard other The card represented by this object.
+        @param table tOptions Center X/Z, bottom Y, Width, Depth, Thickness,
+            and installation-relative FrontTexture and BackTexture paths.
+        !]]
+        public CardMesh(other, tOptions)
+        {
+            assert(class.isa(other, "CoG.BaseCard"), "Expected a CoG card.");
+            assert(rawtype(tOptions) == "table", "Expected card placement options.");
+            local tDefaults = {X = 0, Y = 0, Z = 0, Width = 0.68, Depth = 1.02, Thickness = 0.018};
+            local tPlacement = {};
+
+            for sKey, nDefault in pairs(tDefaults) do
+                local nValue = tOptions[sKey];
+                if (nValue == nil) then nValue = nDefault; end
+                assert(rawtype(nValue) == "number" and math.abs(nValue) < math.huge,
+                    "Invalid card placement setting: "..sKey);
+                tPlacement[sKey] = nValue;
+            end
+            assert(tPlacement.Width > 0 and tPlacement.Depth > 0 and tPlacement.Thickness > 0,
+                "Card dimensions must be positive.");
+            assert(rawtype(tOptions.FrontTexture) == "string" and tOptions.FrontTexture:find("%S")
+                and rawtype(tOptions.BackTexture) == "string" and tOptions.BackTexture:find("%S"),
+                "Card front and back textures are required.");
+
+            this.oCard, this.tPlacement = other, tPlacement;
+            this.pFront, this.pBack = tOptions.FrontTexture, tOptions.BackTexture;
+        }
+
+        --[[!
+        @fqxn CardForgeEngine.CardMesh.getGeometry
+        @desc Returns a detached solid with correctly wound faces and texture
+            coordinates. The upper face follows the card's current face-up state.
+        @ret table Card faces and their render materials.
+        !]]
+        public getGeometry()
+        {
+            local tPlacement = this.tPlacement;
+            local nLeft, nRight = tPlacement.X - tPlacement.Width / 2, tPlacement.X + tPlacement.Width / 2;
+            local nFar, nNear = tPlacement.Z - tPlacement.Depth / 2, tPlacement.Z + tPlacement.Depth / 2;
+            local nBottom, nTop = tPlacement.Y, tPlacement.Y + tPlacement.Thickness;
+            local tA = {X = nLeft,  Y = nBottom, Z = nFar};
+            local tB = {X = nRight, Y = nBottom, Z = nFar};
+            local tC = {X = nRight, Y = nBottom, Z = nNear};
+            local tD = {X = nLeft,  Y = nBottom, Z = nNear};
+            local tE = {X = nLeft,  Y = nTop,    Z = nFar};
+            local tF = {X = nRight, Y = nTop,    Z = nFar};
+            local tG = {X = nRight, Y = nTop,    Z = nNear};
+            local tH = {X = nLeft,  Y = nTop,    Z = nNear};
+
+            local bFaceUp = this.oCard.isFaceUp();
+            return {
+                Faces = {
+                    {Material = bFaceUp and "Front" or "Back", Vertices = {tE, tH, tG, tF}},
+                    {Material = bFaceUp and "Back" or "Front", Vertices = {tA, tB, tC, tD},
+                        UV = {{U = 0, V = 1}, {U = 1, V = 1}, {U = 1, V = 0}, {U = 0, V = 0}}},
+                    {Material = "Edge", Vertices = {tD, tC, tG, tH}},
+                    {Material = "Edge", Vertices = {tC, tB, tF, tG}},
+                    {Material = "Edge", Vertices = {tB, tA, tE, tF}},
+                    {Material = "Edge", Vertices = {tA, tD, tH, tE}},
+                },
+                Materials = {
+                    Front = {R = 230, G = 216, B = 181, Texture = this.pFront, Shade = 1, TextureSize = 384},
+                    Back  = {R =  24, G =  38, B =  70, Texture = this.pBack,  Shade = 1, TextureSize = 384},
+                    Edge  = {R = 187, G = 177, B = 151},
+                },
+            };
+        }
+    }
+}
