@@ -242,7 +242,7 @@ function DataGrid.create(tSession, bFinal)
                 if (bViewChanged or bHeadersChanged) then
                     local tValues = tCellValues[nVisible] or {};
                     local sValue = tRows[nSource][sHeader];
-                    if (bHeadersChanged or tValues[nColumn] ~= sValue) then
+                    if (bHeadersChanged or oGrid:GetCellValue(nVisible - 1, nColumn - 1) ~= sValue) then
                         oGrid:SetCellValue(nVisible - 1, nColumn - 1, sValue);
                         tValues[nColumn] = sValue;
                         bColumnChanged = true;
@@ -414,6 +414,12 @@ function DataGrid.create(tSession, bFinal)
     @vis private
     !]]
     local function sortHeader(nColumn)
+        -- Commit the native editor before sorting changes its visible row.
+        if (oGrid:IsCellEditControlEnabled()) then
+            oGrid:SaveEditControlValue();
+            oGrid:DisableCellEditControl();
+        end
+
         local sHeader = tSession.headers[nColumn + 1];
         if (not sHeader) then return; end
         local bDescending = tSession.source == sSource and tSession.sortColumn == sHeader and not tSession.descending;
