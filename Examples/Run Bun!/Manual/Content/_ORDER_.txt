@@ -1,3 +1,13 @@
 Cover
 intro
+one-minute-teach
+card-types
+what-you-need
+setup
+start-playing
+dog-turn
+dusk
+dawn
+winning
+still-to-decide
 glossary

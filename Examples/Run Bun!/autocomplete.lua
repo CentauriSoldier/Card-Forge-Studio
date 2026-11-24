@@ -100,6 +100,7 @@ return {version = 1, items = {
     {nameHex = "5F73436172645365744944", kind = "string"},
     {nameHex = "5F73436172645365744E616D65", kind = "string"},
     {nameHex = "5F74526F77", kind = "table"},
+    {nameHex = "5F74526F772E4465636B", kind = "string"},
     {nameHex = "5F74526F772E4465736372697074696F6E", kind = "string"},
     {nameHex = "5F74526F772E466C61766F72", kind = "string"},
     {nameHex = "5F74526F772E4E616D65", kind = "string"},

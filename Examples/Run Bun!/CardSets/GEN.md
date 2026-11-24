@@ -2,6 +2,8 @@
 
 These rules apply to every card type under this CardSets folder. Read the relevant card-type guide as well for its character design, anatomy, artwork dimensions, and specific references. Follow current user instructions first, then the repository's AI RULES.md. This guide does not authorize application code changes.
 
+All fonts used in Run Bun! must be free of charge and licensed for commercial use. Verify the actual license before adding or using a font; personal-use-only fonts are not allowed. Retain required license and copyright notices with the font files in the game's Fonts folder.
+
 ## 1. References, world, rendering, and scenery
 
 Inspect actual installed artwork before generating or editing. Use approved images directly as visual references; a text description of steampunk is not sufficient.

@@ -21,6 +21,20 @@ return function(sObject, D, hDC)
         Prep    = {X = nWidth * 0.08848485, Y = nHeight * 0.18400000, Width = nWidth * 0.82424242, Height = nHeight * 0.37866667},
     };
 
+    --type positions scaled to the current card dimensions; Bun and Dog X mark the right edge
+    local tTypePositions = {
+        Bun     = {X = nWidth * 0.90000000, Y = nHeight * 0.64444444},
+        Dog     = {X = nWidth * 0.90000000, Y = nHeight * 0.64000000},
+        Chase   = {X = nWidth / 2, Y = nHeight * 0.64000000},
+        Lure    = {X = nWidth / 2, Y = nHeight * 0.64000000},
+        Nice    = {X = nWidth / 2, Y = nHeight * 0.64444444},
+        Nasty   = {X = nWidth / 2, Y = nHeight * 0.64000000},
+        Panic   = {X = nWidth / 2, Y = nHeight * 0.64444444},
+        Startle = {X = nWidth / 2, Y = nHeight * 0.64000000},
+        Sniff   = {X = nWidth / 2, Y = nHeight * 0.64000000},
+        Prep    = {X = nWidth / 2, Y = nHeight * 0.59200000},
+    };
+
     local sType         = tRow.Type;
     local sNameStyle    = sType.."Name";
     local pImages       = _pCardSet.."/Images";
@@ -45,21 +59,18 @@ return function(sObject, D, hDC)
     --draw the card name
     Forge.DrawText(sNameStyle, nWidth / 2, (nHeight / 2) * 0.215, tRow.Name:gsub("-[qQ]", '?'), true, true);
     --draw Bun and Dog tags on the left and their card type on the right
-    local nTypeY = (sType == "Bun" or sType == "Nice" or sType == "Panic") and 0.64444444 or 0.64000000;
-    if (sType == "Prep") then
-        nTypeY = 0.59200000;
-    end
+    local tTypePosition = tTypePositions[sType];
     if (sType == "Bun" or sType == "Dog") then
         local sTypeText      = sType:upper();
         local nTypeWidth, nTypeHeight, nTypeMinX = STYLE["TYPE"].Prep(D, sTypeText);
-        Forge.DrawText("TYPE", nWidth * 0.90000000 - nTypeWidth - nTypeMinX, nHeight * nTypeY, sTypeText, false, true);
+        Forge.DrawText("TYPE", tTypePosition.X - nTypeWidth - nTypeMinX, tTypePosition.Y, sTypeText, false, true);
 
         STYLE["INFORMATION"].Prep(D, tRow.Tags or "");
         local nTagX         = nWidth * 0.10000000;
         local sSeparator    = "";
         for sTag in (tRow.Tags or ""):gmatch("[^,]+") do
             sTag = sTag:match("^%s*(.-)%s*$");
-            local nTagY = nHeight * nTypeY - D.GetTextHeight(sSeparator..sTag) / 2;
+            local nTagY = tTypePosition.Y - D.GetTextHeight(sSeparator..sTag) / 2;
             if (sSeparator ~= "") then
                 Forge.DrawText("INFORMATION", nTagX, nTagY, sSeparator, false, false);
                 nTagX = nTagX + D.GetTextWidth(sSeparator);
@@ -69,7 +80,7 @@ return function(sObject, D, hDC)
             sSeparator = ", ";
         end
     else
-        Forge.DrawText("TYPE", nWidth / 2, nHeight * nTypeY, sType:upper(), true, true);
+        Forge.DrawText("TYPE", tTypePosition.X, tTypePosition.Y, sType:upper(), true, true);
     end
 
     --wrap each flavor paragraph inside the lower panel, preserving explicit line breaks
