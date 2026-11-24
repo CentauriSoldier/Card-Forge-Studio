@@ -17,6 +17,8 @@ return function(sObject, D, hDC)
         Nasty   = {X = nWidth * 0.05818182, Y = nHeight * 0.16888889, Width = nWidth * 0.88363636, Height = nHeight * 0.42577778},
         Panic   = {X = nWidth * 0.06303030, Y = nHeight * 0.16888889, Width = nWidth * 0.86909091, Height = nHeight * 0.42755556},
         Startle = {X = nWidth * 0.06787879, Y = nHeight * 0.17955556, Width = nWidth * 0.86545455, Height = nHeight * 0.41600000},
+        Sniff   = {X = nWidth * 0.08000000, Y = nHeight * 0.18133333, Width = nWidth * 0.84242424, Height = nHeight * 0.40711111},
+        Prep    = {X = nWidth * 0.08848485, Y = nHeight * 0.18400000, Width = nWidth * 0.82424242, Height = nHeight * 0.37866667},
     };
 
     local sType         = tRow.Type;
@@ -44,18 +46,26 @@ return function(sObject, D, hDC)
     Forge.DrawText(sNameStyle, nWidth / 2, (nHeight / 2) * 0.215, tRow.Name:gsub("-[qQ]", '?'), true, true);
     --draw Bun and Dog tags on the left and their card type on the right
     local nTypeY = (sType == "Bun" or sType == "Nice" or sType == "Panic") and 0.64444444 or 0.64000000;
+    if (sType == "Prep") then
+        nTypeY = 0.59200000;
+    end
     if (sType == "Bun" or sType == "Dog") then
         local sTypeText      = sType:upper();
         local nTypeWidth, nTypeHeight, nTypeMinX = STYLE["TYPE"].Prep(D, sTypeText);
         Forge.DrawText("TYPE", nWidth * 0.90000000 - nTypeWidth - nTypeMinX, nHeight * nTypeY, sTypeText, false, true);
 
+        STYLE["INFORMATION"].Prep(D, tRow.Tags or "");
         local nTagX         = nWidth * 0.10000000;
         local sSeparator    = "";
         for sTag in (tRow.Tags or ""):gmatch("[^,]+") do
             sTag = sTag:match("^%s*(.-)%s*$");
-            local sText = sSeparator..sTag;
-            D.DrawText(nTagX, nHeight * nTypeY - D.GetTextHeight(sText) / 2, sText, CFG.Tag[sType][sTag].Color);
-            nTagX = nTagX + D.GetTextWidth(sText);
+            local nTagY = nHeight * nTypeY - D.GetTextHeight(sSeparator..sTag) / 2;
+            if (sSeparator ~= "") then
+                Forge.DrawText("INFORMATION", nTagX, nTagY, sSeparator, false, false);
+                nTagX = nTagX + D.GetTextWidth(sSeparator);
+            end
+            D.DrawText(nTagX, nTagY, sTag, CFG.Tag[sType][sTag].Color);
+            nTagX = nTagX + D.GetTextWidth(sTag);
             sSeparator = ", ";
         end
     else

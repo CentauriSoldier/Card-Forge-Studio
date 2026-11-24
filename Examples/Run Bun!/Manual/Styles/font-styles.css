@@ -229,6 +229,26 @@
 }
 .font-ruler[data-inline] { font-size: inherit; }
 
+/* style: SNIFFNAME */
+.font-sniffname {
+	font-family: "Trade Winds", sans-serif;
+	font-size: 38pt;
+	font-weight: 400;
+	font-style: normal;
+	font-synthesis: weight style;
+	color: rgba(112,36,54,1);
+	letter-spacing: 0em;
+	text-decoration-line: none;
+	text-shadow: none;
+	-webkit-text-stroke: 0.0197368em rgba(45,12,23,1);
+	paint-order: stroke fill;
+	background-image: linear-gradient(to bottom, rgba(57,15,31,1) 0%, rgba(138,53,75,1) 38%, rgba(242,214,180,1) 49%, rgba(116,38,61,1) 58%, rgba(69,20,39,1) 100%);
+	background-clip: text;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+}
+.font-sniffname[data-inline] { font-size: inherit; }
+
 /* style: STARTLENAME */
 .font-startlename {
 	font-family: "Trade Winds", sans-serif;
@@ -253,7 +273,7 @@
 .font-type {
 	font-family: "Almendra", sans-serif;
 	font-size: 24pt;
-	font-weight: 400;
+	font-weight: 700;
 	font-style: normal;
 	font-synthesis: weight style;
 	color: rgba(42,29,24,1);
