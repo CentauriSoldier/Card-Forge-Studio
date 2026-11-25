@@ -330,6 +330,7 @@ const glossaryForm = document.getElementById('glossary-form');
 const glossaryEntry = document.getElementById('glossary-entry');
 const glossaryAlternatives = document.getElementById('glossary-alternatives');
 const glossaryDelay = document.getElementById('glossary-delay');
+const glossaryAutoLink = document.getElementById('glossary-auto-link');
 const glossarySaveStatus = document.getElementById('glossary-save-status');
 const glossaryDocument = document.getElementById('glossary-document');
 const glossaryDocumentPreview = document.getElementById('glossary-document-preview');
@@ -340,7 +341,9 @@ let glossaryDocumentBaseline = '';
 let glossaryTitleBaseline = '';
 let glossaryDelaySaving = false;
 let glossaryDelayBaseline = String(glossaryState.hover_delay_ms);
+let glossaryAutoLinkBaseline = glossaryState.auto_link_terms === true;
 glossaryDelay.value = glossaryDelayBaseline;
+glossaryAutoLink.checked = glossaryAutoLinkBaseline;
 let glossaryPreviewTimer;
 let glossaryPreviewController;
 let glossaryHasPreview = false;
@@ -353,7 +356,7 @@ function updateGlossaryDirty() {
 	glossaryDirty = glossaryFingerprint() !== glossaryBaseline || glossaryDocument.value !== glossaryDocumentBaseline || glossaryTitle.value !== glossaryTitleBaseline || glossaryDelayChanged();
 	document.getElementById('save-glossary-delay').disabled = glossaryDelaySaving || !glossaryDelayChanged();
 }
-function glossaryDelayChanged() { return glossaryDelay.value === '' || Number(glossaryDelay.value) !== Number(glossaryDelayBaseline); }
+function glossaryDelayChanged() { return glossaryDelay.value === '' || Number(glossaryDelay.value) !== Number(glossaryDelayBaseline) || glossaryAutoLink.checked !== glossaryAutoLinkBaseline; }
 function loadGlossaryEntry(id, preserveContent = false) {
 	glossarySelected = id;
 	glossaryEntry.value = id || '';
@@ -413,7 +416,7 @@ async function previewGlossaryDocument() {
 	glossaryPreviewController?.abort();
 	glossaryPreviewController = new AbortController();
 	try {
-		const result = await post('preview', {content: glossaryDocument.value}, glossaryPreviewController.signal);
+		const result = await post('preview', {content: glossaryDocument.value, glossary_entry: glossarySelected}, glossaryPreviewController.signal);
 		glossaryDocumentPreview.innerHTML = result.html;
 		glossaryHasPreview = true;
 	} catch (error) { if (error.name !== 'AbortError') showNotice(error.message, true); }
@@ -495,16 +498,19 @@ document.getElementById('glossary-global-form').addEventListener('submit', async
 	if (!event.target.reportValidity() || !glossaryDelayChanged()) return;
 	const button = document.getElementById('save-glossary-delay');
 	const submitted = glossaryDelay.value;
+	const submittedAutoLink = glossaryAutoLink.checked;
 	glossaryDelaySaving = true;
 	button.disabled = true;
 	try {
-		const result = await post('glossary-delay-save', {hover_delay_ms: submitted, version: glossaryState.version});
+		const result = await post('glossary-delay-save', {hover_delay_ms: submitted, auto_link_terms: submittedAutoLink, version: glossaryState.version});
 		glossaryState = result.glossary;
 		glossaryDelayBaseline = String(glossaryState.hover_delay_ms);
+		glossaryAutoLinkBaseline = glossaryState.auto_link_terms === true;
 		updateGlossaryDirty();
 		document.getElementById('glossary-global-status').textContent = glossaryDelayChanged() ? 'Unsaved changes' : 'Saved';
 		document.querySelectorAll('[data-glossary-delay]').forEach(link => { link.dataset.glossaryDelay = glossaryState.hover_delay_ms; });
 		showNotice(result.message);
+		await Promise.all([preview(), previewGlossaryDocument()]);
 	} catch (error) { showNotice(error.message, true); }
 	finally { glossaryDelaySaving = false; updateGlossaryDirty(); }
 });

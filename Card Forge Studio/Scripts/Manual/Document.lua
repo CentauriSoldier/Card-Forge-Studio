@@ -100,6 +100,7 @@ function Document.build(tData, sKind, tSettings)
 		end
 	end
 	tOptions.glossary = tGlossary;
+	tOptions.autoLinkTerms = not bPDF and tData.glossarySettings.auto_link_terms == true;
 	local tRendered = {};
 
 	--[[!
@@ -111,6 +112,10 @@ function Document.build(tData, sKind, tSettings)
 		if (not tRendered[tSection]) then
             if (not bPDF and tData.context.onProgress) then tData.context.onProgress("building", "Rendering section: "..tSection.title); end
             if (tData.context.checkpoint) then tData.context.checkpoint(); end
+            tOptions.glossaryEntry = nil;
+            for _, tEntry in pairs(tGlossary) do
+                if (tEntry.id == tSection.id) then tOptions.glossaryEntry = tSection.id; break; end
+            end
             tRendered[tSection] = Markdown.render(tSection.markdown, tOptions);
         end
 		return tRendered[tSection];

@@ -159,15 +159,16 @@
 	}
 	/** Builds the original per-entry Glossary editor's state. */
 	function glossaryState() {
+		const settings = config('Config/glossary-settings.json');
 		let path;
-		try { path = glossaryPath(); } catch (_) { return {entries:{},alternatives:{},hover_delay_ms:config('Config/glossary-settings.json').hover_delay_ms,version:record('Config/glossary-alternatives.json').version+':'+record('Config/glossary-settings.json').version,document:{file:'glossary.md',version:''},missing:true}; }
+		try { path = glossaryPath(); } catch (_) { return {entries:{},alternatives:{},hover_delay_ms:settings.hover_delay_ms,auto_link_terms:settings.auto_link_terms === true,version:record('Config/glossary-alternatives.json').version+':'+record('Config/glossary-settings.json').version,document:{file:'glossary.md',version:''},missing:true}; }
 		const source = record(path);
 		const parts = glossaryParts(source.text);
 		const entries = {};
 		const alternatives = config('Config/glossary-alternatives.json');
 		for (const [id,entry] of Object.entries(parts.entries).sort(([,a],[,b]) => a.title.localeCompare(b.title,undefined,{sensitivity:'base',numeric:true}))) entries[id] = {...entry, id, href:'#'+id, version:source.version};
 		validateGlossary(entries, alternatives);
-		return {entries, alternatives, hover_delay_ms: config('Config/glossary-settings.json').hover_delay_ms, version: record('Config/glossary-alternatives.json').version + ':' + record('Config/glossary-settings.json').version, document:{file:path.slice(8),version:source.version}};
+		return {entries, alternatives, hover_delay_ms: settings.hover_delay_ms, auto_link_terms: settings.auto_link_terms === true, version: record('Config/glossary-alternatives.json').version + ':' + record('Config/glossary-settings.json').version, document:{file:path.slice(8),version:source.version}};
 	}
 	/** Reassembles the glossary in alphabetical order while preserving stable entry IDs. */
 	function composeGlossary(parts) { const blocks = Object.values(parts.entries).sort((a,b) => a.title.localeCompare(b.title,undefined,{sensitivity:'base',numeric:true})); return (parts.prefix.replace(/\r\n/g,'\n').replace(/\n+$/,'')+'\n\n'+blocks.map(entry => entry.header.replace(/\r\n/g,'\n').trimEnd()+'\n\n'+entry.markdown.replace(/\r\n/g,'\n').replace(/^\n+|\n+$/g,'')+'\n\n').join('')).replace(/\n/g,parts.newline); }
@@ -175,13 +176,15 @@
     function glossaryForPreview() {
         if (previewGlossarySnapshot !== snapshot) {
             const state = glossaryState();
-            previewGlossary = {state, index: validateGlossary(state.entries, state.alternatives)};
+            const index = validateGlossary(state.entries, state.alternatives);
+            const terms = state.auto_link_terms ? [...index].sort(([left], [right]) => right.length - left.length || left.localeCompare(right)).map(([term, id]) => [term, id, new RegExp('^'+term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'i')]) : [];
+            previewGlossary = {state, index, terms};
             previewGlossarySnapshot = snapshot;
         }
         return previewGlossary;
     }
 	/** Renders safe Markdown plus the existing style/glossary wrappers, including rich definitions. */
-	function render(source, linkGlossary = true) {
+	function render(source, linkGlossary = true, glossaryEntry = null) {
 		const aliases = new Map();
 		for (const match of (snapshot.files['Styles/font-styles.css']?.text || '').matchAll(/\/\*\s*alias:\s*([\w-]+)\s*=\s*([\w-]+)\s*\*\//g)) aliases.set(match[1].toLowerCase(), match[2].toLowerCase());
 		const namedStyles = new Set([...styleNames().map(name => name.toLowerCase()), ...aliases.keys()]);
@@ -198,8 +201,16 @@
 		html=html.replace(/<pre\b[\s\S]*?<\/pre>|<code\b[\s\S]*?<\/code>/g, code => marker+'CODE'+(protectedCode.push(code)-1)+'END');
 		let glossary = null;
 		let index = null;
+        let terms = [];
         const definitions = new Map();
-		if (linkGlossary) { try { const cached = glossaryForPreview(); glossary=cached.state; index=cached.index; } catch (_) { /* Missing glossary must not prevent ordinary Markdown preview. */ } }
+		if (linkGlossary) { try { const cached = glossaryForPreview(); glossary=cached.state; index=cached.index; terms=cached.terms; } catch (_) { /* Missing glossary must not prevent ordinary Markdown preview. */ } }
+        /** Builds the same safe anchor for explicit tags and automatic text matches. */
+        function glossaryAnchor(id, inside) {
+            const entry = glossary.entries[id];
+            if (!definitions.has(id)) definitions.set(id, {html: render(entry.markdown, false), plain: plain(entry.markdown)});
+            const definition = definitions.get(id);
+            return '<a class="glossary-link" href="#'+escape(id)+'" data-glossary-title="'+escape(entry.title)+'" data-glossary-definition="'+escape(definition.plain)+'" data-glossary-html="'+escape(definition.html)+'" data-glossary-delay="'+glossary.hover_delay_ms+'">'+inside+'</a>';
+        }
 		for (let pass=0;pass<20;pass++) {
 			let replaced=false;
 			html=html.replace(/&lt;(:?)([A-Za-z_][A-Za-z0-9_-]*)&gt;((?:(?!&lt;\/?:?[A-Za-z_][A-Za-z0-9_-]*&gt;)[\s\S])*?)&lt;\/\1\2&gt;/gi,(whole,prefix,name,inside) => {
@@ -208,11 +219,9 @@
 				const key=builtin ? tag : (aliases.get(tag) || tag);
 				const styled=builtin&&tag==='sup'?'<sup>'+inside+'</sup>':builtin&&tag==='g'?inside:'<span class="font-'+key+'" data-font-style="'+escape(key)+'" data-inline>'+inside+'</span>';
 				if (!index || !((builtin && tag === 'g') || (!builtin && key === 'keyword')) || inside.includes('data-glossary-title')) return styled;
-				const node=document.createElement('div');node.innerHTML=inside;const id=index.get(node.textContent.toLowerCase());if(!id)return styled;
-				const entry=glossary.entries[id];
-                if (!definitions.has(id)) definitions.set(id, {html: render(entry.markdown,false), plain: plain(entry.markdown)});
-                const definition=definitions.get(id);
-				return '<a class="glossary-link" href="#'+escape(id)+'" data-glossary-title="'+escape(entry.title)+'" data-glossary-definition="'+escape(definition.plain)+'" data-glossary-html="'+escape(definition.html)+'" data-glossary-delay="'+glossary.hover_delay_ms+'">'+styled+'</a>';
+				const node=document.createElement('div');node.innerHTML=inside;const id=index.get(node.textContent.toLowerCase());
+                if (!id) return glossary.auto_link_terms ? '<span data-manual-glossary-explicit>'+styled+'</span>' : styled;
+				return glossaryAnchor(id, styled);
 			});
 			if(!replaced)break;
 		}
@@ -229,6 +238,53 @@
 		});
 		container.querySelectorAll('img').forEach(image => { const raw=image.getAttribute('src')||'';if(/^images\//i.test(raw)){const base=snapshot.context.manualURL.replace(/\/$/,'')+'/Images/';const resolved=new URL(raw.slice(7),base);if(resolved.href.startsWith(base))image.src=resolved.href;else image.removeAttribute('src');} });
 		if (linkGlossary && window.CFSManualAppearance) window.CFSManualAppearance.sections(container);
+        if (terms.length) {
+            /** Mirrors the exporter's word boundaries, including possessive apostrophes. */
+            function wordPart(text, position) {
+                if (position < 0 || position >= text.length) return false;
+                if (/[\uDC00-\uDFFF]/.test(text[position]) && position > 0) position--;
+                const code = text.codePointAt(position);
+                if (code < 128) return /[A-Za-z0-9_']/.test(text[position]);
+                if (code === 0x2019) return true;
+                return !(code === 0xA0 || (code >= 0x2000 && code <= 0x206F) || (code >= 0x2190 && code <= 0x2BFF) || (code >= 0x3000 && code <= 0x303F) || code >= 0x1F000);
+            }
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            for (const node of nodes) {
+                if (node.parentElement.closest('a, code, pre, h1, h2, h3, h4, h5, h6, th, script, style, [data-manual-glossary-explicit]')) continue;
+                let ownEntry = glossaryEntry;
+                for (let section = node.parentElement.closest('.manual-section'); section; section = section.parentElement?.closest('.manual-section')) {
+                    const id = section.querySelector(':scope > .section-heading > [id]')?.id;
+                    if (glossary.entries[id]) { ownEntry = id; break; }
+                }
+                const text = node.nodeValue;
+                const fragment = document.createDocumentFragment();
+                let start = 0;
+                let position = 0;
+                while (position < text.length) {
+                    let match = null;
+                    if (!wordPart(text, position - 1)) {
+                        for (const [, id, pattern] of terms) {
+                            const found = pattern.exec(text.slice(position));
+                            if (found && !wordPart(text, position + found[0].length)) { match = [found[0], id]; break; }
+                        }
+                    }
+                    if (!match) { position += text.codePointAt(position) > 0xFFFF ? 2 : 1; continue; }
+                    const [term, id] = match;
+                    if (id !== ownEntry) {
+                        fragment.append(document.createTextNode(text.slice(start, position)));
+                        const holder = document.createElement('span');
+                        holder.innerHTML = glossaryAnchor(id, escape(text.slice(position, position + term.length)));
+                        fragment.append(...holder.childNodes);
+                        start = position + term.length;
+                    }
+                    position += term.length;
+                }
+                if (start) { fragment.append(document.createTextNode(text.slice(start))); node.replaceWith(fragment); }
+            }
+            container.querySelectorAll('[data-manual-glossary-explicit]').forEach(node => node.replaceWith(...node.childNodes));
+        }
 		return container.innerHTML;
 	}
 	/** Lists names from CFS-generated style declarations only. */
@@ -240,7 +296,7 @@
 	/** Implements the original endpoint actions using game snapshots and Lua filesystem transactions. */
 	async function action(name, values={}) {
 		let result;
-		if(name==='preview')return {ok:true,html:render(values.content)};
+		if(name==='preview')return {ok:true,html:render(values.content, true, values.glossary_entry || null)};
 		if(name==='save') {
 			const path='Content/'+values.file;if(record(path).version!==values.version)throw new Error('Content version changed; reload before saving.');
 			await write({[path]:values.content});result={ok:true,version:record(path).version,message:'Content saved.'};
@@ -257,7 +313,12 @@
 			if(name==='glossary-delay-save'||name==='glossary-save') {
 				if(values.version!==state.version)throw new Error('Glossary settings changed; reload first.');
 				if(name==='glossary-save'){if(!parts.entries[selected])throw new Error('Choose an existing entry.');alternatives[selected]=[...new Set(values.alternatives.split(/\r?\n/).map(value=>value.trim()).filter(Boolean))];validateGlossary(parts.entries,alternatives);files['Config/glossary-alternatives.json']=JSON.stringify(alternatives,null,4)+'\n';}
-				else {const delay=Number(values.hover_delay_ms);if(!Number.isInteger(delay)||delay<0||delay>10000)throw new Error('Delay must be between 0 and 10000 milliseconds.');files['Config/glossary-settings.json']=JSON.stringify({hover_delay_ms:delay},null,4)+'\n';}
+				else {
+                    const delay = Number(values.hover_delay_ms);
+                    if (!Number.isInteger(delay) || delay < 0 || delay > 10000) throw new Error('Delay must be between 0 and 10000 milliseconds.');
+                    if (typeof values.auto_link_terms !== 'boolean') throw new Error('Automatic glossary linking must be on or off.');
+                    files['Config/glossary-settings.json'] = JSON.stringify({...config('Config/glossary-settings.json'), hover_delay_ms: delay, auto_link_terms: values.auto_link_terms}, null, 4)+'\n';
+                }
 			} else {
 				if(values.version!==record(path).version)throw new Error('The glossary changed; reload before saving.');
 				if(name==='glossary-delete'){if(values.settings_version!==state.version)throw new Error('Glossary alternatives changed; reload first.');if(!parts.entries[selected])throw new Error('Choose an existing entry.');delete parts.entries[selected];delete alternatives[selected];files['Config/glossary-alternatives.json']=JSON.stringify(alternatives,null,4)+'\n';}
@@ -301,13 +362,13 @@
 	}
 	window.CFSManual={request,ack,receive,action,render,open,write,config,styles:styleNames,snapshot:()=>snapshot,setSettingsDirty,hasSettingsDrafts:()=>settingsDrafts.size>0,hasDrafts:()=>!!dirtyReader()||settingsDrafts.size>0,bindDirty(reader){dirtyReader=reader;},reportDirty};
 	initialize();
-	/** Displays the current game manual using the same renderer as editor and glossary previews. */
+	/** Displays the current game manual with the shared appearance scope and renderer-owned section frames. */
 	function showReader(target) {
 		let dialog=document.getElementById('studio-reader');
-		if(!dialog){dialog=document.createElement('div');dialog.id='studio-reader';dialog.className='modal fade';dialog.tabIndex=-1;dialog.innerHTML='<div class="modal-dialog modal-fullscreen"><div class="modal-content"><div class="modal-header"><h2 class="modal-title"></h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Back to editor"></button></div><div class="modal-body"></div></div></div>';document.body.append(dialog);}
+		if(!dialog){dialog=document.createElement('div');dialog.id='studio-reader';dialog.className='modal fade';dialog.tabIndex=-1;dialog.innerHTML='<div class="modal-dialog modal-fullscreen"><div class="modal-content"><div class="modal-header"><h2 class="modal-title"></h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Back to editor"></button></div><div class="modal-body manual-appearance"></div></div></div>';document.body.append(dialog);}
 		dialog.querySelector('.modal-title').textContent=snapshot.context.gameName;
 		const files=Object.keys(snapshot.files).filter(path=>/^Content\/.*\.md$/i.test(path));
-		dialog.querySelector('.modal-body').innerHTML=orderState().names.map(stem=>{const path=files.find(path=>path.slice(8,-3)===stem);return path?'<article class="manual-section section-level-2 metal-panel">'+render(record(path).text)+'</article>':'';}).join('');
+		dialog.querySelector('.modal-body').innerHTML=orderState().names.map(stem=>{const path=files.find(path=>path.slice(8,-3)===stem);return path?'<article>'+render(record(path).text)+'</article>':'';}).join('');
 		bootstrap.Modal.getOrCreateInstance(dialog).show();
 		if(target)setTimeout(()=>Array.from(dialog.querySelectorAll('[id]')).find(node=>node.id===target)?.scrollIntoView(),200);
 	}

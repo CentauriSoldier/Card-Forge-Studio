@@ -1,3 +1,4 @@
 {
-    "hover_delay_ms": 600
+    "hover_delay_ms": 600,
+    "auto_link_terms": false
 }

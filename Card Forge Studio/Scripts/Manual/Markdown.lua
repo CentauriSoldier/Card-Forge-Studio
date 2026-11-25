@@ -31,7 +31,42 @@ function Markdown.render(sSource, tOptions)
 	local fList;
 	local fSpecial;
 	local tStyles	= tOptions.styles or {};
+	local tTerms	= {};
+	if (tOptions.autoLinkTerms == true and tOptions.glossary) then
+		for sTerm, tEntry in pairs(tOptions.glossary) do
+			if (sTerm ~= "") then
+				local sPattern = "^"..sTerm:gsub("([^%w%s])", "%%%1"):gsub("%s+", "%%s+");
+				tTerms[#tTerms + 1] = {text = sTerm, pattern = sPattern, entry = tEntry};
+			end
+		end
+		table.sort(tTerms, function(tLeft, tRight)
+			return #tLeft.text > #tRight.text or (#tLeft.text == #tRight.text and tLeft.text < tRight.text);
+		end);
+	end
 	sSource = sSource:gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("\0", "\239\191\189");
+
+	--[[!
+	@fqxn CFS.Manual.Markdown.Private.Functions.fGlossaryLink
+	@desc Uses the existing glossary anchor contract for explicit and automatic links.
+	@vis private
+	!]]
+	local function fGlossaryLink(tEntry, sInside)
+		return '<a class="glossary-link" href="#'..Markdown.escape(tEntry.id)..'" data-glossary-title="'..Markdown.escape(tEntry.title)..'" data-glossary-definition="'..Markdown.escape(tEntry.plain)..'" data-glossary-html="'..Markdown.escape(tEntry.html)..'" data-glossary-delay="'..tostring(tOptions.delay or 0)..'">'..sInside..'</a>';
+	end
+
+	--[[!
+	@fqxn CFS.Manual.Markdown.Private.Functions.fWordPart
+	@desc Treats letters, digits, underscores and possessive apostrophes as word continuations. Non-ASCII text is kept whole; Unicode punctuation and symbols delimit words.
+	@vis private
+	!]]
+	local function fWordPart(sText, nByte)
+		if (nByte < 1 or nByte > #sText) then return false; end
+		local nStart = utf8.offset(sText, 0, nByte);
+		local nCode = utf8.codepoint(sText, nStart);
+		if (nCode < 128) then return sText:sub(nStart, nStart):match("[%w_']") ~= nil; end
+		if (nCode == 0x2019) then return true; end
+		return not (nCode == 0xA0 or (nCode >= 0x2000 and nCode <= 0x206F) or (nCode >= 0x2190 and nCode <= 0x2BFF) or (nCode >= 0x3000 and nCode <= 0x303F) or nCode >= 0x1F000);
+	end
 
 	--[[!
 	@fqxn CFS.Manual.Markdown.Private.Functions.fURL
@@ -59,7 +94,7 @@ function Markdown.render(sSource, tOptions)
 	@desc Scans inline tokens in source order so code, escapes and link destinations are not reinterpreted by later formatting passes.
 	@vis private
 	!]]
-	fInline = function(sText, nDepth, bInLink)
+	fInline = function(sText, nDepth, bInLink, bNoAuto)
 		local tHTML		= {};
 		local nIndex	= 1;
 		nDepth = nDepth or 0;
@@ -99,15 +134,15 @@ function Markdown.render(sSource, tOptions)
 						if (sOtherPrefix == sPrefix and sOther:lower() == sName:lower()) then
 							nLevel = nLevel + (sSlash == "/" and -1 or 1);
 							if (nLevel == 0) then
-								local sInside	= fInline(sRest:sub(#sName + #sPrefix + 3, nStart - 1), nDepth + 1, bInLink);
 								local sTag = sName:lower();
 								local bBuiltin = sPrefix == "" and (sTag == "sup" or sTag == "g");
 								local sKey = not bBuiltin and type(tStyles[sTag]) == "string" and tStyles[sTag] or sTag;
+								local sInside	= fInline(sRest:sub(#sName + #sPrefix + 3, nStart - 1), nDepth + 1, bInLink, bNoAuto or (bBuiltin and sTag == "g") or sKey == "keyword");
 								local sStyled	= bBuiltin and sTag == "sup" and "<sup>"..sInside.."</sup>" or bBuiltin and sTag == "g" and sInside or '<span class="font-'..sKey..'" data-font-style="'..sKey..'" data-inline>'..sInside..'</span>';
 								local sPlain	= sInside:gsub("<[^>]*>", ""):gsub("&amp;", "&"):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&#39;", "'"):gsub("&quot;", '"');
 								local tEntry	= not bInLink and tOptions.glossary and ((bBuiltin and sTag == "g") or (not bBuiltin and sKey == "keyword")) and tOptions.glossary[sPlain:lower()];
 								if (tEntry and not sInside:find("data-glossary-title", 1, true)) then
-									sStyled = '<a class="glossary-link" href="#'..Markdown.escape(tEntry.id)..'" data-glossary-title="'..Markdown.escape(tEntry.title)..'" data-glossary-definition="'..Markdown.escape(tEntry.plain)..'" data-glossary-html="'..Markdown.escape(tEntry.html)..'" data-glossary-delay="'..tostring(tOptions.delay or 0)..'">'..sStyled..'</a>';
+									sStyled = fGlossaryLink(tEntry, sStyled);
 								end
 								sToken, nUsed = sStyled, nEnd;
 								break;
@@ -168,13 +203,25 @@ function Markdown.render(sSource, tOptions)
 				local bWord		= sChar == "_" and nIndex > 1 and sText:sub(nIndex - 1, nIndex - 1):match("[%w_]");
 				if (nClose and not bWord and not sRest:sub(#sMark + 1, #sMark + 1):match("%s") and not sRest:sub(nClose - 1, nClose - 1):match("%s")) then
 					local sTag = sMark == "~~" and "s" or #sMark == 2 and "strong" or "em";
-					sToken = "<"..sTag..">"..(#sMark == 3 and "<strong>" or "")..fInline(sRest:sub(#sMark + 1, nClose - 1), nDepth + 1, bInLink)..(#sMark == 3 and "</strong>" or "").."</"..sTag..">";
+					sToken = "<"..sTag..">"..(#sMark == 3 and "<strong>" or "")..fInline(sRest:sub(#sMark + 1, nClose - 1), nDepth + 1, bInLink, bNoAuto)..(#sMark == 3 and "</strong>" or "").."</"..sTag..">";
 					nUsed = nClose + #sMark - 1;
 				end
 			elseif (sChar == "&") then
 				local sEntity = sRest:match("^&#[xX]%x+;") or sRest:match("^&#%d+;") or sRest:match("^&[A-Za-z][A-Za-z0-9]+;");
 				if (sEntity) then sToken, nUsed = sEntity, #sEntity; end
 			elseif (sRest:match("^  +\n")) then local sBreak = sRest:match("^  +\n"); sToken, nUsed = "<br>\n", #sBreak; end
+			if (not sToken and not bInLink and not bNoAuto and #tTerms > 0 and not fWordPart(sText, nIndex - 1)) then
+				for _, tTerm in ipairs(tTerms) do
+					local sMatched = sRest:lower():match(tTerm.pattern);
+					local nLength = sMatched and #sMatched;
+					if (nLength and not fWordPart(sText, nIndex + nLength)) then
+						-- Consume an excluded longest match without linking a shorter term inside it.
+						local sMatch = Markdown.escape(sRest:sub(1, nLength));
+						sToken, nUsed = tTerm.entry.id == tOptions.glossaryEntry and sMatch or fGlossaryLink(tTerm.entry, sMatch), nLength;
+						break;
+					end
+				end
+			end
 			tHTML[#tHTML + 1] = sToken or Markdown.escape(sChar);
 			nIndex = nIndex + (nUsed or 1);
 		end
@@ -254,7 +301,7 @@ function Markdown.render(sSource, tOptions)
 				while (nIndex <= #tLines and (tLines[nIndex]:match("^    ") or tLines[nIndex]:match("^%s*$"))) do tCode[#tCode + 1] = tLines[nIndex]:gsub("^    ", ""); nIndex = nIndex + 1; end
 				tHTML[#tHTML + 1] = "<pre><code>"..Markdown.escape(table.concat(tCode, "\n"):gsub("\n+$", "").."\n").."</code></pre>";
 			elseif (sHeading and #sHeading <= 6) then
-				tHTML[#tHTML + 1] = "<h"..#sHeading..">"..fInline(sText:gsub("%s+#+%s*$", "")).."</h"..#sHeading..">"; nIndex = nIndex + 1;
+				tHTML[#tHTML + 1] = "<h"..#sHeading..">"..fInline(sText:gsub("%s+#+%s*$", ""), nil, false, true).."</h"..#sHeading..">"; nIndex = nIndex + 1;
 			elseif (sTrim:match("^%-%-%-[- ]*$") or sTrim:match("^%*%*%*[* ]*$") or sTrim:match("^___[_ ]*$")) then tHTML[#tHTML + 1] = "<hr>"; nIndex = nIndex + 1;
 			elseif (sLine:match("^ ? ? ?>")) then
 				local tQuote = {};
@@ -307,7 +354,7 @@ function Markdown.render(sSource, tOptions)
 						local tRow = {};
 						for nCell = 1, #tHead do
 							local sAlignment = tAlign[nCell]:match("^:.*:$") and "center" or tAlign[nCell]:match(":$") and "right" or tAlign[nCell]:match("^:") and "left";
-							tRow[#tRow + 1] = "<"..sCellTag..(sAlignment and ' style="text-align:'..sAlignment..'"' or "")..">"..fInline(tCells[nCell] or "").."</"..sCellTag..">";
+							tRow[#tRow + 1] = "<"..sCellTag..(sAlignment and ' style="text-align:'..sAlignment..'"' or "")..">"..fInline(tCells[nCell] or "", nil, false, sCellTag == "th").."</"..sCellTag..">";
 						end
 						return table.concat(tRow);
 					end
@@ -318,7 +365,7 @@ function Markdown.render(sSource, tOptions)
 				else tHTML[#tHTML + 1] = "<p>"..fInline(sLine).."</p>"; nIndex = nIndex + 1; end
 			elseif (tLines[nIndex + 1] and (tLines[nIndex + 1]:match("^ ? ? ?===+%s*$") or tLines[nIndex + 1]:match("^ ? ? ?%-%-%-+%s*$"))) then
 				local nLevel = tLines[nIndex + 1]:find("=", 1, true) and 1 or 2;
-				tHTML[#tHTML + 1] = "<h"..nLevel..">"..fInline(sLine).."</h"..nLevel..">"; nIndex = nIndex + 2;
+				tHTML[#tHTML + 1] = "<h"..nLevel..">"..fInline(sLine, nil, false, true).."</h"..nLevel..">"; nIndex = nIndex + 2;
 			else
 				local tParagraph = {sLine};
 				nIndex = nIndex + 1;
