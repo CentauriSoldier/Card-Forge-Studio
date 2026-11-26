@@ -162,7 +162,7 @@ function Options.create(dParent, tContext)
     local dPage, oPage = page("General", "Choose startup behavior and how external data changes are handled.");
     tControls.loadLastGame = check(dPage, oPage, "Load last game automatically at startup",
         INIFile.GetValue(FS.AppCFG, "Settings", "LoadLastGame") ~= "0");
-    tControls.loadLastCardSet = check(dPage, oPage, "Load last card set automatically after restoring its game",
+    tControls.loadLastCardSet = check(dPage, oPage, "Load last card set automatically whenever a game is opened",
         INIFile.GetValue(FS.AppCFG, "Settings", "LoadLastCardSet") ~= "0");
     tControls.csv = check(dPage, oPage, "Automatically reload external CSV changes",
         INIFile.GetValue(FS.AppCFG, "Settings", "ExternalCSVChanges") == "automatic");

@@ -576,9 +576,11 @@ function Main.create(tOptions)
     end
 
 
+    local fRestoreLastCardSet;
+
     --[[!
     @fqxn CFS.Windows.Main.Private.Functions.selectGame
-    @desc Refreshes available games and opens the styled game loader.
+    @desc Refreshes available games, opens the styled game loader and restores the selected game's last card set when enabled.
     @vis private
     !]]
     local function selectGame()
@@ -614,6 +616,7 @@ function Main.create(tOptions)
             showPage("Welcome");
             dFrame:SetTitle(APP_NAME.." - "..oGame.GetName());
             dFrame:SetStatusText("Game loaded: "..oGame.GetName(), 0);
+            fRestoreLastCardSet(oGame);
         end
     end
 
@@ -646,6 +649,20 @@ function Main.create(tOptions)
         INIFile.SetValue(FS.AppCFG, "LastCardSets", oCardSet.GetGameUUID(), oCardSet.GetUUID());
         return tData;
     end
+
+    --[[!
+    @fqxn CFS.Windows.Main.Private.Functions.fRestoreLastCardSet
+    @desc Restores an activated game's remembered card set when enabled. Missing sets leave the game loaded. Callers have already handled pending edits.
+    @param any oGame Activated game.
+    @vis private
+    !]]
+    fRestoreLastCardSet = function(oGame)
+        if (INIFile.GetValue(FS.AppCFG, "Settings", "LoadLastCardSet") == "0") then return; end
+        local sCardSetUUID = INIFile.GetValue(FS.AppCFG, "LastCardSets", oGame.GetUUID());
+        if (sCardSetUUID == "") then return; end
+        local oCardSet = oGame.GetCardSet(sCardSetUUID);
+        if (oCardSet) then loadCardSet(oCardSet, true); end
+    end;
 
     --[[!
     @fqxn CFS.Windows.Main.Private.Functions.tDataSession_options_onMetadataChanged
@@ -1222,11 +1239,7 @@ function Main.create(tOptions)
         CFS.Game.Activate(oLastGame);
         dFrame:SetTitle(APP_NAME.." - "..oLastGame.GetName());
         dFrame:SetStatusText("Game loaded: "..oLastGame.GetName(), 0);
-        if (INIFile.GetValue(FS.AppCFG, "Settings", "LoadLastCardSet") == "0") then return; end
-        local sCardSetUUID = INIFile.GetValue(FS.AppCFG, "LastCardSets", oLastGame.GetUUID());
-        if (sCardSetUUID == "") then return; end
-        local oCardSet = oLastGame.GetCardSet(sCardSetUUID);
-        if (oCardSet) then loadCardSet(oCardSet, true); end
+        fRestoreLastCardSet(oLastGame);
     end
 
     local bRestorePending = true;

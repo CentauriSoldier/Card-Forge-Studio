@@ -190,6 +190,7 @@ function EditorOptions.create(dParent)
     tControls.referenceUseEditorFontSize:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED, enableReferenceFonts);
     enableReferenceFonts();
     oBlock = block("Saving");
+    check(oBlock, "autoCloseCodeColumnEditor", "Auto close code column editor on save");
     check(oBlock, "trimTrailing", "Remove trailing spaces and tabs on Save");
     check(oBlock, "finalNewline", "Ensure a final newline on Save");
     for _, dPage in ipairs(tPages) do dPage:Layout(); dPage:FitInside(); end

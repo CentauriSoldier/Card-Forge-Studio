@@ -117,6 +117,7 @@ local _tDefinitions = {
     autocompleteCharacters = {setting = "AutocompleteCharacters", default = 2, min = 1, max = 10},
     trimTrailing = {setting = "TrimTrailingWhitespace", default = false},
     finalNewline = {setting = "FinalNewline", default = false},
+    autoCloseCodeColumnEditor = {setting = "AutoCloseCodeColumnEditor", default = true},
     autoClose = {setting = "AutoClose", default = false},
     scrollPastEnd = {setting = "ScrollPastEnd", default = false},
     useTabs = {setting = "UseTabs", default = false},

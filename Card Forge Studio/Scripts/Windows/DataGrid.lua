@@ -113,6 +113,7 @@ function DataGrid.create(tSession, bFinal)
     dFrame:SetMinSize(wx.wxSize(700, 400));
     dFrame:CreateStatusBar();
     oGrid:CreateGrid(0, 0);
+    oGrid:SetDefaultCellOverflow(false);
     oGrid:DisableDragRowSize();
     oGrid:EnableEditing(not bFinal and type(tSession.options.onEdit) == "function");
     oSearch:SetToolTip("Search all columns in this window.");
@@ -189,6 +190,48 @@ function DataGrid.create(tSession, bFinal)
         end
     end
 
+    local oGridWindow = oGrid:GetGridWindow();
+    local sToolTip = "";
+    local function fClearToolTip()
+        if (sToolTip ~= "") then
+            oGridWindow:UnsetToolTip();
+            sToolTip = "";
+        end
+    end
+    -- Measure the displayed cell with its own font; clipped text is available only on hover.
+    oGridWindow:Connect(wx.wxEVT_MOTION, protect(function(oEvent)
+        local sText = "";
+        if (not oGrid:IsCellEditControlEnabled()) then
+            local nX, nY = oGrid:CalcUnscrolledPosition(oEvent:GetX(), oEvent:GetY());
+            local nColumn, nRow = oGrid:XToCol(nX), oGrid:YToRow(nY);
+            if (nRow >= 0 and nColumn >= 0 and nRow < oGrid:GetNumberRows() and nColumn < oGrid:GetNumberCols()) then
+                local sValue = oGrid:GetCellValue(nRow, nColumn);
+                if (sValue ~= "") then
+                    local oDC = wx.wxClientDC(oGridWindow);
+                    oDC:SetFont(oGrid:GetCellFont(nRow, nColumn));
+                    local sMeasured, nWidth, nHeight = oDC:GetMultiLineTextExtent(sValue);
+                    oDC:delete();
+                    if (nWidth > oGrid:GetColSize(nColumn) - 4 or nHeight > oGrid:GetRowSize(nRow) - 4) then
+                        sText = sValue;
+                    end
+                end
+            end
+        end
+        if (sText ~= sToolTip) then
+            fClearToolTip();
+            if (sText ~= "") then oGridWindow:SetToolTip(sText); sToolTip = sText; end
+        end
+        oEvent:Skip();
+    end));
+    oGridWindow:Connect(wx.wxEVT_LEAVE_WINDOW, function(oEvent)
+        fClearToolTip();
+        oEvent:Skip();
+    end);
+    oGridWindow:Connect(wx.wxEVT_MOUSEWHEEL, function(oEvent)
+        fClearToolTip();
+        oEvent:Skip();
+    end);
+
     oNew:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(function()
         local nCount = require("Windows.NewCards").Show(dFrame);
 
@@ -207,6 +250,7 @@ function DataGrid.create(tSession, bFinal)
         if (bClosed) then
             return;
         end
+        fClearToolTip();
         local sCardSetName = tSession.options.getCardSetName and tSession.options.getCardSetName() or "";
         dFrame:SetTitle(sTitle..(sCardSetName ~= "" and (" - "..sCardSetName) or ""));
 
@@ -469,12 +513,18 @@ function DataGrid.create(tSession, bFinal)
         local nSource = tSession.selected;
         local sHeader = tSession.headers[tSession.column];
         assert(not bFinal and nSource and tSession.codeColumns[sHeader] ~= nil, "Select a base code cell.");
+        -- Commit this cell through the existing processor while retaining the modal editing guard.
+        local function fSave(sEncoded)
+            tSession.editing = false;
+            local bOK, sError = pcall(tSession.edit, nSource, sHeader, sEncoded);
+            tSession.editing = true;
+            assert(bOK, sError);
+        end
         tSession.editing = true;
         local bOK, sResult = pcall(dCodeEditor.edit, dFrame,
-            tSession.base[nSource][sHeader], "Code Editor - Row "..nSource.." - "..tSession.base[nSource].Name.." - "..sHeader);
+            tSession.base[nSource][sHeader], "Code Editor - Row "..nSource.." - "..tSession.base[nSource].Name.." - "..sHeader, fSave);
         tSession.editing = false;
         assert(bOK, sResult);
-        if (sResult ~= nil) then tSession.edit(nSource, sHeader, sResult); end
     end
 
     oEditCode:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(editCode));
@@ -490,9 +540,22 @@ function DataGrid.create(tSession, bFinal)
     oReprocess:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(function()
         tSession.options.onReprocess(tSession.selected);
     end));
-    oSave:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(function()
-        tSession.save();
-    end));
+    local function fSaveData()
+        if (bFinal or tSession.editing or tSession.exporting) then return; end
+        if (oGrid:IsCellEditControlEnabled()) then
+            oGrid:SaveEditControlValue();
+            oGrid:DisableCellEditControl();
+        end
+        if (tSession.dirty and type(tSession.options.onSave) == "function") then tSession.save(); end
+    end
+    oSave:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED, protect(fSaveData));
+    if (not bFinal) then
+        local nSaveCommand = wx.wxNewId();
+        dFrame:Connect(nSaveCommand, wx.wxEVT_COMMAND_MENU_SELECTED, protect(fSaveData));
+        dFrame:SetAcceleratorTable(wx.wxAcceleratorTable({
+            wx.wxAcceleratorEntry(wx.wxACCEL_CTRL, string.byte("S"), nSaveCommand),
+        }));
+    end
     dFrame:Connect(wx.wxEVT_CLOSE_WINDOW, function(oEvent)
         if (oEvent:CanVeto()) then dFrame:Hide(); oEvent:Veto();
         else bClosed = true; oScrollTimer:Stop(); oWindowState.close(); oEvent:Skip(); end
@@ -508,6 +571,7 @@ function DataGrid.create(tSession, bFinal)
     !]]
     local function syncScroll(nX, nY)
         if (bClosed) then return; end
+        fClearToolTip();
         oGrid:Scroll(nX, nY);
         nLastX, nLastY = oGrid:GetViewStart();
     end
@@ -556,6 +620,7 @@ function DataGrid.create(tSession, bFinal)
         if (bClosed or bRefreshing or not dFrame:IsShown()) then return; end
         local nX, nY = oGrid:GetViewStart();
         if (nX ~= nLastX or nY ~= nLastY) then
+            fClearToolTip();
             nLastX, nLastY = nX, nY;
             tSession.scroll(nX, nY);
         end
