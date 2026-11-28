@@ -593,6 +593,19 @@ function Export.pdfOptions(tContext, tData, tSettings)
     if (not tOptions.resolveFont and not tOptions.fonts) then
         tOptions.resolveFont, fSaveFonts = fontResolver(tContext, tSettings);
     end
+    if (not tOptions.resolveFallbackFonts and tOptions.resolveFont) then
+        local tFallbacks;
+        tOptions.resolveFallbackFonts = function()
+            if (not tFallbacks) then
+                tFallbacks = {};
+                for _, sFamily in ipairs({"Segoe UI Emoji", "Segoe UI Symbol", "Noto Sans Symbols 2"}) do
+                    local bFound, tFace = pcall(tOptions.resolveFont, {family = sFamily});
+                    if (bFound and tFace) then tFallbacks[#tFallbacks + 1] = tFace; end
+                end
+            end
+            return tFallbacks;
+        end;
+    end
     if (CFS and CFS.FontStyle and wx.wxFileExists(pStyles)) then
         oReader = INI.CreateReader(pStyles, false);
         tOptions.resolveStyle = function(sName)

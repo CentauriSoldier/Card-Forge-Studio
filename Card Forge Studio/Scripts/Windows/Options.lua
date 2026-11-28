@@ -412,7 +412,9 @@ function Options.create(dParent, tContext)
     dPage, oPage = page("Manual Editor", "Choose how manual source text is displayed.");
     tControls.manualLineNumbers = check(dPage, oPage, "Show line numbers",
         INIFile.GetValue(FS.AppCFG, "ManualEditor", "LineNumbers") == "1");
-    if (tContext.game) then tControls.manualAppearance = require("Windows.ManualAppearance").create(dPage, oPage, FS.Game.Manual); end
+    if (tContext.game) then
+        oPage:Add(wx.wxStaticText(dPage, wx.wxID_ANY, "Use Appearance in the Manual Editor to open the visual appearance designer."), 0, wx.wxTOP, 12);
+    end
     local tModel = require("Windows.Editors.Common").model(tFiles);
     --[[!
     @fqxn CFS.Windows.Options.Private.Functions.select
@@ -471,7 +473,6 @@ function Options.create(dParent, tContext)
     @vis private
     !]]
     local function apply()
-        if (tControls.manualAppearance) then tControls.manualAppearance.validate(); end
         for _, sKey in ipairs({"game", "card"}) do
             local tInfo = tControls[sKey];
             if (tInfo) then
@@ -506,7 +507,6 @@ function Options.create(dParent, tContext)
                 sOldSet, tSetInfo and tSetInfo.name:GetValue():match("^%s*(.-)%s*$"));
         end
 
-        if (tControls.manualAppearance) then tControls.manualAppearance.save(); end
         tModel.save();
         local bAutomatic = tControls.csv:GetValue();
         INIFile.SetValue(FS.AppCFG, "Settings", "ExternalCSVChanges", bAutomatic and "automatic" or "prompt");

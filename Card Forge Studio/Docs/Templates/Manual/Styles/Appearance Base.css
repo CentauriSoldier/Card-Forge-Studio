@@ -241,3 +241,19 @@ h3, .section-level-3 > .section-heading h3 { font-family: system-ui, sans-serif;
 @media screen {
 	.title-assembly { background-image: var(--manual-header-art), linear-gradient(#161b20, #161b20); }
 }
+
+/* Visual designer defaults. Specific element settings override these defaults. */
+.manual-section { color: inherit; }
+.manual-section > .section-copy { color: inherit; }
+.manual-section > .section-heading > :is(h1,h2,h3,h4,h5,h6) { color: inherit; }
+.section-copy p, .section-copy li { color: inherit; }
+.section-copy ul, .section-copy ol { padding-left: 1.5rem; }
+hr { border: 0; border-top: 1px solid #73828a; margin: 1.2rem 0; }
+pre { padding: 1rem; overflow-x: auto; background: #18232b; color: #edf1f3; }
+:not(pre) > code { padding: .1em .3em; border-radius: 3px; background: #52606a33; }
+.glossary-popup { position: fixed; z-index: 1080; max-width: min(28rem, calc(100vw - 16px)); padding: 1rem; border: 1px solid #89969d; border-radius: 8px; background: #18232b; color: #edf1f3; box-shadow: 0 6px 20px #0005; }
+.glossary-popup[hidden] { display: none; }
+.glossary-popup-content > :last-child { margin-bottom: 0; }
+.manual-cover { position: relative; line-height: 0; }
+.manual-cover-scene { display: block; width: 100%; height: auto; }
+.manual-cover-title { position: absolute; width: 94%; left: 3%; bottom: 2.7%; height: auto; }

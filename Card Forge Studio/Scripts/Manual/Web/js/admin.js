@@ -80,6 +80,24 @@ document.getElementById('content-file').addEventListener('change', event => {
 	glossaryDirty = false;
 	window.CFSManual.open(event.target.value);
 });
+// Adjacent-file navigation uses the dropdown's existing unsaved-change handling.
+const contentFile = document.getElementById('content-file');
+const previousContent = document.getElementById('previous-content');
+const nextContent = document.getElementById('next-content');
+function updateContentNavigation() {
+	previousContent.disabled = contentFile.selectedIndex <= 0;
+	nextContent.disabled = contentFile.selectedIndex < 0 || contentFile.selectedIndex >= contentFile.options.length - 1;
+}
+for (const [button, step] of [[previousContent, -1], [nextContent, 1]]) {
+	button.addEventListener('click', () => {
+		const index = contentFile.selectedIndex + step;
+		if (index < 0 || index >= contentFile.options.length) return;
+		contentFile.selectedIndex = index;
+		contentFile.dispatchEvent(new Event('change'));
+	});
+}
+contentFile.addEventListener('change', updateContentNavigation);
+updateContentNavigation();
 // Additional ranges are tag targets; native typing edits only the active range.
 const selectionHighlights = document.getElementById('markdown-selections');
 const selectionStatus = document.getElementById('selection-status');

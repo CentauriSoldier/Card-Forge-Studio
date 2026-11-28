@@ -7,7 +7,12 @@
 	popup.className = 'glossary-popup';
 	popup.setAttribute('role', 'tooltip');
 	popup.hidden = true;
-	document.body.append(popup);
+	// Keep the popup inside the same appearance scope as manual content.
+	const appearance = document.createElement('div');
+	appearance.className = 'manual-appearance';
+	appearance.style.display = 'contents';
+	appearance.append(popup);
+	document.body.append(appearance);
 	let target = null;
 	let timer;
 	let focused = null;

@@ -889,11 +889,19 @@ function PDF.create(tOptions)
     @param string sText UTF-8 text.
     @return table tMissing Distinct missing code points in encounter order.
     !]]
+    local function glyphFont(tFont, nCode)
+        if (glyph(tFont, nCode) ~= 0) then return tFont; end
+        for _, tFallback in ipairs(tFont.fallbacks or {}) do
+            fFont(tFallback);
+            if (glyph(tFallback, nCode) ~= 0) then return tFallback; end
+        end
+        return tFont;
+    end
     function oDocument.missingGlyphs(tFont, sText)
         fFont(tFont);
         local tMissing, tSeen = {}, {};
         for _, nCode in utf8.codes(sText) do
-            if (not tSeen[nCode] and glyph(tFont, nCode) == 0) then
+            if (not tSeen[nCode] and glyph(glyphFont(tFont, nCode), nCode) == 0) then
                 tMissing[#tMissing + 1] = nCode;
             end
             tSeen[nCode] = true;
@@ -917,10 +925,11 @@ function PDF.create(tOptions)
         number(nSize);
         assert(nSize > 0 and not sText:find("[%z\1-\31]"), "Text must be a single line with a positive font size.");
         for _, nCode in utf8.codes(sText) do
-            local nGlyph = glyph(tFont, nCode);
+            local tSelected = glyphFont(tFont, nCode);
+            local nGlyph = glyph(tSelected, nCode);
 
             assert(nGlyph ~= 0, string.format("Font %s has no glyph for U+%04X.", tFont.name, nCode));
-            nWidth = nWidth + width(tFont, nGlyph);
+            nWidth = nWidth + width(tSelected, nGlyph);
         end
         return nWidth * nSize / 1000 + utf8.len(sText) * (nSpacing or 0);
     end
@@ -943,6 +952,26 @@ function PDF.create(tOptions)
         local nSpacing = tStyle and tStyle.spacing or 0;
         local nWidth = oDocument.measureText(tFont, nSize, sText, nSpacing);
 
+        if (tFont.fallbacks) then
+            local tSegments = {};
+            local bFallback = false;
+            for _, nCode in utf8.codes(sText) do
+                local tSelected = glyphFont(tFont, nCode);
+                local tLast = tSegments[#tSegments];
+                bFallback = bFallback or tSelected ~= tFont;
+                if (not tLast or tLast.font ~= tSelected) then
+                    tLast = {font = tSelected, text = ""}; tSegments[#tSegments + 1] = tLast;
+                end
+                tLast.text = tLast.text..utf8.char(nCode);
+            end
+            if (bFallback) then
+                local nOffset = 0;
+                for _, tSegment in ipairs(tSegments) do
+                    nOffset = nOffset + oDocument.text(tPage, tSegment.font, nSize, nX + nOffset, nY, tSegment.text, tStyle);
+                end
+                return nOffset;
+            end
+        end
         number(nSpacing);
         for nIndex = 1, 3 do
             local nValue = tStyle and tStyle.color and tStyle.color[nIndex] or 0;

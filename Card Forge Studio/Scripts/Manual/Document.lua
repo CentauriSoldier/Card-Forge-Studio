@@ -84,10 +84,24 @@ function Document.build(tData, sKind, tSettings)
 		end
 	end
 	tOptions = {styles = tStyles, files = tFiles, pdf = bPDF, delay = tData.glossarySettings.hover_delay_ms};
-	local bGlossary = false;
-	for _, tSection in ipairs(tSections) do
-		if (tSection.level == nChapterLevel) then bGlossary = tSection.id == "glossary"; end
-		if (bGlossary and tSection.level == nChapterLevel + 1) then
+	local nGlossaryFirst;
+	local nGlossaryLast;
+	local nGlossaryEntryLevel;
+	for nIndex, tSection in ipairs(tSections) do
+		if (tSection.id == "glossary") then
+			nGlossaryFirst = nIndex + 1;
+			nGlossaryLast = nIndex;
+			for nNext = nGlossaryFirst, #tSections do
+				local tChild = tSections[nNext];
+				if (tChild.level <= tSection.level) then break; end
+				nGlossaryLast = nNext;
+				nGlossaryEntryLevel = math.min(nGlossaryEntryLevel or tChild.level, tChild.level);
+			end
+			break;
+		end
+	end
+	for nIndex, tSection in ipairs(tSections) do
+		if (nGlossaryFirst and nIndex >= nGlossaryFirst and nIndex <= nGlossaryLast and tSection.level == nGlossaryEntryLevel) then
             if (not bPDF and tData.context.onProgress) then tData.context.onProgress("building", "Building glossary entry: "..tSection.title); end
             if (tData.context.checkpoint) then tData.context.checkpoint(); end
 			local sDefinition	= Markdown.render(tSection.markdown, tOptions);

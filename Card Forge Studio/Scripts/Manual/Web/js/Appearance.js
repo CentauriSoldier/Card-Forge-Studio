@@ -11,6 +11,7 @@ window.CFSManualAppearance = {
                 while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
                 const section = document.createElement('section');
                 section.className = 'manual-section manual-heading-level-' + level + ' section-level-' + (level === 1 ? 2 : level) + (level > 3 ? ' inset-section' : ' metal-panel');
+                if (title.id) section.dataset.section = title.id;
                 const heading = document.createElement('div'); heading.className = 'section-heading';
                 const anchor = document.createElement('span'); anchor.className = 'heading-anchor'; anchor.setAttribute('aria-hidden', 'true');
                 heading.append(anchor, title);

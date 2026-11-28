@@ -66,6 +66,8 @@ function Adapter.create(dParent, pManual, tOptions)
 	local sReply = "";
 	local nOptionsRevision = 0;
 	local sOptionsScript = "";
+	local tAppearanceWindow;
+	local tAppearanceDraft;
 	local function publishReply()
 		local hReply = assert(io.open(pPage..".reply.tmp", "wb"));
 		assert(hReply:write(sReply..sOptionsScript)); assert(hReply:close());
@@ -80,6 +82,9 @@ function Adapter.create(dParent, pManual, tOptions)
 	!]]
 	fBuild = function()
 		local tSnapshot = tService.snapshot();
+		if (tAppearanceDraft) then
+			tSnapshot.appearanceCSS = require("Manual.Appearance").css(pManual, ".manual-appearance", fileURL(pManual):gsub("/$", "").."/Images/", tAppearanceDraft);
+		end
 		local tTokens = {};
 		local sTemplate;
 		local hTemplate = assert(io.open(_pWeb.."/Editor.html", "rb"));
@@ -140,7 +145,16 @@ function Adapter.create(dParent, pManual, tOptions)
 			if (tRequest.export) then
 				tOptions.onOpenExport();
 			elseif (tRequest.appearance) then
-                tOptions.onOpenOptions();
+				if (not tAppearanceWindow or not tAppearanceWindow.show()) then
+					tAppearanceWindow = require("Windows.ManualAppearance").create(dFrame, pManual, {
+						gameName = tOptions.gameName,
+						onPreview = function(tDraft)
+							tAppearanceDraft = tDraft;
+							tWindow.applyOptions();
+						end,
+						onClose = function() tAppearanceWindow = nil; end,
+					});
+				end
 			elseif (tRequest.file) then
 				sSelected = tRequest.file;
 				fBuild();
@@ -232,6 +246,7 @@ function Adapter.create(dParent, pManual, tOptions)
 			return;
 		end
 		if (not bClosed) then
+			if (tAppearanceWindow and not tAppearanceWindow.close(not oEvent:CanVeto())) then oEvent:Veto(); return; end
 			bClosed = true;
 			oDispatchTimer:Stop(); tPending = {};
 			oBrowser:Stop(); tBridge.close(); wx.wxRemoveFile(pPage); wx.wxRemoveFile(pPage..".reply.js"); wx.wxRemoveFile(pPage..".reply.tmp"); oState.close();
@@ -251,7 +266,7 @@ function Adapter.create(dParent, pManual, tOptions)
 		nOptionsRevision = nOptionsRevision + 1;
 		local tSettings = {revision = nOptionsRevision,
 			lineNumbers = INIFile.GetValue(FS.AppCFG, "ManualEditor", "LineNumbers") == "1",
-            appearanceCSS = require("Manual.Appearance").css(pManual, ".manual-appearance", fileURL(pManual):gsub("/$", "").."/Images/")};
+            appearanceCSS = require("Manual.Appearance").css(pManual, ".manual-appearance", fileURL(pManual):gsub("/$", "").."/Images/", tAppearanceDraft)};
 		sOptionsScript = "\nif ((window.cfsManualOptionsRevision || 0) < "..nOptionsRevision..") { window.cfsManualOptionsRevision = "..nOptionsRevision.."; document.dispatchEvent(new CustomEvent('manual-editor-options', {detail:"..JSON.encode(tSettings).."})); }";
 		publishReply();
 	end
@@ -288,7 +303,7 @@ function Adapter.create(dParent, pManual, tOptions)
 	@return boolean bDirty Whether authoring/settings drafts remain unsaved.
 	!]]
 	function tWindow.hasDrafts()
-		return tService.dirty == true;
+		return tService.dirty == true or (tAppearanceWindow and tAppearanceWindow.hasDrafts()) or false;
 	end
 	oBrowser:LoadURL(sPageURL);
 	tWindow.show();

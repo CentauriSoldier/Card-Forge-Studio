@@ -239,7 +239,18 @@ function PDFLayout.build(tData, tSettings, tOptions)
         assert(tDescriptor and rawtype(tDescriptor.path) == "string", "PDF layout requires an explicit "..sRole.." font"..(tStyle.family and " for "..tStyle.family or "")..".");
         sKey = tDescriptor.path.."\0"..tostring(tDescriptor.face or 1);
         if (not tFontCache[sKey]) then tFontCache[sKey] = oDocument.addFont(tDescriptor.path, tDescriptor.face); end
-        return tFontCache[sKey];
+        local tFont = tFontCache[sKey];
+        if (not tFont.fallbacks and tOptions.resolveFallbackFonts) then
+            tFont.fallbacks = {};
+            for _, tFallback in ipairs(tOptions.resolveFallbackFonts()) do
+                local sFallbackKey = tFallback.path.."\0"..tostring(tFallback.face or 1);
+                if (sFallbackKey ~= sKey) then
+                    if (not tFontCache[sFallbackKey]) then tFontCache[sFallbackKey] = oDocument.addFont(tFallback.path, tFallback.face); end
+                    tFont.fallbacks[#tFont.fallbacks + 1] = tFontCache[sFallbackKey];
+                end
+            end
+        end
+        return tFont;
     end;
     fMetrics = function(tStyle, sText)
         local tFont = fFont(tStyle);
@@ -265,7 +276,7 @@ function PDFLayout.build(tData, tSettings, tOptions)
         error("PDF link does not resolve to a manual section or supported URI: "..sTarget);
     end;
     for _, tChapter in ipairs(tData.chapters) do
-        local tSections = Document.sections({chapters = {tChapter}});
+        local tSections = Document.sections({context = tData.context, chapters = {tChapter}});
 
         tFileTargets[tChapter.name] = tSections[1].id;
     end
